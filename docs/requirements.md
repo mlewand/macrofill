@@ -89,7 +89,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 
 - Realistically I need two meals for testing (curd and wholegrain bread).
 - Each meal has steps, each requiring an ingredient class. The user picks the concrete product at that step.
-- Decision: product-level from MVP0. Generic class-level macros are too inaccurate (e.g. lean vs full-fat curd differ several times over in fat). The product picker shows products of the step's ingredient class, most recently used first, with the recipe step's default product preselected.
+- Generic class-level macros are too inaccurate (e.g. lean vs full-fat curd differ several times over in fat). The product picker shows products of the step's ingredient class, most recently used choices prioritized.
 - MVP0: recipes, ingredient classes and products are seed files in the repo (JSON/TS), loaded into the backend DB. Adding a product = editing the seed file.
 - Seed recipes:
   - Sandwich: wholegrain bread → cream cheese → cheese → ham
