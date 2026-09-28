@@ -27,6 +27,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   vim \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Runtime libraries Playwright's bundled Chromium needs to launch on Debian 12,
+# so `pnpm test:e2e` can run headless in this container (browsers themselves are
+# installed later, from the workspace, via `playwright install`).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  ca-certificates \
+  fonts-liberation \
+  libasound2 \
+  libatk-bridge2.0-0 \
+  libatk1.0-0 \
+  libatspi2.0-0 \
+  libcairo2 \
+  libcups2 \
+  libdbus-1-3 \
+  libdrm2 \
+  libgbm1 \
+  libglib2.0-0 \
+  libgtk-3-0 \
+  libnspr4 \
+  libnss3 \
+  libpango-1.0-0 \
+  libx11-6 \
+  libxcb1 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxext6 \
+  libxfixes3 \
+  libxkbcommon0 \
+  libxrandr2 \
+  libxshmfence1 \
+  libxss1 \
+  wget \
+  xdg-utils \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
   chown -R node:node /usr/local/share
@@ -81,6 +115,11 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 # Install Claude
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
+# Enable Corepack for managing package managers like Yarn and pnpm.
+USER root
+RUN corepack enable
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+USER node
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/
