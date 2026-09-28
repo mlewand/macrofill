@@ -1,0 +1,148 @@
+{
+  "products": [
+    {
+      "name": "Pickled cucumbers - Ogórki kiszone",
+      "nutrition": {
+        "kcals": 11,
+        "fat": 0.5,
+        "saturatedFat": 0.1,
+        "carbohydrates": 1.0,
+        "sugar": 0.5,
+        "protein": 0.7,
+        "salt": 1.9
+      }
+    },
+    {
+      "name": "Milk - Mleko Łowicz UHT 3.2%",
+      "nutrition": {
+        "kcals": 60,
+        "fat": 3.2,
+        "saturatedFat": 1.9,
+        "carbohydrates": 4.7,
+        "sugar": 4.7,
+        "protein": 3.0,
+        "salt": 0.1
+      }
+    },
+    {
+      "name": "Curd - Polmlek Twaróg półtłusty",
+      "nutrition": {
+        "kcals": 119,
+        "fat": 4.2,
+        "saturatedFat": 2.8,
+        "carbohydrates": 3.4,
+        "sugar": 3.0,
+        "protein": 17.0,
+        "salt": 0.1
+      }
+    },
+    {
+      "name": "Cottage cheese - Serek wiejski",
+      "nutrition": {
+        "kcals": 101,
+        "fat": 5.0,
+        "saturatedFat": 3.0,
+        "carbohydrates": 3.0,
+        "sugar": 2.8,
+        "protein": 11.0,
+        "salt": 0.5
+      }
+    },
+    {
+      "name": "Yogurt - Jogurt naturalny",
+      "nutrition": {
+        "kcals": 67,
+        "fat": 3.1,
+        "saturatedFat": 2.1,
+        "carbohydrates": 4.0,
+        "sugar": 4.0,
+        "protein": 4.8,
+        "salt": 0.17
+      }
+    },
+    {
+      "name": "homogenized cheese - Mlekpol Serek homogenizowany waniliowy",
+      "nutrition": {
+        "kcals": 132,
+        "fat": 5.5,
+        "saturatedFat": 3.6,
+        "carbohydrates": 13.0,
+        "sugar": 12.5,
+        "protein": 7.5,
+        "salt": 0.1
+      }
+    },
+    {
+      "name": "Cheese - Mlekpol Ser Królewski z Kolna",
+      "nutrition": {
+        "kcals": 347,
+        "fat": 27.0,
+        "saturatedFat": 17.0,
+        "carbohydrates": 0.0,
+        "sugar": 0.0,
+        "protein": 26.0,
+        "salt": 1.3
+      }
+    },
+    {
+      "name": "Turkey ham - Sokołów Szynka z piersi indyka",
+      "nutrition": {
+        "kcals": 87,
+        "fat": 2.0,
+        "saturatedFat": 0.8,
+        "carbohydrates": 1.2,
+        "sugar": 0.5,
+        "protein": 16.0,
+        "salt": 2.0
+      }
+    },
+    {
+      "name": "Milk - Mleko Łowicz UHT odtłuszczone 0.5%",
+      "nutrition": {
+        "kcals": 37,
+        "fat": 0.5,
+        "saturatedFat": 0.3,
+        "carbohydrates": 5.0,
+        "sugar": 5.0,
+        "protein": 3.0,
+        "salt": 0.1
+      }
+    },
+    {
+      "name": "Radish - FRISCO FRESH Rzodkiewka pęczek",
+      "nutrition": {
+        "kcals": 21,
+        "fat": 0.2,
+        "saturatedFat": null,
+        "carbohydrates": 4.4,
+        "sugar": null,
+        "protein": 1.0,
+        "salt": null
+      }
+    },
+    {
+      "name": "Whole grain bread - VINCENT Chleb pełnoziarnisty",
+      "nutrition": {
+        "kcals": 229,
+        "fat": 5.0,
+        "saturatedFat": null,
+        "carbohydrates": 37.0,
+        "sugar": null,
+        "protein": 7.0,
+        "salt": null
+      }
+    },
+    {
+      "name": "Cotton cheese - ALMETTE Serek twarogowy z ogórkiem i ziołami",
+      "nutrition": {
+        "kcals": 251,
+        "fat": 23.0,
+        "saturatedFat": 16.0,
+        "carbohydrates": 4.1,
+        "sugar": 3.0,
+        "protein": 7.0,
+        "salt": 0.86
+      }
+    }
+  ]
+}
