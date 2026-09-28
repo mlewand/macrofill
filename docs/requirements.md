@@ -70,13 +70,13 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 # Data model
 
 - Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent, user-added Product) has `ownerId`. Curated content (IngredientClass, Recipe, seed Products) is global. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it.
-- User: id, username, password hash (argon2id).
+- User: id, username, password hash (argon2id), timezone (IANA name, e.g. `Europe/Warsaw`; used by M2-5, M7-1).
 - NutritionValues (per 100 g): energy kcal, fat, saturates, carbs, sugars, protein, salt (full EU label set), fibre (optional, EU labels don't always have it). UI shows only protein/fat/carbs/fibre/kcal for now.
   - Missing fibre on a product is stored as unknown, never as 0. A meal or day fibre total that includes an unknown value is shown as "unknown".
 - IngredientClass: id (stable slug, e.g. `curd`), name (LocalizedText).
 - Product: id, ingredientClassId, name (plain string, as on the package), brand?, nutrition per 100 g, source (`seed` | `user`). Barcode reserved for the future.
 - Recipe: id, name (LocalizedText), steps: ordered list of { id, ingredientClassId, defaultProductId? }.
-- PreparedMeal: id, recipeId?, inputMethod (`scale` | `vision` | `direct`), startedAt, finishedAt, items: { stepId?, productId, grams, weightSource (`scale` | `manual`), skipped }.
+- PreparedMeal: id, recipeId?, inputMethod (`scale` | `vision` | `direct`), startedAt, finishedAt, items: a discriminated union on `skipped` — `{ stepId?, skipped: true }` for a skipped step, or `{ stepId?, skipped: false, productId, grams, weightSource ('scale' | 'manual') }` otherwise. `productId` and `grams` don't exist on a skipped item.
   - Item grams are ≥ 0. Negative items (net removal) are deferred.
   - Future: total cooked weight, for batch dishes (Thermomix) where water evaporates.
 - ConsumptionEntry: id, preparedMealId, eatenAt, portion. MVP0 creates it automatically with portion = whole meal.
