@@ -31,7 +31,7 @@ export async function assertSchemaCurrent(db: Db, migrationsFolder: string): Pro
   const pending = await pendingMigrations(db, migrationsFolder);
   if (pending > 0) {
     throw new SchemaBehindError(
-      `Database schema is behind: ${pending} pending migration${pending === 1 ? '' : 's'}. Run \`pnpm db:migrate\` first.`,
+      `Database schema is behind: ${pending} pending migration${pending === 1 ? '' : 's'}. Run \`pnpm db:migrate\` first (\`node migrate.mjs\` in the production image).`,
     );
   }
 }

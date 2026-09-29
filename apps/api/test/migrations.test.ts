@@ -44,8 +44,9 @@ describe('M4-9: migrations run only explicitly; the api refuses a schema that is
 
   it('checking the schema does not migrate it', async () => {
     database = createTestDatabase();
+    // Names the command both in the repo and in the production image.
     await expect(assertSchemaCurrent(database.db, migrationsDir)).rejects.toThrow(
-      /pnpm db:migrate/,
+      /pnpm db:migrate.*node migrate\.mjs/,
     );
     const before = await pendingMigrations(database.db, migrationsDir);
     await expect(assertSchemaCurrent(database.db, migrationsDir)).rejects.toThrow();
