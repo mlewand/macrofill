@@ -2,3 +2,4 @@ pnpm-lock.yaml
 docs/
 test_data/
 *.md
+apps/api/drizzle/
