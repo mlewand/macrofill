@@ -26,7 +26,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 - Product - a concrete product (brand + name) with nutrition values per 100 g. Belongs to one ingredient class.
 - Prepared meal - the result of a capture session: products used and their weights.
 - Consumption entry - what the user actually ate, pointing to a prepared meal. In MVP0 always the whole prepared meal.
-- Daily targets - expected daily intake of protein, fat, carbs, fibre, kcal.
+- Daily targets - expected daily intake of protein, fat, carbs, fibre, kcal. Each target is optional; a nutrient without a target isn't tracked against one.
 
 # MVP0 scope
 
@@ -81,7 +81,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
   - Future: total cooked weight, for batch dishes (Thermomix) where water evaporates.
 - ConsumptionEntry: id, preparedMealId, eatenAt, portion. MVP0 creates it automatically with portion = whole meal.
   - Future: eat just part of a meal (e.g. shared with others), as grams of cooked weight or a fraction.
-- DailyTargets: per user; protein, fat, carbs, fibre, kcal. From configuration/seed in MVP0.
+- DailyTargets: per user; protein, fat, carbs, fibre, kcal, each optional (unset means not tracked, never 0). From configuration/seed in MVP0.
 - UsageEvent: id, ownerId, clientSessionId, name, props (jsonb), occurredAt, appVersion. See Usage data.
 - ScaleRecording: capture session id, driver id, frames { timestamp, raw payload, parsed reading }, user events (next, skip, manual override, undo).
 
@@ -180,7 +180,7 @@ interface ScaleDriver {
 
 # Macro tracking
 
-- Daily targets (protein, fat, carbs, fibre, kcal) per user, defined in configuration/seed. No GUI for now.
+- Daily targets (protein, fat, carbs, fibre, kcal) per user, defined in configuration/seed. No GUI for now. Any of them can be left unset.
 - Today view: list of today's consumption entries, totals vs targets for protein, fat, carbs, fibre, kcal.
 - Item macros = grams × per-100 g value / 100. Meal = sum of items. Day = sum of consumption entries.
 - Future: GUI for targets, history view, adaptive targets.
@@ -350,7 +350,7 @@ IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferr
 ## M7: Today view and general requirements
 
 - **M7-1:** The Today view lists the day's consumption entries in the user's timezone, newest first, each with the recipe name, time and macros.
-- **M7-2:** For protein, fat, carbs, fibre and kcal it shows consumed, target and remaining.
+- **M7-2:** For protein, fat, carbs, fibre and kcal it shows consumed, target and remaining. A nutrient without a target shows only consumed, with no target or remaining.
 - **M7-3:** Fibre shows as "unknown" per M2-3.
 - **M7-4:** The user can delete a consumption entry, after a confirmation step.
 - **M7-5:** A meal saved on the phone appears on the tablet after a refresh.
