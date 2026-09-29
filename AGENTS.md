@@ -8,7 +8,7 @@ Read before any work:
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current state: only docs exist so far; the first change is M1 (repo skeleton). Current phase: **A**. Update this line when a phase's exit criteria are met.
+Current phase: **A**. Update this line when a phase's exit criteria are met.
 
 ## How to work
 
@@ -47,18 +47,23 @@ Current state: only docs exist so far; the first change is M1 (repo skeleton). C
 
 ## Commands
 
-M1 creates these root scripts; keep this list in sync with `package.json`.
+Root scripts; keep this list in sync with `package.json`. Rows marked *(M1, pending)* don't exist yet.
 
 | Command | Purpose |
 |---|---|
-| `pnpm dev` | Run web and api on the host |
-| `pnpm db:up` | Start the local Postgres in Docker Compose |
-| `pnpm db:migrate` | Apply migrations to `DATABASE_URL` |
-| `pnpm db:seed` | Load seed data (idempotent) |
-| `pnpm lint` / `pnpm typecheck` / `pnpm test` | Checks that must pass before finishing |
-| `pnpm test:e2e` | Playwright tests on a phone viewport |
+| `pnpm dev` | Run web and api on the host *(M1, pending)* |
+| `pnpm db:up` | Start the local Postgres in Docker Compose *(M1, pending)* |
+| `pnpm db:migrate` | Apply migrations to `DATABASE_URL` *(pending)* |
+| `pnpm db:seed` | Load seed data (idempotent) *(pending)* |
+| `pnpm lint` / `pnpm typecheck` / `pnpm test` | Checks that must pass before finishing. `lint` runs ESLint and `prettier --check` |
+| `pnpm format` | Format with Prettier |
+| `pnpm test:e2e` | Playwright tests on a phone viewport *(M1, pending)* |
 
-M1 must also document here how to run a single test by criterion ID (Vitest `-t 'M3-6'`, Playwright `-g 'M6-8'`), for one package and from the root.
+Running a subset of tests (Vitest projects are named `domain`, `scale`, `web`, `api` and `repo` for the root `tests/`):
+
+- by criterion ID: `pnpm test -t 'M3-6'`
+- one project: `pnpm test --project domain`, or `pnpm -F @macrofill/domain test`
+- one file: `pnpm test packages/domain/test/tsconfig.test.ts`
 
 ## Saving coding agent information
 
