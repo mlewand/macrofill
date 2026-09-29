@@ -16,7 +16,8 @@ export default defineConfig({
   },
   projects: [{ name: 'phone', use: { ...devices['Pixel 7'] } }],
   webServer: {
-    command: 'pnpm build && node apps/api/dist/server.mjs',
+    // The api needs a migrated database: DATABASE_URL from the environment or the root .env.
+    command: 'pnpm build && node --env-file-if-exists=.env apps/api/dist/server.mjs',
     cwd: repoRoot,
     url: `http://localhost:${port}/`,
     env: {
