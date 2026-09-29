@@ -4,7 +4,7 @@ import { connect } from './db/client';
 import { startServer } from './start';
 
 const config = loadConfig(process.env);
-const database = connect(config.databaseUrl);
+const database = connect(config.databaseUrl, { queryTimeoutMs: 3000 });
 
 try {
   const server = await startServer(config, database, serve);

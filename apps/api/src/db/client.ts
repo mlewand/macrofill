@@ -15,8 +15,25 @@ export interface Database {
   close(): Promise<void>;
 }
 
-export function connect(databaseUrl: string): Database {
-  const pool = new pg.Pool({ connectionString: databaseUrl });
+export interface ConnectOptions {
+  /**
+   * Fails a query that gets no answer in time. The server sets it so /api/health answers 503
+   * before the Docker healthcheck gives up (5 s). The migrate and seed commands leave it unset.
+   */
+  queryTimeoutMs?: number;
+}
+
+/** Also bounds waiting for a free pool connection, so probes against a dead database don't pile up. */
+const CONNECT_TIMEOUT_MS = 2000;
+
+export function connect(databaseUrl: string, options: ConnectOptions = {}): Database {
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+    ...(options.queryTimeoutMs === undefined ? {} : { query_timeout: options.queryTimeoutMs }),
+  });
+  // An idle client losing its connection must not crash the process; the next query reconnects.
+  pool.on('error', (error) => console.error(`database: ${error.message}`));
   const db = drizzle(pool, { schema, casing: 'snake_case' });
   return {
     db,
