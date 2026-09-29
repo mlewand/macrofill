@@ -37,15 +37,21 @@ describe('NutritionValues', () => {
     );
   });
 
-  it('M2-3: stores missing fibre as unknown (null), distinct from 0', () => {
-    expect(nutritionValuesSchema.parse(curd).fibre).toBeNull();
-    expect(nutritionValuesSchema.parse({ ...curd, fibre: 0 }).fibre).toBe(0);
-  });
+  it.each(NUTRIENTS.map((n) => [n]))(
+    'M2-3: stores a missing %s as unknown (null), distinct from 0',
+    (nutrient: Nutrient) => {
+      expect(nutritionValuesSchema.parse({ ...curd, [nutrient]: null })[nutrient]).toBeNull();
+      expect(nutritionValuesSchema.parse({ ...curd, [nutrient]: 0 })[nutrient]).toBe(0);
+    },
+  );
 
-  it('M2-3: requires fibre to be stated, so a missing value is never read as 0', () => {
-    const withoutFibre = Object.fromEntries(Object.entries(curd).filter(([k]) => k !== 'fibre'));
-    expect(nutritionValuesSchema.safeParse(withoutFibre).success).toBe(false);
-  });
+  it.each(NUTRIENTS.map((n) => [n]))(
+    'M2-3: requires %s to be stated, so a missing value is never read as 0',
+    (nutrient: Nutrient) => {
+      const without = Object.fromEntries(Object.entries(curd).filter(([k]) => k !== nutrient));
+      expect(nutritionValuesSchema.safeParse(without).success).toBe(false);
+    },
+  );
 });
 
 describe('M2-6: product validation', () => {
@@ -86,9 +92,11 @@ describe('M2-6: product validation', () => {
     expect(productSchema.safeParse({ ...product, nutrition }).success).toBe(false);
   });
 
-  it('counts unknown fibre as 0 in the sum', () => {
-    const nutrition = { ...curd, protein: 50, fat: 30, carbs: 19.9, fibre: null, salt: 0.1 };
+  it('counts unknown values as 0 in the sum', () => {
+    const nutrition = { ...curd, protein: 50, fat: 30, carbs: 20, fibre: null, salt: null };
     expect(productSchema.safeParse({ ...product, nutrition }).success).toBe(true);
+    const over = { ...nutrition, protein: null, fat: 60, carbs: 40.1 };
+    expect(productSchema.safeParse({ ...product, nutrition: over }).success).toBe(false);
   });
 
   it('does not count saturates, sugars or kcal in the sum', () => {

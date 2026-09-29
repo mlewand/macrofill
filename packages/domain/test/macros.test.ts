@@ -40,8 +40,21 @@ const cucumber: NutritionValues = {
   fibre: 0,
 };
 
+// A label without saturates, sugars or salt, like the seed radish.
+const radish: NutritionValues = {
+  kcal: 21,
+  fat: 0.2,
+  saturates: null,
+  carbs: 4.4,
+  sugars: null,
+  protein: 1,
+  salt: null,
+  fibre: 1.6,
+};
+
 const products = new Map<string, NutritionValues>([
   ['bread', bread],
+  ['radish', radish],
   ['ham', ham],
   ['cucumber', cucumber],
 ]);
@@ -58,8 +71,9 @@ describe('M2-1: item nutrition', () => {
     );
   });
 
-  it('keeps unknown fibre unknown', () => {
+  it('keeps unknown values unknown', () => {
     expect(itemNutrition(ham, 40).fibre).toBeNull();
+    expect(itemNutrition(radish, 40)).toMatchObject({ saturates: null, sugars: null, salt: null });
   });
 
   it('0 g gives zeros, not unknowns, for known values', () => {
@@ -142,7 +156,7 @@ describe('M2-2: meal total', () => {
   });
 });
 
-describe('M2-3: fibre total', () => {
+describe('M2-3: unknown totals', () => {
   it('is unknown if any contributing product has unknown fibre', () => {
     expect(mealNutrition([item('bread', 60), item('ham', 20)], products).fibre).toBeNull();
   });
@@ -151,6 +165,14 @@ describe('M2-3: fibre total', () => {
     const total = mealNutrition([item('bread', 60), item('ham', 20)], products);
     for (const n of NUTRIENTS.filter((n) => n !== 'fibre')) {
       expect(total[n]).toBeCloseTo((60 * (bread[n] ?? 0) + 20 * (ham[n] ?? 0)) / 100, 12);
+    }
+  });
+
+  it('an unknown salt, sugars or saturates makes only that total unknown', () => {
+    const total = mealNutrition([item('bread', 60), item('radish', 20)], products);
+    expect(total).toMatchObject({ saturates: null, sugars: null, salt: null });
+    for (const n of ['kcal', 'fat', 'carbs', 'protein', 'fibre'] as const) {
+      expect(total[n]).toBeCloseTo((60 * (bread[n] ?? 0) + 20 * (radish[n] ?? 0)) / 100, 12);
     }
   });
 

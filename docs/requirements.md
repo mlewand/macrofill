@@ -71,8 +71,8 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 
 - Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent, user-added Product) has `ownerId`. Curated content (IngredientClass, Recipe, seed Products) is global. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it.
 - User: id, username, password hash (argon2id), timezone (IANA name, e.g. `Europe/Warsaw`; used by M2-5, M7-1).
-- NutritionValues (per 100 g): energy kcal, fat, saturates, carbs, sugars, protein, salt (full EU label set), fibre (optional, EU labels don't always have it). UI shows only protein/fat/carbs/fibre/kcal for now.
-  - Missing fibre on a product is stored as unknown, never as 0. A meal or day fibre total that includes an unknown value is shown as "unknown".
+- NutritionValues (per 100 g): energy kcal, fat, saturates, carbs, sugars, protein, salt (full EU label set), fibre (EU labels don't always have it). UI shows only protein/fat/carbs/fibre/kcal for now.
+  - Any value missing from a product's label or source (most often fibre, but e.g. saturates, sugars or salt too) is stored as unknown, never as 0. A meal or day total of a nutrient that includes an unknown value is shown as "unknown"; the other nutrients' totals are unaffected.
 - IngredientClass: id (stable slug, e.g. `curd`), name (LocalizedText).
 - Product: id, ingredientClassId, name (plain string, as on the package), brand?, nutrition per 100 g, source (`seed` | `user`). Barcode reserved for the future.
 - Recipe: id, name (LocalizedText), steps: ordered list of { id, ingredientClassId, defaultProductId? }.
@@ -284,10 +284,10 @@ IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferr
 
 - **M2-1:** An item's nutrition equals grams × per-100 g value / 100, for every stored field.
 - **M2-2:** A meal's total is the sum of its non-skipped items. Item grams must be ≥ 0; validation rejects negative values.
-- **M2-3:** The fibre total is "unknown" if any contributing product has unknown fibre. Otherwise it's numeric.
+- **M2-3:** A nutrient's total is "unknown" if any contributing product has that value unknown (most often fibre). Otherwise it's numeric. An unknown value affects only its own nutrient's total.
 - **M2-4:** Calculations use unrounded values. Only the display rounds: grams to 1 decimal, kcal to an integer.
 - **M2-5:** A consumption entry counts toward the day in the user's timezone. Timestamps are stored in UTC, and the timezone is set per user in the seed. A meal at 23:30 Warsaw time counts toward that Warsaw day.
-- **M2-6:** Product validation rejects negative values, and rejects per-100 g protein + fat + carbs + fibre + salt above 100 g.
+- **M2-6:** Product validation rejects negative values, and rejects per-100 g protein + fat + carbs + fibre + salt above 100 g. Unknown values count as 0 in that sum.
 
 ## M3: Scale layer and weight tracker
 
@@ -351,7 +351,7 @@ IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferr
 
 - **M7-1:** The Today view lists the day's consumption entries in the user's timezone, newest first, each with the recipe name, time and macros.
 - **M7-2:** For protein, fat, carbs, fibre and kcal it shows consumed, target and remaining. A nutrient without a target shows only consumed, with no target or remaining.
-- **M7-3:** Fibre shows as "unknown" per M2-3.
+- **M7-3:** A nutrient total that is unknown per M2-3 (most often fibre) shows as "unknown".
 - **M7-4:** The user can delete a consumption entry, after a confirmation step.
 - **M7-5:** A meal saved on the phone appears on the tablet after a refresh.
 - **M7-6:** Primary action buttons are full-width and at least 64 px tall. The live weight is at least 48 px. Everything works in portrait on both phone and tablet.
