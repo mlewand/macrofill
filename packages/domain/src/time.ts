@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { idSchema } from './common.js';
 
 function isTimeZone(name: string): boolean {
-  // Only IANA names (`Europe/Warsaw`, `UTC`), not offsets like `+01:00`.
-  if (!/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/.test(name)) return false;
+  // Intl also accepts bare offsets like `+01:00`, which aren't IANA names and don't follow DST.
+  if (/^[+-]/.test(name)) return false;
   try {
     new Intl.DateTimeFormat('en', { timeZone: name });
     return true;

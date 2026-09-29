@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { localDay, timestampSchema, userSchema } from '../src/index.js';
+import { localDay, timeZoneSchema, timestampSchema, userSchema } from '../src/index.js';
 
 describe('M2-5: consumption counts toward the day in the user timezone', () => {
   it.each([
@@ -38,5 +38,13 @@ describe('M2-5: consumption counts toward the day in the user timezone', () => {
     expect(userSchema.safeParse({ ...user, timezone: 'Europe/Warsaw' }).success).toBe(true);
     expect(userSchema.safeParse({ ...user, timezone: 'Mars/Olympus' }).success).toBe(false);
     expect(userSchema.safeParse({ ...user, timezone: '+01:00' }).success).toBe(false);
+    expect(userSchema.safeParse({ ...user, timezone: '-0500' }).success).toBe(false);
   });
+
+  it.each(['UTC', 'CST6CDT', 'EST5EDT', 'Etc/GMT+1', 'America/Argentina/Buenos_Aires'])(
+    'accepts the IANA name %s',
+    (timezone) => {
+      expect(timeZoneSchema.safeParse(timezone).success).toBe(true);
+    },
+  );
 });
