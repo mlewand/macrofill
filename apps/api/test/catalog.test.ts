@@ -73,6 +73,26 @@ describe('GET /api/catalog (M5-1, M5-2)', () => {
     expect([...products.values()].filter((v) => v !== null)).toHaveLength(2);
   });
 
+  it("includes the user's own products, with their own lastUsedAt", async () => {
+    const ownProductId = 'f2c8a6b7-0d1e-4f2a-9b3c-3d2e1f0a9b8c';
+    await database.db.execute(
+      sql`insert into products (id, owner_id, ingredient_class_id, name, source, protein)
+          values (${ownProductId}, ${seedData.users[0]!.user.id}, 'curd', 'Homemade curd', 'user', 12)`,
+    );
+    await saveMeal(crypto.randomUUID(), '2026-01-13T08:00:00.000Z', [
+      { skipped: false, productId: ownProductId, grams: 50, weightSource: 'manual' },
+    ]);
+    const own = (await catalog()).products.find((p) => p.id === ownProductId);
+    expect(own).toMatchObject({
+      name: 'Homemade curd',
+      source: 'user',
+      ingredientClassId: 'curd',
+      lastUsedAt: '2026-01-13T08:00:00.000Z',
+    });
+    expect(own?.nutrition.protein).toBe(12);
+    expect(own?.nutrition.fat).toBeNull();
+  });
+
   it("ignores other users' history and hides their own products", async () => {
     await database.db.execute(
       sql`insert into users (id, username, timezone) values (${otherUserId}, 'other', 'UTC')`,
