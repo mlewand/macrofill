@@ -11,5 +11,8 @@ export function parseGrams(input: string): GramsInput {
   if (text === '') return { ok: false, reason: 'empty' };
   if (/^-\s*(\d+[.,]?\d*|[.,]\d+)$/.test(text)) return { ok: false, reason: 'negative' };
   if (!/^(\d+[.,]?\d*|[.,]\d+)$/.test(text)) return { ok: false, reason: 'invalid' };
-  return { ok: true, grams: Number(text.replace(',', '.')) };
+  const grams = Number(text.replace(',', '.'));
+  // Hundreds of digits overflow to Infinity.
+  if (!Number.isFinite(grams)) return { ok: false, reason: 'invalid' };
+  return { ok: true, grams };
 }

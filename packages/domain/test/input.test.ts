@@ -25,6 +25,11 @@ describe('M5-3: grams input', () => {
     expect(parseGrams(input)).toEqual({ ok: false, reason: 'negative' });
   });
 
+  it('rejects a number too large to represent, instead of returning Infinity', () => {
+    expect(parseGrams('9'.repeat(400))).toEqual({ ok: false, reason: 'invalid' });
+    expect(parseGrams(`${'9'.repeat(400)},5`)).toEqual({ ok: false, reason: 'invalid' });
+  });
+
   it.each(['abc', '1.2.3', '1,2,3', '1e3', '0x10', 'Infinity', '3 2', ',', '.', '3g', '+3'])(
     'rejects non-numeric input %j',
     (input) => {
