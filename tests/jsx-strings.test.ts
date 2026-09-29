@@ -34,6 +34,10 @@ describe('M5-10: lint fails on hardcoded UI strings in JSX', () => {
     ['title', "<div title={'Help'} />"],
     ['alt', '<img alt="Logo" />'],
     ['non-English text', '<p>Zapisz</p>'],
+    ['a children prop', '<button children="Save" />'],
+    ['a children prop expression', "<button children={'Save'} />"],
+    ['a concatenated child', "<p>{'Step ' + x}</p>"],
+    ['a concatenated attribute', "<img alt={x + ' logo'} />"],
   ])('rejects %s', async (_case, jsx) => {
     expect(await stringErrors(component(jsx))).toBeGreaterThan(0);
   });
@@ -43,6 +47,7 @@ describe('M5-10: lint fails on hardcoded UI strings in JSX', () => {
     ['translated attributes', "<button aria-label={t('close')} title={t('help')} />"],
     ['whitespace and punctuation only', "<p>\n  {t('a')} · {t('b')}: {x}%\n</p>"],
     ['numbers', '<p>{x} 100</p>'],
+    ['arithmetic', '<p>{x + 1}</p>'],
     [
       'non-UI attributes',
       '<input className="grams-input wide" type="text" inputMode="decimal" data-testid="grams" id="g" name="grams" role="status" />',

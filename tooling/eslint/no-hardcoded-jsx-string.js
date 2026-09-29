@@ -4,7 +4,8 @@
 
 const hasLetter = (/** @type {string} */ text) => /\p{L}/u.test(text);
 
-// Attributes whose value is shown to the user or read by a screen reader.
+// Attributes whose value is shown to the user or read by a screen reader. `children` is the
+// prop spelling of rendered content.
 const uiAttributes = new Set([
   'alt',
   'aria-description',
@@ -12,14 +13,15 @@ const uiAttributes = new Set([
   'aria-placeholder',
   'aria-roledescription',
   'aria-valuetext',
+  'children',
   'label',
   'placeholder',
   'title',
 ]);
 
 /**
- * String literals an expression can evaluate to, looking through conditionals and logical
- * operators (`x ? 'a' : b`, `x && 'a'`).
+ * String literals an expression can evaluate to or contain, looking through conditionals,
+ * logical operators and concatenation (`x ? 'a' : b`, `x && 'a'`, `'a ' + x`).
  * @param {any} node
  * @returns {any[]}
  */
@@ -35,6 +37,10 @@ function renderedStrings(node) {
       return [...renderedStrings(node.consequent), ...renderedStrings(node.alternate)];
     case 'LogicalExpression':
       return [...renderedStrings(node.left), ...renderedStrings(node.right)];
+    case 'BinaryExpression':
+      return node.operator === '+'
+        ? [...renderedStrings(node.left), ...renderedStrings(node.right)]
+        : [];
     default:
       return [];
   }
