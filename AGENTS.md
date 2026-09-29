@@ -48,17 +48,18 @@ Current phase: **A**. Update this line when a phase's exit criteria are met.
 
 ## Commands
 
-Root scripts; keep this list in sync with `package.json`. Rows marked *(M1, pending)* don't exist yet.
+Root scripts; keep this list in sync with `package.json`. Rows marked *(pending)* don't exist yet.
 
 | Command | Purpose |
 |---|---|
-| `pnpm dev` | Run web and api on the host *(M1, pending)* |
-| `pnpm db:up` | Start the local Postgres in Docker Compose *(M1, pending)* |
+| `pnpm dev` | Run web (Vite, proxies `/api`) and api on the host; settings in `.env` (copy `.env.example`) |
+| `pnpm db:up` | Start the local Postgres 17 in Docker Compose |
+| `pnpm build` | Build web and api (`apps/*/dist`); the `Dockerfile` runs it |
 | `pnpm db:migrate` | Apply migrations to `DATABASE_URL` *(pending)* |
 | `pnpm db:seed` | Load seed data (idempotent) *(pending)* |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | Checks that must pass before finishing. `lint` runs ESLint and `prettier --check` |
 | `pnpm format` | Format with Prettier |
-| `pnpm test:e2e` | Playwright tests on a phone viewport *(M1, pending)* |
+| `pnpm test:e2e` | Playwright tests on a phone viewport *(pending)* |
 
 Running a subset of tests (Vitest projects are named `domain`, `scale`, `web`, `api` and `repo` for the root `tests/`):
 
