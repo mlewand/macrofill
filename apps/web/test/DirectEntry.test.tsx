@@ -1,9 +1,10 @@
-import type { Catalog, SaveMealRequest, SaveMealResponse } from '@macrofill/domain';
+import type { Catalog } from '@macrofill/domain';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiContext, type Api } from '../src/api/api';
 import { App } from '../src/App';
 import en from '../src/i18n/en.json';
+import { fakeApi as baseFakeApi, stored } from './support/api';
 
 const nutrition = (protein: number, fibre: number | null = null) => ({
   kcal: 100,
@@ -72,14 +73,12 @@ const catalog: Catalog = {
   ],
 };
 
-function fakeApi(saveMeal: Api['saveMeal'] = (request) => Promise.resolve(stored(request))): Api {
-  return { catalog: vi.fn(() => Promise.resolve(catalog)), saveMeal: vi.fn(saveMeal) };
+function fakeApi(saveMeal?: Api['saveMeal']): Api {
+  return baseFakeApi({
+    catalog: () => Promise.resolve(catalog),
+    ...(saveMeal ? { saveMeal } : {}),
+  });
 }
-
-const stored = (request: SaveMealRequest): SaveMealResponse => ({
-  meal: request.meal,
-  consumptionEntry: { ...request.consumptionEntry, preparedMealId: request.meal.id },
-});
 
 function renderApp(api = fakeApi()) {
   render(
