@@ -220,7 +220,7 @@ describe('M2-4: calculations use unrounded values', () => {
     expect(dayNutrition([])).toEqual(mealNutrition([], products));
   });
 
-  it('mutating an empty result does not leak into later totals', () => {
+  it('mutating an empty result does not leak into later totals (regression: #8)', () => {
     const empty = dayNutrition([]);
     empty.kcal = 500;
     empty.fibre = null;

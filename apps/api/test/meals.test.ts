@@ -118,7 +118,7 @@ describe('POST /api/meals', () => {
       expect(await count('prepared_meal_items')).toBe(0);
     });
 
-    it('a retry with a different consumption entry id is a conflict, not a replay', async () => {
+    it('a retry with a different consumption entry id is a conflict, not a replay (regression: #11)', async () => {
       await post(request());
       const body = request();
       const otherEntryId = 'f1c7a5e6-8b9d-4c0e-9f1a-1b0c9d8e7f6a';
@@ -130,7 +130,7 @@ describe('POST /api/meals', () => {
       expect(await count('consumption_entries')).toBe(1);
     });
 
-    it("a retry naming another user's consumption entry id is a conflict", async () => {
+    it("a retry naming another user's consumption entry id is a conflict (regression: #11)", async () => {
       await post(request());
       const otherEntryId = 'f1c7a5e6-8b9d-4c0e-9f1a-1b0c9d8e7f6a';
       const otherMealId = 'a2d8b6f7-9c0e-4d1f-8a2b-2c1d0e9f8a7b';

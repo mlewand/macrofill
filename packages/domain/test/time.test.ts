@@ -41,8 +41,15 @@ describe('M2-5: consumption counts toward the day in the user timezone', () => {
     expect(userSchema.safeParse({ ...user, timezone: '-0500' }).success).toBe(false);
   });
 
-  it.each(['UTC', 'CST6CDT', 'EST5EDT', 'Etc/GMT+1', 'America/Argentina/Buenos_Aires'])(
+  it.each(['UTC', 'Etc/GMT+1', 'America/Argentina/Buenos_Aires'])(
     'accepts the IANA name %s',
+    (timezone) => {
+      expect(timeZoneSchema.safeParse(timezone).success).toBe(true);
+    },
+  );
+
+  it.each(['CST6CDT', 'EST5EDT'])(
+    'accepts the IANA name %s, with digits (regression: #8)',
     (timezone) => {
       expect(timeZoneSchema.safeParse(timezone).success).toBe(true);
     },
