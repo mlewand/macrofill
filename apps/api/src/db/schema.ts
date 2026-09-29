@@ -119,10 +119,11 @@ export const preparedMealItems = pgTable(
   (t) => [
     primaryKey({ columns: [t.preparedMealId, t.position] }),
     // Mirrors the domain union: a skipped item has no product or grams; others have both, grams >= 0.
+    // Every predicate is null-safe: a CHECK that evaluates to NULL passes.
     check(
       'prepared_meal_items_skipped_shape',
       sql`(${t.skipped} and ${t.productId} is null and ${t.grams} is null and ${t.weightSource} is null)
-        or (not ${t.skipped} and ${t.productId} is not null and ${t.grams} >= 0 and ${t.weightSource} is not null)`,
+        or (not ${t.skipped} and ${t.productId} is not null and ${t.grams} is not null and ${t.grams} >= 0 and ${t.weightSource} is not null)`,
     ),
   ],
 );

@@ -1,5 +1,5 @@
 {
-  "id": "0ca15d95-bb49-46d9-b615-e91ce9da140d",
+  "id": "c2e6827a-9a97-4022-a57c-eb7a05e225bb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -271,7 +271,7 @@
       "checkConstraints": {
         "prepared_meal_items_skipped_shape": {
           "name": "prepared_meal_items_skipped_shape",
-          "value": "(\"prepared_meal_items\".\"skipped\" and \"prepared_meal_items\".\"product_id\" is null and \"prepared_meal_items\".\"grams\" is null and \"prepared_meal_items\".\"weight_source\" is null)\n        or (not \"prepared_meal_items\".\"skipped\" and \"prepared_meal_items\".\"product_id\" is not null and \"prepared_meal_items\".\"grams\" >= 0 and \"prepared_meal_items\".\"weight_source\" is not null)"
+          "value": "(\"prepared_meal_items\".\"skipped\" and \"prepared_meal_items\".\"product_id\" is null and \"prepared_meal_items\".\"grams\" is null and \"prepared_meal_items\".\"weight_source\" is null)\n        or (not \"prepared_meal_items\".\"skipped\" and \"prepared_meal_items\".\"product_id\" is not null and \"prepared_meal_items\".\"grams\" is not null and \"prepared_meal_items\".\"grams\" >= 0 and \"prepared_meal_items\".\"weight_source\" is not null)"
         }
       },
       "isRLSEnabled": false

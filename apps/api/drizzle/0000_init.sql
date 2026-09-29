@@ -31,7 +31,7 @@ CREATE TABLE "prepared_meal_items" (
 	"weight_source" text,
 	CONSTRAINT "prepared_meal_items_prepared_meal_id_position_pk" PRIMARY KEY("prepared_meal_id","position"),
 	CONSTRAINT "prepared_meal_items_skipped_shape" CHECK (("prepared_meal_items"."skipped" and "prepared_meal_items"."product_id" is null and "prepared_meal_items"."grams" is null and "prepared_meal_items"."weight_source" is null)
-        or (not "prepared_meal_items"."skipped" and "prepared_meal_items"."product_id" is not null and "prepared_meal_items"."grams" >= 0 and "prepared_meal_items"."weight_source" is not null))
+        or (not "prepared_meal_items"."skipped" and "prepared_meal_items"."product_id" is not null and "prepared_meal_items"."grams" is not null and "prepared_meal_items"."grams" >= 0 and "prepared_meal_items"."weight_source" is not null))
 );
 --> statement-breakpoint
 CREATE TABLE "prepared_meals" (
