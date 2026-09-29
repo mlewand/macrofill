@@ -6,8 +6,9 @@ import tseslint from 'typescript-eslint';
 import noCrossPackageRelativeImport from './tooling/eslint/no-cross-package-relative-import.js';
 
 // Package import rules from docs/ARCHITECTURE.md (M1-7).
-/** @type {(name: string, message: string) => { name: string, message: string }} */
-const restrictedImport = (name, message) => ({ name, message });
+// Each rule covers the package and all its subpaths (`@macrofill/web/src/...`).
+/** @type {(name: string, message: string) => { group: string[], message: string }} */
+const restrictedPackage = (name, message) => ({ group: [name, `${name}/**`], message });
 
 export default tseslint.config(
   {
@@ -75,6 +76,11 @@ export default tseslint.config(
           selector: "NewExpression[callee.name='Date'][arguments.length=0]",
           message: 'domain has no clock. Pass time in.',
         },
+        {
+          // Date() without `new` returns the current time as a string.
+          selector: "CallExpression[callee.name='Date']",
+          message: 'domain has no clock. Pass time in.',
+        },
       ],
     },
   },
@@ -84,9 +90,9 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          paths: [
-            restrictedImport('@macrofill/api', 'scale must not import apps.'),
-            restrictedImport('@macrofill/web', 'scale must not import apps.'),
+          patterns: [
+            restrictedPackage('@macrofill/api', 'scale must not import apps.'),
+            restrictedPackage('@macrofill/web', 'scale must not import apps.'),
           ],
         },
       ],
@@ -98,9 +104,9 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          paths: [
-            restrictedImport('@macrofill/scale', 'api never imports scale.'),
-            restrictedImport('@macrofill/web', 'api must not import web.'),
+          patterns: [
+            restrictedPackage('@macrofill/scale', 'api never imports scale.'),
+            restrictedPackage('@macrofill/web', 'api must not import web.'),
           ],
         },
       ],
@@ -114,9 +120,9 @@ export default tseslint.config(
       '@typescript-eslint/no-restricted-imports': [
         'error',
         {
-          paths: [
+          patterns: [
             {
-              name: '@macrofill/api',
+              group: ['@macrofill/api', '@macrofill/api/**'],
               allowTypeImports: true,
               message: 'web imports api with `import type` only.',
             },
