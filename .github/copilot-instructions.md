@@ -1,0 +1,27 @@
+# Code review instructions
+
+Prioritize finding defects and maintainability problems over stylistic comments.
+
+When reviewing changes:
+
+- Look for incorrect behavior, regressions, and unhandled edge cases.
+- Look for incorrect assumptions about null/undefined values and empty collections.
+- Check asynchronous code for missing awaits, races, stale state, and incorrect error propagation.
+- Check resource lifecycle and cleanup.
+- Look for incorrect error handling and errors that are silently swallowed.
+- Identify logic that works for the happy path but fails for plausible boundary conditions.
+- Check whether changes violate existing invariants or assumptions elsewhere in the codebase.
+- Identify unnecessarily complicated implementations when a substantially simpler implementation exists.
+- Look for duplication or new abstractions that don't justify their complexity.
+- Check public API changes for backwards compatibility.
+- Identify missing tests for important behavior introduced or changed by the PR.
+- Pay particular attention to interactions between changed files rather than reviewing files independently.
+
+Do not comment on formatting or stylistic issues that can be handled by automated linters.
+
+Do not suggest refactoring merely because an alternative implementation is possible.
+Only suggest a refactor when there is a concrete readability, correctness,
+maintainability, or performance benefit.
+
+For every issue, explain the concrete failure mode or maintenance problem.
+Avoid speculative comments without a plausible scenario.
