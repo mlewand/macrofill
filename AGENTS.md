@@ -59,11 +59,11 @@ Root scripts; keep this list in sync with `package.json`. Rows marked *(pending)
 | `pnpm db:seed` | Load seed data (idempotent) *(pending)* |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | Checks that must pass before finishing. `lint` runs ESLint and `prettier --check` |
 | `pnpm format` | Format with Prettier |
-| `pnpm test:e2e` | Playwright tests on a phone viewport *(pending)* |
+| `pnpm test:e2e` | Playwright tests on a phone viewport, against the production build served by the api |
 
 Running a subset of tests (Vitest projects are named `domain`, `scale`, `web`, `api` and `repo` for the root `tests/`):
 
-- by criterion ID: `pnpm test -t 'M3-6'`
+- by criterion ID: `pnpm test -t 'M3-6'`, or `pnpm test:e2e -g 'M6-8'`
 - one project: `pnpm test --project domain`, or `pnpm -F @macrofill/domain test`
 - one file: `pnpm test packages/domain/test/tsconfig.test.ts`
 
