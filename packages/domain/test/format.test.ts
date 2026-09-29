@@ -18,4 +18,19 @@ describe('M2-4: display rounding', () => {
   ])('kcal %d display as %d', (kcal, shown) => {
     expect(roundKcal(kcal)).toBe(shown);
   });
+
+  it.each([
+    [-0.4, 0],
+    [-118.5, -119],
+    [-118.49, -118],
+  ])('kcal %d display as %d, never -0, halves away from zero', (kcal, shown) => {
+    expect(Object.is(roundKcal(kcal), shown)).toBe(true);
+  });
+
+  it.each([
+    [-0.04, 0],
+    [-12.35, -12.4],
+  ])('grams %d display as %d, never -0, halves away from zero', (grams, shown) => {
+    expect(Object.is(roundGrams(grams), shown)).toBe(true);
+  });
 });
