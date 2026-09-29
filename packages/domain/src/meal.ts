@@ -48,7 +48,10 @@ export type ConsumptionEntry = z.infer<typeof consumptionEntrySchema>;
 
 const target = z.number().nonnegative().nullable();
 
-/** Each target is optional: `null` means not tracked, never 0. */
+/**
+ * Each target can be unset: `null` means not tracked, never 0, and the other targets stay tracked.
+ * All five keys are required; only their values are nullable.
+ */
 export const dailyTargetsSchema = z.object({
   protein: target,
   fat: target,
