@@ -9,6 +9,7 @@ const hasLetter = (/** @type {string} */ text) => /\p{L}/u.test(text);
 const uiAttributes = new Set([
   'alt',
   'aria-description',
+  'aria-keyshortcuts',
   'aria-label',
   'aria-placeholder',
   'aria-roledescription',

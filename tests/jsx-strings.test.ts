@@ -30,6 +30,7 @@ describe('M5-10: lint fails on hardcoded UI strings in JSX', () => {
     ['a string in a conditional child', "<p>{x ? 'Yes' : t('no')}</p>"],
     ['a string in a logical child', "<p>{x && 'Loading'}</p>"],
     ['aria-label', '<button aria-label="Close" />'],
+    ['aria-keyshortcuts', '<button aria-keyshortcuts="Ctrl+S" />'],
     ['placeholder', '<input placeholder="Grams" />'],
     ['title', "<div title={'Help'} />"],
     ['alt', '<img alt="Logo" />'],
