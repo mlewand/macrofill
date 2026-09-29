@@ -13,7 +13,8 @@
     "lint": "eslint . && prettier --check .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r --parallel typecheck",
     "test": "vitest run",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:e2e": "pnpm --filter @macrofill/web test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
