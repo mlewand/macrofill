@@ -8,4 +8,10 @@ describe('M1-1: web app skeleton', () => {
     render(<App />);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(en.app.name);
   });
+
+  it('sets the browser tab title from the i18n catalog', () => {
+    document.title = 'stale';
+    render(<App />);
+    expect(document.title).toBe(en.app.name);
+  });
 });

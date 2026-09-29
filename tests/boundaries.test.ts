@@ -75,6 +75,8 @@ describe('M1-7: ESLint enforces the package import rules', () => {
     it.each([
       "import { x } from '@macrofill/api';",
       "import { x } from '@macrofill/web';",
+      "import { x } from '@macrofill/api/client';",
+      "import { x } from '@macrofill/web/src/App';",
       "import { x } from '../../../apps/api/src/index';",
     ])('rejects %s', async (code) => {
       await expectRejected(file, `${code}\nexport { };\n`);
@@ -91,6 +93,8 @@ describe('M1-7: ESLint enforces the package import rules', () => {
     it.each([
       "import { x } from '@macrofill/scale';",
       "import { x } from '@macrofill/web';",
+      "import { x } from '@macrofill/scale/src/index';",
+      "import { x } from '@macrofill/web/src/App';",
       "import { x } from '../../../packages/scale/src/index';",
     ])('rejects %s', async (code) => {
       await expectRejected(file, `${code}\nexport { };\n`);
@@ -107,12 +111,22 @@ describe('M1-7: ESLint enforces the package import rules', () => {
       );
     });
 
-    it('rejects value imports from api', async () => {
-      await expectRejected(
+    it('allows type-only imports from api subpaths', async () => {
+      await expectAllowed(
         file,
-        "import { createApp } from '@macrofill/api';\nexport { createApp };\n",
+        "import type { Client } from '@macrofill/api/client';\nexport type { Client };\n",
       );
     });
+
+    it.each(['@macrofill/api', '@macrofill/api/client'])(
+      'rejects value imports from %s',
+      async (source) => {
+        await expectRejected(
+          file,
+          `import { createApp } from '${source}';\nexport { createApp };\n`,
+        );
+      },
+    );
 
     it('rejects relative imports into api sources', async () => {
       await expectRejected(
@@ -135,6 +149,7 @@ describe('domain has no clock and no randomness', () => {
   it.each([
     'export const t = Date.now();',
     'export const d = new Date();',
+    'export const s = Date();',
     'export const r = Math.random();',
   ])('rejects %s', async (code) => {
     await expect(clockErrors(code)).resolves.not.toEqual([]);
