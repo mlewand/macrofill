@@ -41,10 +41,19 @@ describe('M1-5: api serves the built web app', () => {
     expect(await res.text()).toContain('<title>index</title>');
   });
 
-  it('does not fall back to index.html for unknown API routes', async () => {
-    const res = await app().request('/api/does-not-exist');
-    expect(res.status).toBe(404);
-    expect(await res.text()).not.toContain('<title>index</title>');
+  it.each(['/api', '/api/', '/api/does-not-exist'])(
+    'does not fall back to index.html for unknown API route %s',
+    async (path) => {
+      const res = await app().request(path);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('content-type')).toMatch(/application\/json/);
+    },
+  );
+
+  it('falls back to index.html for app routes that only start with "api"', async () => {
+    const res = await app().request('/apix');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('<title>index</title>');
   });
 
   it('serves the service worker with Cache-Control: no-cache', async () => {
