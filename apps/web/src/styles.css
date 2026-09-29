@@ -1,0 +1,133 @@
+/* Phone first and wet-hands friendly: large targets, large text. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.4;
+  --gap: 1rem;
+  --accent: #2f6f3e;
+  --problem: #b3261e;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--gap);
+}
+
+form,
+section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.75rem;
+}
+
+button {
+  font: inherit;
+  min-height: 48px;
+  border-radius: 0.5rem;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: inherit;
+  padding: 0 1rem;
+}
+
+button.primary {
+  width: 100%;
+  min-height: 64px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1.25rem;
+}
+
+button:disabled {
+  opacity: 0.4;
+}
+
+.row {
+  display: flex;
+  gap: var(--gap);
+}
+
+.row > button {
+  flex: 1;
+}
+
+.choices,
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.items li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+legend {
+  margin-bottom: 0.5rem;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 48px;
+  padding: 0 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 0.5rem;
+}
+
+.option input {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+input.grams {
+  font: inherit;
+  font-size: 2rem;
+  padding: 0.25rem 0.5rem;
+  max-width: 10rem;
+}
+
+.progress,
+.muted {
+  opacity: 0.7;
+  margin: 0;
+}
+
+.problem {
+  color: var(--problem);
+  margin: 0;
+}
+
+.nutrition th {
+  text-align: left;
+  font-weight: normal;
+  padding-right: 2rem;
+}
