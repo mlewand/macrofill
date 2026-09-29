@@ -246,4 +246,41 @@ describe('Direct Entry', () => {
     const [first, second] = vi.mocked(api.saveMeal).mock.calls.map(([request]) => request);
     expect(second).toEqual(first);
   });
+
+  it('a save in flight freezes the summary (regression: #16)', async () => {
+    await openCurdBowl(fakeApi(() => new Promise(() => {})));
+    typeGrams('200');
+    click(en.step.next);
+    click(en.step.skip);
+    click(en.summary.save);
+    expect(screen.getByRole('textbox', { name: 'Grams of Polmlek Twaróg' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: en.step.undo })).toBeDisabled();
+    expect(screen.getByRole('button', { name: en.summary.saving })).toBeDisabled();
+  });
+
+  it('after a failed save the summary stays frozen, and a retry resends the first request (regression: #16)', async () => {
+    let attempts = 0;
+    const api = await openCurdBowl(
+      fakeApi((request) =>
+        ++attempts === 1 ? Promise.reject(new Error('offline')) : Promise.resolve(stored(request)),
+      ),
+    );
+    typeGrams('200');
+    click(en.step.next);
+    click(en.step.skip);
+    click(en.summary.save);
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.summary.saveFailed);
+
+    // The first request may have reached the server, so its content must not change.
+    const input = screen.getByRole('textbox', { name: 'Grams of Polmlek Twaróg' });
+    expect(input).toBeDisabled();
+    expect(screen.getByRole('button', { name: en.step.undo })).toBeDisabled();
+    fireEvent.change(input, { target: { value: '999' } });
+
+    click(en.summary.save);
+    expect(await screen.findByRole('status')).toHaveTextContent(en.saved.title);
+    const [first, second] = vi.mocked(api.saveMeal).mock.calls.map(([request]) => request);
+    expect(second).toEqual(first);
+    expect(second?.meal.items[0]).toMatchObject({ grams: 200 });
+  });
 });
