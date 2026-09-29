@@ -31,6 +31,7 @@ Current phase: **A**. Update this line when a phase's exit criteria are met.
 ## Conventions
 
 - TypeScript `strict` everywhere.
+- Dependencies respect pnpm's `minimumReleaseAge` (brand-new releases are held back). Don't add `minimumReleaseAgeExclude` entries; use a version range that allows an older release. pnpm adds such entries on its own when you ask for a version that's too new, so check `pnpm-workspace.yaml` after adding dependencies.
 - The zod schemas in `packages/domain` are the API contract. Web and api import them and never redefine the same shapes.
 - `packages/domain` has no I/O, no clock and no randomness. Pass time and IDs in.
 - Scale byte decoding lives in `@mlewand/huajun-ble-scale`. If the library lacks something, report it instead of reimplementing it; the change belongs in the library.
