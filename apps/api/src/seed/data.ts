@@ -214,7 +214,7 @@ const users: SeedUser[] = [
       username: 'mlewand',
       timezone: 'Europe/Warsaw',
     },
-    targets: { protein: null, fat: null, carbs: null, fibre: null, kcal: null },
+    targets: { protein: 160, fat: 65, carbs: null, fibre: null, kcal: 2700 },
   },
 ];
 
