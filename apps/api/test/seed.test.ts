@@ -51,6 +51,39 @@ describe('M4-5: seed script', () => {
     );
   });
 
+  it('reseeding after a step is inserted mid-recipe moves the later steps', async () => {
+    await seed(database.db);
+    const [recipe, ...otherRecipes] = seedData.recipes;
+    const [first, ...rest] = recipe!.steps;
+    const inserted = { id: 'f1b2c3d4-0000-4000-8000-000000000001', ingredientClassId: 'cheese' };
+    const changed = {
+      ...seedData,
+      recipes: [{ ...recipe!, steps: [first!, inserted, ...rest] }, ...otherRecipes],
+    };
+    await seed(database.db, changed);
+    const rows = await queryRows<{ id: string }>(
+      database.db,
+      sql`select id from recipe_steps where recipe_id = ${recipe!.id} order by position`,
+    );
+    expect(rows.map((r) => r.id)).toEqual([first!.id, inserted.id, ...rest.map((s) => s.id)]);
+  });
+
+  it('reseeding after a step is removed drops it from the recipe', async () => {
+    await seed(database.db);
+    const [recipe, ...otherRecipes] = seedData.recipes;
+    const [first, , ...rest] = recipe!.steps;
+    const changed = {
+      ...seedData,
+      recipes: [{ ...recipe!, steps: [first!, ...rest] }, ...otherRecipes],
+    };
+    await seed(database.db, changed);
+    const rows = await queryRows<{ id: string; position: number }>(
+      database.db,
+      sql`select id, position from recipe_steps where recipe_id = ${recipe!.id} order by position`,
+    );
+    expect(rows).toEqual([first!, ...rest].map((s, position) => ({ id: s.id, position })));
+  });
+
   it('never writes a password hash, and keeps one that was set', async () => {
     await seed(database.db);
     const [user] = seedData.users;

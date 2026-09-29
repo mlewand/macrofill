@@ -1,3 +1,4 @@
+import { and, eq, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   dailyTargets,
@@ -44,6 +45,22 @@ export async function seed(db: Db, data = seedData): Promise<void> {
         .insert(recipes)
         .values(recipe)
         .onConflictDoUpdate({ target: recipes.id, set: recipe });
+      // Steps no longer in the seed go (meal items keep their stepId; it has no foreign key).
+      // The rest move out of the way first, so reordered or inserted steps don't collide on
+      // (recipe_id, position) while they're upserted one by one.
+      await tx.delete(recipeSteps).where(
+        and(
+          eq(recipeSteps.recipeId, recipe.id),
+          notInArray(
+            recipeSteps.id,
+            steps.map((s) => s.id),
+          ),
+        ),
+      );
+      await tx
+        .update(recipeSteps)
+        .set({ position: sql`-${recipeSteps.position} - 1` })
+        .where(eq(recipeSteps.recipeId, recipe.id));
       for (const [position, { defaultProductId, ...step }] of steps.entries()) {
         const row = {
           ...step,
