@@ -30,7 +30,14 @@ function isInputLabel(attribute) {
   const type = element.attributes.find(
     (/** @type {any} */ a) => a.type === 'JSXAttribute' && a.name.name === 'type',
   );
-  return type?.value?.type === 'Literal' && labelledInputTypes.has(type.value.value);
+  // `type="submit"` or `type={'submit'}`; HTML keywords are case-insensitive.
+  const value =
+    type?.value?.type === 'JSXExpressionContainer' ? type.value.expression : type?.value;
+  return (
+    value?.type === 'Literal' &&
+    typeof value.value === 'string' &&
+    labelledInputTypes.has(value.value.toLowerCase())
+  );
 }
 
 /**
@@ -47,7 +54,7 @@ function renderedStrings(node) {
     case 'TemplateLiteral':
       return node.quasis.some((/** @type {any} */ q) => hasLetter(q.value.cooked ?? ''))
         ? [node]
-        : [];
+        : node.expressions.flatMap((/** @type {any} */ e) => renderedStrings(e));
     case 'ConditionalExpression':
       return [...renderedStrings(node.consequent), ...renderedStrings(node.alternate)];
     case 'LogicalExpression':
