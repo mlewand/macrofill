@@ -46,7 +46,7 @@ describe('M2-2: the database enforces the prepared meal item shape', () => {
 
   it.each([
     [
-      'a weighed item without grams',
+      'a weighed item without grams (regression: #10)',
       { skipped: false, productId: product, grams: null, weightSource: 'manual' },
     ],
     [
@@ -67,7 +67,7 @@ describe('M2-2: the database enforces the prepared meal item shape', () => {
       { skipped: true, productId: product, grams: null, weightSource: null },
     ],
     [
-      'an unknown weight source',
+      'an unknown weight source (regression: #10)',
       { skipped: false, productId: product, grams: 10, weightSource: 'guess' },
     ],
   ])('rejects %s', async (_case, item) => {
@@ -88,7 +88,7 @@ describe('the database enforces enum values', () => {
     await database.close();
   });
 
-  it('rejects an unknown meal input method', async () => {
+  it('rejects an unknown meal input method (regression: #10)', async () => {
     await expect(
       database.db.execute(
         sql`insert into prepared_meals (id, owner_id, input_method, started_at, finished_at)
@@ -97,7 +97,7 @@ describe('the database enforces enum values', () => {
     ).rejects.toThrow();
   });
 
-  it('rejects an unknown product source', async () => {
+  it('rejects an unknown product source (regression: #10)', async () => {
     await expect(
       database.db.execute(
         sql`insert into products (id, owner_id, ingredient_class_id, name, source)
