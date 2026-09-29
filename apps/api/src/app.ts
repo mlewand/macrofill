@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { Db } from './db/client';
 import { stubAuth, type AuthEnv } from './http/auth';
+import { catalogRoutes } from './routes/catalog';
 import { mealRoutes } from './routes/meals';
 import { seedData } from './seed/data';
 
@@ -16,7 +17,10 @@ export interface AppOptions {
 }
 
 function createApiRoutes(db: Db, stubUsername: string) {
-  return new Hono<AuthEnv>().use(stubAuth(db, stubUsername)).route('/', mealRoutes(db));
+  return new Hono<AuthEnv>()
+    .use(stubAuth(db, stubUsername))
+    .route('/', catalogRoutes(db))
+    .route('/', mealRoutes(db));
 }
 
 export type AppType = ReturnType<typeof createApiRoutes>;

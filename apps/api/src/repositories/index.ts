@@ -1,16 +1,21 @@
 import type {
+  CatalogProduct,
   ConsumptionEntry,
+  IngredientClass,
   PreparedMeal,
   PreparedMealItem,
+  Recipe,
   SaveMealRequest,
 } from '@macrofill/domain';
-import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, max, or } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   consumptionEntries,
+  ingredientClasses,
   preparedMealItems,
   preparedMeals,
   products,
+  recipeSteps,
   recipes,
 } from '../db/schema';
 
@@ -20,7 +25,57 @@ import {
  */
 export function createRepositories(db: Db, ownerId: string) {
   return {
+    ingredientClasses: {
+      all(): Promise<IngredientClass[]> {
+        return db.select().from(ingredientClasses).orderBy(asc(ingredientClasses.id));
+      },
+    },
+
     products: {
+      /** Seed products and the user's own, each with when the user last used it (M5-2). */
+      async visibleWithLastUse(): Promise<CatalogProduct[]> {
+        const lastUse = db
+          .select({
+            productId: preparedMealItems.productId,
+            lastUsedAt: max(preparedMeals.finishedAt).as('last_used_at'),
+          })
+          .from(preparedMealItems)
+          .innerJoin(preparedMeals, eq(preparedMeals.id, preparedMealItems.preparedMealId))
+          .where(
+            and(
+              eq(preparedMealItems.ownerId, ownerId),
+              eq(preparedMeals.ownerId, ownerId),
+              eq(preparedMealItems.skipped, false),
+            ),
+          )
+          .groupBy(preparedMealItems.productId)
+          .as('last_use');
+        const rows = await db
+          .select({ product: products, lastUsedAt: lastUse.lastUsedAt })
+          .from(products)
+          .leftJoin(lastUse, eq(lastUse.productId, products.id))
+          .where(or(isNull(products.ownerId), eq(products.ownerId, ownerId)))
+          .orderBy(asc(products.name));
+        return rows.map(({ product: p, lastUsedAt }) => ({
+          id: p.id,
+          ingredientClassId: p.ingredientClassId,
+          name: p.name,
+          ...(p.brand === null ? {} : { brand: p.brand }),
+          nutrition: {
+            kcal: p.kcal,
+            fat: p.fat,
+            saturates: p.saturates,
+            carbs: p.carbs,
+            sugars: p.sugars,
+            protein: p.protein,
+            salt: p.salt,
+            fibre: p.fibre,
+          },
+          source: p.source,
+          lastUsedAt: lastUsedAt === null ? null : new Date(lastUsedAt).toISOString(),
+        }));
+      },
+
       /** Of `ids`, those the user may use: seed products and the user's own. */
       async visibleIds(ids: readonly string[]): Promise<Set<string>> {
         if (ids.length === 0) return new Set();
@@ -38,6 +93,29 @@ export function createRepositories(db: Db, ownerId: string) {
     },
 
     recipes: {
+      async all(): Promise<Recipe[]> {
+        const [recipeRows, stepRows] = await Promise.all([
+          db.select().from(recipes).orderBy(asc(recipes.id)),
+          db
+            .select()
+            .from(recipeSteps)
+            .orderBy(asc(recipeSteps.recipeId), asc(recipeSteps.position)),
+        ]);
+        return recipeRows.map((recipe) => ({
+          id: recipe.id,
+          name: recipe.name,
+          steps: stepRows
+            .filter((step) => step.recipeId === recipe.id)
+            .map((step) => ({
+              id: step.id,
+              ingredientClassId: step.ingredientClassId,
+              ...(step.defaultProductId === null
+                ? {}
+                : { defaultProductId: step.defaultProductId }),
+            })),
+        }));
+      },
+
       async exists(id: string): Promise<boolean> {
         const rows = await db.select({ id: recipes.id }).from(recipes).where(eq(recipes.id, id));
         return rows.length > 0;

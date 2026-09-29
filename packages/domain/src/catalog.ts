@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { idSchema, localizedTextSchema, slugSchema } from './common.js';
+import { idSchema, localizedTextSchema, slugSchema, timestampSchema } from './common.js';
 import { productNutritionSchema } from './nutrition.js';
 
 export const ingredientClassSchema = z.object({
@@ -36,3 +36,20 @@ export const recipeSchema = z.object({
 });
 
 export type Recipe = z.infer<typeof recipeSchema>;
+
+/** A product in the catalog, with when the current user last used it (M5-2). */
+export const catalogProductSchema = productSchema.extend({
+  /** Finish time of the user's latest meal with this product; `null` if never used. */
+  lastUsedAt: timestampSchema.nullable(),
+});
+
+export type CatalogProduct = z.infer<typeof catalogProductSchema>;
+
+/** `GET /api/catalog`: everything the Direct Entry flow needs (M5-1, M5-2). */
+export const catalogSchema = z.object({
+  ingredientClasses: z.array(ingredientClassSchema),
+  recipes: z.array(recipeSchema),
+  products: z.array(catalogProductSchema),
+});
+
+export type Catalog = z.infer<typeof catalogSchema>;
