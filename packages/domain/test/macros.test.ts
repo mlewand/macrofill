@@ -197,4 +197,12 @@ describe('M2-4: calculations use unrounded values', () => {
   it('an empty day is all zeros with known fibre', () => {
     expect(dayNutrition([])).toEqual(mealNutrition([], products));
   });
+
+  it('mutating an empty result does not leak into later totals', () => {
+    const empty = dayNutrition([]);
+    empty.kcal = 500;
+    empty.fibre = null;
+    expect(dayNutrition([])).toEqual({ ...empty, kcal: 0, fibre: 0 });
+    expect(mealNutrition([item('cucumber', 100)], products).kcal).toBeCloseTo(11, 12);
+  });
 });

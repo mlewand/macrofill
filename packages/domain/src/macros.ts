@@ -44,7 +44,8 @@ function add(a: NutritionValues, b: NutritionValues): NutritionValues {
 
 /** Sums totals. A sum that includes unknown fibre is unknown (M2-3). */
 export function sumNutrition(totals: readonly NutritionValues[]): NutritionValues {
-  return totals.reduce(add, ZERO);
+  // A fresh accumulator, so an empty result can't be mutated into the shared ZERO.
+  return totals.reduce(add, { ...ZERO });
 }
 
 /**
