@@ -5,6 +5,7 @@ import {
   ingredientClassSchema,
   preparedMealSchema,
   recipeSchema,
+  saveMealRequestSchema,
 } from '../src/index.js';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -96,5 +97,40 @@ describe('entity schemas', () => {
     expect(targets).toEqual({ protein: 150, fat: null, carbs: null, fibre: 30, kcal: 2200 });
     expect(dailyTargetsSchema.safeParse({ ...targets, protein: -1 }).success).toBe(false);
     expect(dailyTargetsSchema.safeParse({ protein: 150 }).success).toBe(false);
+  });
+});
+
+describe('M4-6: save meal request', () => {
+  const request = {
+    meal: {
+      id: uuid(10),
+      inputMethod: 'direct',
+      startedAt: '2026-01-15T07:00:00.000Z',
+      finishedAt: '2026-01-15T07:05:00.000Z',
+      items: [],
+    },
+    consumptionEntry: {
+      id: uuid(20),
+      eatenAt: '2026-01-15T07:05:00.000Z',
+      portion: { type: 'whole' },
+    },
+  };
+
+  it('carries the meal and its consumption entry, both with client-generated ids', () => {
+    expect(saveMealRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      saveMealRequestSchema.safeParse({
+        ...request,
+        consumptionEntry: { ...request.consumptionEntry, id: 'x' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('the entry points at the meal implicitly; a client-sent preparedMealId is dropped', () => {
+    const parsed = saveMealRequestSchema.parse({
+      ...request,
+      consumptionEntry: { ...request.consumptionEntry, preparedMealId: uuid(99) },
+    });
+    expect(parsed.consumptionEntry).not.toHaveProperty('preparedMealId');
   });
 });

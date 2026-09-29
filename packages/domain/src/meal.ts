@@ -46,6 +46,25 @@ export const consumptionEntrySchema = z.object({
 
 export type ConsumptionEntry = z.infer<typeof consumptionEntrySchema>;
 
+/**
+ * `POST /api/meals` body: a meal and its consumption entry. Both ids are client-generated, so a
+ * retried save is idempotent (M4-6). The entry belongs to this meal; it names no meal itself.
+ */
+export const saveMealRequestSchema = z.object({
+  meal: preparedMealSchema,
+  consumptionEntry: consumptionEntrySchema.omit({ preparedMealId: true }),
+});
+
+export type SaveMealRequest = z.infer<typeof saveMealRequestSchema>;
+
+/** `POST /api/meals` response: the meal and entry as stored. */
+export const saveMealResponseSchema = z.object({
+  meal: preparedMealSchema,
+  consumptionEntry: consumptionEntrySchema,
+});
+
+export type SaveMealResponse = z.infer<typeof saveMealResponseSchema>;
+
 const target = z.number().nonnegative().nullable();
 
 /**
