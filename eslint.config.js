@@ -3,6 +3,11 @@ import prettier from 'eslint-config-prettier';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import noCrossPackageRelativeImport from './tooling/eslint/no-cross-package-relative-import.js';
+
+// Package import rules from docs/ARCHITECTURE.md (M1-7).
+/** @type {(name: string, message: string) => { name: string, message: string }} */
+const restrictedImport = (name, message) => ({ name, message });
 
 export default tseslint.config(
   {
@@ -23,6 +28,12 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    plugins: {
+      local: { rules: { 'no-cross-package-relative-import': noCrossPackageRelativeImport } },
+    },
+    rules: {
+      'local/no-cross-package-relative-import': 'error',
+    },
   },
   {
     // domain's own tsconfig has no Node types, so its tests use a separate one.
@@ -40,10 +51,78 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    files: ['packages/domain/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(?!(zod(/.*)?|\\.\\.?(/.*)?)$)',
+              message: 'domain imports only zod (docs/ARCHITECTURE.md).',
+            },
+          ],
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        { object: 'Date', property: 'now', message: 'domain has no clock. Pass time in.' },
+        { object: 'Math', property: 'random', message: 'domain has no randomness. Pass IDs in.' },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+          message: 'domain has no clock. Pass time in.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['packages/scale/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            restrictedImport('@macrofill/api', 'scale must not import apps.'),
+            restrictedImport('@macrofill/web', 'scale must not import apps.'),
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['apps/api/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            restrictedImport('@macrofill/scale', 'api never imports scale.'),
+            restrictedImport('@macrofill/web', 'api must not import web.'),
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['apps/web/src/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@macrofill/api',
+              allowTypeImports: true,
+              message: 'web imports api with `import type` only.',
+            },
+          ],
+        },
+      ],
     },
   },
   prettier,
