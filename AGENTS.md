@@ -47,3 +47,9 @@ M1 creates these root scripts; keep this list in sync with `package.json`.
 | `pnpm db:seed` | Load seed data (idempotent) |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | Checks that must pass before finishing |
 | `pnpm test:e2e` | Playwright tests on a phone viewport |
+
+## Saving coding agent information
+
+When feasible `AGENTS.md` should be preferred for storing information over `CLAUDE.md`.
+
+`Claude.md` should be used only for truly claude specific instructions that are not useful for other LLM harness.
