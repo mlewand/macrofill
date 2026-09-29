@@ -4,14 +4,17 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import type { Database } from '../src/db/client';
-import { createTestDatabase } from './support/db';
+import { seed } from '../src/seed/seed';
+import { createMigratedTestDatabase } from './support/db';
 
 describe('M1-5: api serves the built web app', () => {
   let webDist: string;
   let database: Database;
 
-  beforeAll(() => {
-    database = createTestDatabase();
+  beforeAll(async () => {
+    // Unknown /api paths pass the stub auth first, which needs the seeded user.
+    database = await createMigratedTestDatabase();
+    await seed(database.db);
     webDist = mkdtempSync(join(tmpdir(), 'macrofill-web-'));
     mkdirSync(join(webDist, 'assets'));
     writeFileSync(join(webDist, 'index.html'), '<!doctype html><title>index</title>');

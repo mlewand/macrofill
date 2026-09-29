@@ -1,22 +1,38 @@
 import { serveStatic } from '@hono/node-server/serve-static';
 import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import type { Db } from './db/client';
+import { stubAuth, type AuthEnv } from './http/auth';
+import { mealRoutes } from './routes/meals';
+import { seedData } from './seed/data';
 
 export interface AppOptions {
   db: Db;
+  /** Phase A stub auth acts as this seeded user. Defaults to the first seed user. */
+  stubUsername?: string;
   /** Directory with the built `apps/web`. Production only; in development Vite serves the web app. */
   webDist?: string;
 }
 
-function createApiRoutes() {
-  return new Hono();
+function createApiRoutes(db: Db, stubUsername: string) {
+  return new Hono<AuthEnv>().use(stubAuth(db, stubUsername)).route('/', mealRoutes(db));
 }
 
 export type AppType = ReturnType<typeof createApiRoutes>;
 
 export function createApp(options: AppOptions) {
   const app = new Hono();
+
+  // Malformed JSON bodies (M4-4) come here as 400 HTTPExceptions from the validator.
+  app.onError((error, c) => {
+    if (error instanceof HTTPException && error.status === 400) {
+      return c.json({ error: 'invalid_json' }, 400);
+    }
+    if (error instanceof HTTPException) return error.getResponse();
+    console.error(error);
+    return c.json({ error: 'internal' }, 500);
+  });
 
   // M4-8: outside the api routes, so auth (M4-2) never wraps it. The Docker healthcheck calls it.
   app.get('/api/health', async (c) => {
@@ -28,7 +44,10 @@ export function createApp(options: AppOptions) {
     }
   });
 
-  app.route('/api', createApiRoutes());
+  app.route(
+    '/api',
+    createApiRoutes(options.db, options.stubUsername ?? seedData.users[0]!.user.username),
+  );
   app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
 
   if (options.webDist !== undefined) {
