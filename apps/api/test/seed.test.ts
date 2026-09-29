@@ -105,17 +105,18 @@ describe('M4-5: seed script', () => {
       sql`select salt, sugars, saturates, fibre from products where name like '%Rzodkiewka%'`,
     );
     expect(radish).toEqual([{ salt: null, sugars: null, saturates: null, fibre: null }]);
+    // Targets follow the seed file, whatever the user set there; an unset one stays null.
+    const [user] = seedData.users;
     const targets = await queryRows(database.db, sql`select * from daily_targets`);
-    expect(targets).toEqual([
-      {
-        owner_id: seedData.users[0]!.user.id,
-        protein: null,
-        fat: null,
-        carbs: null,
-        fibre: null,
-        kcal: null,
-      },
-    ]);
+    expect(targets).toEqual([{ owner_id: user!.user.id, ...user!.targets }]);
+  });
+
+  it('stores an unset target as null, never 0', async () => {
+    const [user] = seedData.users;
+    const targets = { protein: 150, fat: null, carbs: null, fibre: null, kcal: null };
+    await seed(database.db, { ...seedData, users: [{ ...user!, targets }] });
+    const rows = await queryRows(database.db, sql`select * from daily_targets`);
+    expect(rows).toEqual([{ owner_id: user!.user.id, ...targets }]);
   });
 });
 
