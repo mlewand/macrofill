@@ -3,11 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
+import type { Database } from '../src/db/client';
+import { createTestDatabase } from './support/db';
 
 describe('M1-5: api serves the built web app', () => {
   let webDist: string;
+  let database: Database;
 
   beforeAll(() => {
+    database = createTestDatabase();
     webDist = mkdtempSync(join(tmpdir(), 'macrofill-web-'));
     mkdirSync(join(webDist, 'assets'));
     writeFileSync(join(webDist, 'index.html'), '<!doctype html><title>index</title>');
@@ -16,11 +20,12 @@ describe('M1-5: api serves the built web app', () => {
     writeFileSync(join(webDist, 'manifest.webmanifest'), '{}');
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     rmSync(webDist, { recursive: true, force: true });
+    await database.close();
   });
 
-  const app = () => createApp({ webDist });
+  const app = () => createApp({ db: database.db, webDist });
 
   it('serves index.html at the root', async () => {
     const res = await app().request('/');
@@ -81,7 +86,7 @@ describe('M1-5: api serves the built web app', () => {
   });
 
   it('serves no static files when no web build is configured', async () => {
-    const res = await createApp().request('/');
+    const res = await createApp({ db: database.db }).request('/');
     expect(res.status).toBe(404);
   });
 });

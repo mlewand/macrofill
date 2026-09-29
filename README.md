@@ -19,13 +19,17 @@ corepack enable
 pnpm install
 cp .env.example .env
 pnpm db:up
+pnpm db:migrate
+pnpm db:seed
 pnpm dev
 ```
 
 Open http://localhost:5173.
 
 - `pnpm db:up` starts Postgres 17 in Docker Compose on `127.0.0.1:5432`, and `.env.example` already points `DATABASE_URL` at it. To use an existing Postgres server instead, give the app its own database and role there and change only `DATABASE_URL`.
-- Migrations (`pnpm db:migrate`) and seed data (`pnpm db:seed`) don't exist yet. They'll run here, after `pnpm db:up`.
+- `pnpm db:migrate` applies the Drizzle migrations in `apps/api/drizzle`. It's the only way migrations run: the api refuses to start while the schema is behind.
+- `pnpm db:seed` loads the recipes, ingredient classes, products and users from `apps/api/src/seed/data.ts`. Running it again is safe; it updates rows in place. Daily targets are set there too (unset means not tracked).
+- After changing `apps/api/src/db/schema.ts`, generate a migration with `pnpm -F @macrofill/api db:generate`, then run `pnpm db:migrate`.
 
 ## Daily development
 
@@ -68,7 +72,7 @@ Web Bluetooth and PWA installation need HTTPS. On the LAN, a Caddy reverse proxy
 | `pnpm test:e2e` | Playwright on a phone viewport, against the production build served by the api |
 | `pnpm format` | Format with Prettier |
 
-Before the first `pnpm test:e2e`, install the browser once: `pnpm --filter @macrofill/web exec playwright install --with-deps chromium`.
+Before the first `pnpm test:e2e`, install the browser once: `pnpm --filter @macrofill/web exec playwright install --with-deps chromium`. The e2e tests use the database from `DATABASE_URL` (the root `.env`), so run `pnpm db:up`, `pnpm db:migrate` and `pnpm db:seed` first. The Vitest API tests need no database; they use PGlite in-process.
 
 Running a subset:
 
@@ -76,7 +80,7 @@ Running a subset:
 - one project (`domain`, `scale`, `web`, `api`, or `repo` for the root `tests/`): `pnpm test --project domain`
 - one file: `pnpm test packages/domain/test/tsconfig.test.ts`
 
-CI (GitHub Actions) runs lint, typecheck, the Vitest tests, the e2e tests and a production image build on every push.
+CI (GitHub Actions) runs lint, typecheck, the Vitest tests, the e2e tests and a production image build with a smoke test (`tooling/ci/image-smoke.sh`) on every push.
 
 ## Production deploy
 
@@ -91,12 +95,17 @@ One Docker image: the api serves the built web app, on one origin. It runs on th
    APP_PORT=3000
    ```
 
-3. Build and start:
+3. Build the image, apply migrations, load the seed data and start:
 
    ```sh
-   docker compose -f compose.prod.yml up -d --build
+   docker compose -f compose.prod.yml build
+   docker compose -f compose.prod.yml run --rm app node migrate.mjs
+   docker compose -f compose.prod.yml run --rm app node seed.mjs
+   docker compose -f compose.prod.yml up -d
    ```
 
 4. Point a Caddy site at `<lan-server-ip>:3000`.
 
-Updating means pulling the repo and running the same command again. Migrations will be a separate, explicit step before the restart once they exist.
+The container's healthcheck calls `/api/health`, which checks the database connection; `docker compose -f compose.prod.yml ps` shows the status.
+
+Updating means pulling the repo and running the same steps again. The seed step is needed only when the seed data changed. Migrations run only through the explicit `migrate.mjs` step: an app that's newer than the database schema refuses to start.

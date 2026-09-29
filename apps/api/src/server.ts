@@ -1,16 +1,22 @@
 import { serve } from '@hono/node-server';
-import { createApp } from './app';
 import { loadConfig } from './config';
+import { connect } from './db/client';
+import { startServer } from './start';
 
 const config = loadConfig(process.env);
-const app = createApp(config.webDist === undefined ? {} : { webDist: config.webDist });
+const database = connect(config.databaseUrl, { queryTimeoutMs: 3000 });
 
-const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`api listening on :${info.port}`);
-});
-
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    server.close(() => process.exit(0));
-  });
+try {
+  const server = await startServer(config, database, serve);
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(signal, () => {
+      server.close(() => {
+        void database.close().finally(() => process.exit(0));
+      });
+    });
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  await database.close();
+  process.exit(1);
 }

@@ -1,7 +1,10 @@
 import { serveStatic } from '@hono/node-server/serve-static';
+import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
+import type { Db } from './db/client';
 
 export interface AppOptions {
+  db: Db;
   /** Directory with the built `apps/web`. Production only; in development Vite serves the web app. */
   webDist?: string;
 }
@@ -12,8 +15,18 @@ function createApiRoutes() {
 
 export type AppType = ReturnType<typeof createApiRoutes>;
 
-export function createApp(options: AppOptions = {}) {
+export function createApp(options: AppOptions) {
   const app = new Hono();
+
+  // M4-8: outside the api routes, so auth (M4-2) never wraps it. The Docker healthcheck calls it.
+  app.get('/api/health', async (c) => {
+    try {
+      await options.db.execute(sql`select 1`);
+      return c.json({ status: 'ok' });
+    } catch {
+      return c.json({ status: 'unavailable' }, 503);
+    }
+  });
 
   app.route('/api', createApiRoutes());
   app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));

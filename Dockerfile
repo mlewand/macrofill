@@ -14,10 +14,16 @@ RUN pnpm build
 FROM node:24-slim
 ENV NODE_ENV=production \
     API_PORT=3000 \
-    WEB_DIST=/app/public
+    WEB_DIST=/app/public \
+    MIGRATIONS_DIR=/app/drizzle
 WORKDIR /app
+# server.mjs, plus migrate.mjs and seed.mjs for the explicit deploy steps (see README).
 COPY --from=build /repo/apps/api/dist/ ./
+COPY --from=build /repo/apps/api/drizzle/ ./drizzle/
 COPY --from=build /repo/apps/web/dist/ ./public/
 USER node
 EXPOSE 3000
+# M4-8: healthy only while the api can reach the database.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:' + (process.env.API_PORT || 3000) + '/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 CMD ["node", "--enable-source-maps", "server.mjs"]
