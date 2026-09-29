@@ -92,7 +92,8 @@ describe('entity schemas', () => {
       fibre: 30,
       kcal: 2200,
     });
-    expect(targets.fat).toBeNull();
+    // Unsetting one target leaves the others tracked.
+    expect(targets).toEqual({ protein: 150, fat: null, carbs: null, fibre: 30, kcal: 2200 });
     expect(dailyTargetsSchema.safeParse({ ...targets, protein: -1 }).success).toBe(false);
     expect(dailyTargetsSchema.safeParse({ protein: 150 }).success).toBe(false);
   });

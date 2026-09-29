@@ -147,6 +147,13 @@ describe('M2-3: fibre total', () => {
     expect(mealNutrition([item('bread', 60), item('ham', 20)], products).fibre).toBeNull();
   });
 
+  it('unknown fibre leaves every other total numeric', () => {
+    const total = mealNutrition([item('bread', 60), item('ham', 20)], products);
+    for (const n of NUTRIENTS.filter((n) => n !== 'fibre')) {
+      expect(total[n]).toBeCloseTo((60 * (bread[n] ?? 0) + 20 * (ham[n] ?? 0)) / 100, 12);
+    }
+  });
+
   it('is numeric when every contributing product has fibre, including 0', () => {
     expect(mealNutrition([item('bread', 60), item('cucumber', 30)], products).fibre).toBeCloseTo(
       4.2,
