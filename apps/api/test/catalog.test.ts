@@ -73,6 +73,29 @@ describe('GET /api/catalog (M5-1, M5-2)', () => {
     expect([...products.values()].filter((v) => v !== null)).toHaveLength(2);
   });
 
+  it('M5-2: skipped items never count as a use, even if one carried a product', async () => {
+    // The CHECK constraint already stops a skipped item from carrying a product. It's dropped
+    // here on purpose, to test that the query itself ignores skipped items.
+    await saveMeal(crypto.randomUUID(), '2026-01-12T08:00:00.000Z', [
+      { skipped: false, productId: curd.id, grams: 100, weightSource: 'manual' },
+    ]);
+    await database.db.execute(
+      sql`alter table prepared_meal_items drop constraint prepared_meal_items_skipped_shape`,
+    );
+    const mealId = crypto.randomUUID();
+    const owner = seedData.users[0]!.user.id;
+    await database.db.execute(
+      sql`insert into prepared_meals (id, owner_id, input_method, started_at, finished_at)
+          values (${mealId}, ${owner}, 'direct', '2026-01-20T08:00:00Z', '2026-01-20T08:00:00Z')`,
+    );
+    await database.db.execute(
+      sql`insert into prepared_meal_items (owner_id, prepared_meal_id, position, skipped, product_id)
+          values (${owner}, ${mealId}, 0, true, ${curd.id})`,
+    );
+    const products = new Map((await catalog()).products.map((p) => [p.id, p.lastUsedAt]));
+    expect(products.get(curd.id)).toBe('2026-01-12T08:00:00.000Z');
+  });
+
   it("includes the user's own products, with their own lastUsedAt", async () => {
     const ownProductId = 'f2c8a6b7-0d1e-4f2a-9b3c-3d2e1f0a9b8c';
     await database.db.execute(

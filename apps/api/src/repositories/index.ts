@@ -41,7 +41,13 @@ export function createRepositories(db: Db, ownerId: string) {
           })
           .from(preparedMealItems)
           .innerJoin(preparedMeals, eq(preparedMeals.id, preparedMealItems.preparedMealId))
-          .where(and(eq(preparedMealItems.ownerId, ownerId), eq(preparedMeals.ownerId, ownerId)))
+          .where(
+            and(
+              eq(preparedMealItems.ownerId, ownerId),
+              eq(preparedMeals.ownerId, ownerId),
+              eq(preparedMealItems.skipped, false),
+            ),
+          )
           .groupBy(preparedMealItems.productId)
           .as('last_use');
         const rows = await db
