@@ -15,6 +15,7 @@ When reviewing changes:
 - Look for duplication or new abstractions that don't justify their complexity.
 - Check public API changes for backwards compatibility.
 - Identify missing tests for important behavior introduced or changed by the PR.
+- A fix for a business logic bug must come with a regression test that references the PR or GitHub issue where the bug was found, as `(regression: #<number>)` in the test name (see `AGENTS.md`). Flag a fix without one, and a regression test that would pass even without the fix.
 - Pay particular attention to interactions between changed files rather than reviewing files independently.
 
 Do not comment on formatting or stylistic issues that can be handled by automated linters.

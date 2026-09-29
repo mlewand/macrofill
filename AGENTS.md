@@ -17,6 +17,7 @@ Current phase: **A**. Update this line when a phase's exit criteria are met.
 - Tests first: write failing tests for the criteria you're implementing, then the code. Put the criterion ID in the test name, e.g. `it('M3-6: negative step asks for correction', ...)`.
 - Never change requirements, criteria, `docs/ARCHITECTURE.md` or `docs/TODO.md` silently. If a criterion is ambiguous, contradicts another, or looks wrong, stop and ask. If it has to change, propose the edit and say why.
 - Never weaken tests, coverage thresholds or lint rules to get a green build.
+- **Every business logic bug that's discovered gets a regression test**, whether it was found in review, testing or use. The test references the pull request or GitHub issue where the bug was found: add `(regression: #<number>)` at the end of the test name, after the criterion ID, e.g. `it('M4-6: a retry naming a different entry is a conflict (regression: #11)', ...)`. Check that the test fails without the fix and passes with it. A test that passes either way doesn't guard anything. `pnpm test -t 'regression: #'` runs them all.
 - Before finishing: `pnpm lint`, `pnpm typecheck` and `pnpm test` pass from the repo root.
 - Keep `README.md` current when setup, commands or deployment change.
 - Commit messages name the criterion IDs they cover.
