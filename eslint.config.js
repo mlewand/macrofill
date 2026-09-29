@@ -4,6 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import noCrossPackageRelativeImport from './tooling/eslint/no-cross-package-relative-import.js';
+import noHardcodedJsxString from './tooling/eslint/no-hardcoded-jsx-string.js';
 
 // Package import rules from docs/ARCHITECTURE.md (M1-7).
 // Each rule covers the package and all its subpaths (`@macrofill/web/src/...`).
@@ -30,7 +31,12 @@ export default tseslint.config(
       },
     },
     plugins: {
-      local: { rules: { 'no-cross-package-relative-import': noCrossPackageRelativeImport } },
+      local: {
+        rules: {
+          'no-cross-package-relative-import': noCrossPackageRelativeImport,
+          'no-hardcoded-jsx-string': noHardcodedJsxString,
+        },
+      },
     },
     rules: {
       'local/no-cross-package-relative-import': 'error',
@@ -117,6 +123,8 @@ export default tseslint.config(
     plugins: { 'react-hooks': reactHooks },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // M5-10: UI text comes from the i18n catalog.
+      'local/no-hardcoded-jsx-string': 'error',
       '@typescript-eslint/no-restricted-imports': [
         'error',
         {
