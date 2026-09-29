@@ -19,9 +19,24 @@ const uiAttributes = new Set([
   'title',
 ]);
 
+// `<input type="submit" value="Save" />`: for these input types `value` is the visible label.
+// For other inputs and elements it's form data.
+const labelledInputTypes = new Set(['submit', 'button', 'reset']);
+
+/** @param {any} attribute JSXAttribute */
+function isInputLabel(attribute) {
+  const element = attribute.parent;
+  if (element?.name?.type !== 'JSXIdentifier' || element.name.name !== 'input') return false;
+  const type = element.attributes.find(
+    (/** @type {any} */ a) => a.type === 'JSXAttribute' && a.name.name === 'type',
+  );
+  return type?.value?.type === 'Literal' && labelledInputTypes.has(type.value.value);
+}
+
 /**
  * String literals an expression can evaluate to or contain, looking through conditionals,
- * logical operators and concatenation (`x ? 'a' : b`, `x && 'a'`, `'a ' + x`).
+ * logical operators, concatenation, arrays and TypeScript wrappers (`x ? 'a' : b`, `x && 'a'`,
+ * `'a ' + x`, `['a']`, `'a' as const`).
  * @param {any} node
  * @returns {any[]}
  */
@@ -37,6 +52,13 @@ function renderedStrings(node) {
       return [...renderedStrings(node.consequent), ...renderedStrings(node.alternate)];
     case 'LogicalExpression':
       return [...renderedStrings(node.left), ...renderedStrings(node.right)];
+    case 'ArrayExpression':
+      return node.elements.flatMap((/** @type {any} */ e) => renderedStrings(e));
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TSNonNullExpression':
+    case 'TSTypeAssertion':
+      return renderedStrings(node.expression);
     case 'BinaryExpression':
       return node.operator === '+'
         ? [...renderedStrings(node.left), ...renderedStrings(node.right)]
@@ -77,7 +99,8 @@ export default {
       /** @param {any} node */
       JSXAttribute(node) {
         const name = node.name.type === 'JSXIdentifier' ? node.name.name : '';
-        if (!uiAttributes.has(name) || node.value === null) return;
+        if (!(uiAttributes.has(name) || (name === 'value' && isInputLabel(node)))) return;
+        if (node.value === null) return;
         const strings =
           node.value.type === 'JSXExpressionContainer'
             ? renderedStrings(node.value.expression)

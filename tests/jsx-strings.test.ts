@@ -38,6 +38,12 @@ describe('M5-10: lint fails on hardcoded UI strings in JSX', () => {
     ['a children prop expression', "<button children={'Save'} />"],
     ['a concatenated child', "<p>{'Step ' + x}</p>"],
     ['a concatenated attribute', "<img alt={x + ' logo'} />"],
+    ['a submit input label', '<input type="submit" value="Save" />'],
+    ['a button input label', "<input type='button' value={'Next'} />"],
+    ['a reset input label', '<input type="reset" value="Clear" />'],
+    ['a literal behind as const', "<p>{'Save' as const}</p>"],
+    ['a literal behind satisfies', "<p>{'Save' satisfies string}</p>"],
+    ['a literal in an array child', "<p>{['Save', x]}</p>"],
   ])('rejects %s', async (_case, jsx) => {
     expect(await stringErrors(component(jsx))).toBeGreaterThan(0);
   });
@@ -48,6 +54,8 @@ describe('M5-10: lint fails on hardcoded UI strings in JSX', () => {
     ['whitespace and punctuation only', "<p>\n  {t('a')} · {t('b')}: {x}%\n</p>"],
     ['numbers', '<p>{x} 100</p>'],
     ['arithmetic', '<p>{x + 1}</p>'],
+    ['a form value', '<><input type="text" value="abc" /><option value="curd" /></>'],
+    ['a submit input with a translated label', '<input type="submit" value={t(\'save\')} />'],
     [
       'non-UI attributes',
       '<input className="grams-input wide" type="text" inputMode="decimal" data-testid="grams" id="g" name="grams" role="status" />',
