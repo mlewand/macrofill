@@ -40,3 +40,11 @@ Until then: item grams must be ≥ 0.
 ## Usage data consent
 
 Before serving other users: consent or opt-out for usage events, and including them in per-user data export and deletion (GDPR).
+
+## Scale library changes (before Phase B)
+
+Not deferrals: changes needed in `@mlewand/huajun-ble-scale`, done in the library before Phase B starts. The app doesn't work around them.
+
+- Monotonic timestamp: `Reading.receivedAt` comes from `Date.now()`, which isn't monotonic, while `ScaleReading.timestamp` must be (see Scale driver abstraction). Keep `receivedAt` as is and add a companion monotonic timestamp property.
+- Export the frame-to-`Reading` mapping (`toReading`), so `ReplayScaleDriver` can re-parse stored bytes (M3-11).
+- `CapacitorTransport` exposes the `deviceId` picked on first connect and can connect to a known `deviceId` without the chooser (M6-6).
