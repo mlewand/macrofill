@@ -5,6 +5,7 @@ import {
   type CatalogProduct,
   type NutritionValues,
   type Recipe,
+  type SaveMealRequest,
 } from '@macrofill/domain';
 import { useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -201,8 +202,10 @@ function Summary(props: {
   const { state, catalog, dispatch } = props;
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
-  // The finish time is fixed at the first attempt, so retries send the same meal.
-  const [finishedAt, setFinishedAt] = useState<string>();
+  // The first request sent. It may have reached the server even if the response didn't come
+  // back, so from then on the summary is frozen and every retry resends exactly this (M4-6).
+  const [sent, setSent] = useState<SaveMealRequest>();
+  const frozen = sent !== undefined;
   const products = useMemo(() => new Map(catalog.products.map((p) => [p.id, p])), [catalog]);
 
   const items = mealItems(state);
@@ -211,10 +214,9 @@ function Summary(props: {
     : undefined;
 
   const save = async () => {
-    const at = finishedAt ?? new Date().toISOString();
-    setFinishedAt(at);
-    const body = saveRequest(state, at);
+    const body = sent ?? saveRequest(state, new Date().toISOString());
     if (!body) return;
+    setSent(body);
     setSaving(true);
     setFailed(false);
     try {
@@ -247,6 +249,7 @@ function Summary(props: {
                   name={name}
                   grams={draft.grams}
                   invalid={stepProblem(draft) !== undefined}
+                  disabled={frozen}
                   onChange={(grams) => dispatch({ type: 'editGrams', index, grams })}
                 />
               )}
@@ -274,7 +277,7 @@ function Summary(props: {
       <button
         type="button"
         className="secondary"
-        disabled={saving}
+        disabled={frozen}
         onClick={() => dispatch({ type: 'undo' })}
       >
         {t('step.undo')}
@@ -287,6 +290,7 @@ function SummaryItem(props: {
   name: string;
   grams: string;
   invalid: boolean;
+  disabled: boolean;
   onChange: (grams: string) => void;
 }) {
   const { t } = useTranslation();
@@ -302,6 +306,7 @@ function SummaryItem(props: {
         autoComplete="off"
         aria-label={t('summary.gramsFor', { product: props.name })}
         aria-invalid={props.invalid}
+        disabled={props.disabled}
         value={props.grams}
         onChange={(event) => props.onChange(event.target.value)}
       />
