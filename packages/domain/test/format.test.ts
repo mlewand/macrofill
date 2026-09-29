@@ -1,0 +1,21 @@
+import { describe, expect, it } from 'vitest';
+import { roundGrams, roundKcal } from '../src/index.js';
+
+describe('M2-4: display rounding', () => {
+  it.each([
+    [12.34, 12.3],
+    [12.35, 12.4],
+    [0.04, 0],
+    [99.95, 100],
+  ])('grams %d display as %d', (grams, shown) => {
+    expect(roundGrams(grams)).toBe(shown);
+  });
+
+  it.each([
+    [118.5, 119],
+    [118.49, 118],
+    [0.4, 0],
+  ])('kcal %d display as %d', (kcal, shown) => {
+    expect(roundKcal(kcal)).toBe(shown);
+  });
+});
