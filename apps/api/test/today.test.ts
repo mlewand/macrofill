@@ -7,7 +7,6 @@ import { seedData } from '../src/seed/data';
 import { seed } from '../src/seed/seed';
 import { createMigratedTestDatabase } from './support/db';
 
-const owner = seedData.users[0]!.user;
 const curdRecipe = seedData.recipes.find((r) => r.name.en === 'Curd')!;
 const curd = seedData.products.find((p) => p.ingredientClassId === 'curd')!;
 const milk = seedData.products.find((p) => p.ingredientClassId === 'milk')!;
