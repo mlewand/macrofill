@@ -30,6 +30,7 @@ CREATE TABLE "prepared_meal_items" (
 	"grams" double precision,
 	"weight_source" text,
 	CONSTRAINT "prepared_meal_items_prepared_meal_id_position_pk" PRIMARY KEY("prepared_meal_id","position"),
+	CONSTRAINT "prepared_meal_items_weight_source_values" CHECK ("prepared_meal_items"."weight_source" in ('scale', 'manual')),
 	CONSTRAINT "prepared_meal_items_skipped_shape" CHECK (("prepared_meal_items"."skipped" and "prepared_meal_items"."product_id" is null and "prepared_meal_items"."grams" is null and "prepared_meal_items"."weight_source" is null)
         or (not "prepared_meal_items"."skipped" and "prepared_meal_items"."product_id" is not null and "prepared_meal_items"."grams" is not null and "prepared_meal_items"."grams" >= 0 and "prepared_meal_items"."weight_source" is not null))
 );
@@ -40,7 +41,8 @@ CREATE TABLE "prepared_meals" (
 	"recipe_id" uuid,
 	"input_method" text NOT NULL,
 	"started_at" timestamp with time zone NOT NULL,
-	"finished_at" timestamp with time zone NOT NULL
+	"finished_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "prepared_meals_input_method_values" CHECK ("prepared_meals"."input_method" in ('scale', 'vision', 'direct'))
 );
 --> statement-breakpoint
 CREATE TABLE "products" (
@@ -58,6 +60,7 @@ CREATE TABLE "products" (
 	"protein" double precision,
 	"salt" double precision,
 	"fibre" double precision,
+	CONSTRAINT "products_source_values" CHECK ("products"."source" in ('seed', 'user')),
 	CONSTRAINT "products_owner_matches_source" CHECK (("products"."source" = 'seed') = ("products"."owner_id" is null))
 );
 --> statement-breakpoint

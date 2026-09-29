@@ -1,5 +1,10 @@
-import type { LocalizedText } from '@macrofill/domain';
-import { sql } from 'drizzle-orm';
+import {
+  preparedMealSchema,
+  productSchema,
+  weighedItemSchema,
+  type LocalizedText,
+} from '@macrofill/domain';
+import { sql, type AnyColumn } from 'drizzle-orm';
 import {
   boolean,
   check,
@@ -16,6 +21,22 @@ import {
 
 // Every user-owned table has `ownerId`; curated content (classes, recipes, seed products) is global.
 // Nutrient and target columns are nullable: null means unknown / not tracked, never 0.
+
+// `text({ enum })` narrows only the TypeScript type, so the database checks the values too.
+// They come from the domain enums; changing one there needs a new migration.
+const productSources = nonEmpty(productSchema.shape.source.options);
+const inputMethods = nonEmpty(preparedMealSchema.shape.inputMethod.options);
+const weightSources = nonEmpty(weighedItemSchema.shape.weightSource.options);
+
+function nonEmpty<T extends string>(values: readonly T[]): [T, ...T[]] {
+  const [first, ...rest] = values;
+  if (first === undefined) throw new Error('An enum needs at least one value.');
+  return [first, ...rest];
+}
+
+function oneOf(column: AnyColumn, values: readonly string[]) {
+  return sql`${column} in (${sql.raw(values.map((v) => `'${v}'`).join(', '))})`;
+}
 
 export const users = pgTable('users', {
   id: uuid().primaryKey(),
@@ -53,7 +74,7 @@ export const products = pgTable(
       .references(() => ingredientClasses.id),
     name: text().notNull(),
     brand: text(),
-    source: text({ enum: ['seed', 'user'] }).notNull(),
+    source: text({ enum: productSources }).notNull(),
     kcal: doublePrecision(),
     fat: doublePrecision(),
     saturates: doublePrecision(),
@@ -64,6 +85,7 @@ export const products = pgTable(
     fibre: doublePrecision(),
   },
   (t) => [
+    check('products_source_values', oneOf(t.source, productSources)),
     check('products_owner_matches_source', sql`(${t.source} = 'seed') = (${t.ownerId} is null)`),
   ],
 );
@@ -89,16 +111,20 @@ export const recipeSteps = pgTable(
   (t) => [unique().on(t.recipeId, t.position)],
 );
 
-export const preparedMeals = pgTable('prepared_meals', {
-  id: uuid().primaryKey(),
-  ownerId: uuid()
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  recipeId: uuid().references(() => recipes.id),
-  inputMethod: text({ enum: ['scale', 'vision', 'direct'] }).notNull(),
-  startedAt: timestamp({ withTimezone: true }).notNull(),
-  finishedAt: timestamp({ withTimezone: true }).notNull(),
-});
+export const preparedMeals = pgTable(
+  'prepared_meals',
+  {
+    id: uuid().primaryKey(),
+    ownerId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    recipeId: uuid().references(() => recipes.id),
+    inputMethod: text({ enum: inputMethods }).notNull(),
+    startedAt: timestamp({ withTimezone: true }).notNull(),
+    finishedAt: timestamp({ withTimezone: true }).notNull(),
+  },
+  (t) => [check('prepared_meals_input_method_values', oneOf(t.inputMethod, inputMethods))],
+);
 
 export const preparedMealItems = pgTable(
   'prepared_meal_items',
@@ -114,10 +140,11 @@ export const preparedMealItems = pgTable(
     skipped: boolean().notNull(),
     productId: uuid().references(() => products.id),
     grams: doublePrecision(),
-    weightSource: text({ enum: ['scale', 'manual'] }),
+    weightSource: text({ enum: weightSources }),
   },
   (t) => [
     primaryKey({ columns: [t.preparedMealId, t.position] }),
+    check('prepared_meal_items_weight_source_values', oneOf(t.weightSource, weightSources)),
     // Mirrors the domain union: a skipped item has no product or grams; others have both, grams >= 0.
     // Every predicate is null-safe: a CHECK that evaluates to NULL passes.
     check(

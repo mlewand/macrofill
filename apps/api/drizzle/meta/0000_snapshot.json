@@ -1,5 +1,5 @@
 {
-  "id": "c2e6827a-9a97-4022-a57c-eb7a05e225bb",
+  "id": "23220d74-7186-4706-88a4-6f8d21d4edd4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -269,6 +269,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "prepared_meal_items_weight_source_values": {
+          "name": "prepared_meal_items_weight_source_values",
+          "value": "\"prepared_meal_items\".\"weight_source\" in ('scale', 'manual')"
+        },
         "prepared_meal_items_skipped_shape": {
           "name": "prepared_meal_items_skipped_shape",
           "value": "(\"prepared_meal_items\".\"skipped\" and \"prepared_meal_items\".\"product_id\" is null and \"prepared_meal_items\".\"grams\" is null and \"prepared_meal_items\".\"weight_source\" is null)\n        or (not \"prepared_meal_items\".\"skipped\" and \"prepared_meal_items\".\"product_id\" is not null and \"prepared_meal_items\".\"grams\" is not null and \"prepared_meal_items\".\"grams\" >= 0 and \"prepared_meal_items\".\"weight_source\" is not null)"
@@ -349,7 +353,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "prepared_meals_input_method_values": {
+          "name": "prepared_meals_input_method_values",
+          "value": "\"prepared_meals\".\"input_method\" in ('scale', 'vision', 'direct')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.products": {
@@ -474,6 +483,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "products_source_values": {
+          "name": "products_source_values",
+          "value": "\"products\".\"source\" in ('seed', 'user')"
+        },
         "products_owner_matches_source": {
           "name": "products_owner_matches_source",
           "value": "(\"products\".\"source\" = 'seed') = (\"products\".\"owner_id\" is null)"
