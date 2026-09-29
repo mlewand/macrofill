@@ -7,6 +7,8 @@
     "node": ">=24"
   },
   "scripts": {
+    "dev": "pnpm --parallel --filter @macrofill/web --filter @macrofill/api dev",
+    "db:up": "docker compose up -d --wait db",
     "lint": "eslint . && prettier --check .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r --parallel typecheck",
     "test": "vitest run",
