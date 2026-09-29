@@ -1,0 +1,20 @@
+{
+  "name": "@macrofill/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@macrofill/domain": "workspace:*",
+    "hono": "^4.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0"
+  }
+}
