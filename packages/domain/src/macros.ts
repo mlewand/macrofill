@@ -1,5 +1,5 @@
 import type { PreparedMealItem } from './meal.js';
-import type { NutritionValues } from './nutrition.js';
+import { NUTRIENTS, type NutritionValues } from './nutrition.js';
 
 // Calculations never round (M2-4); see format.ts for display.
 
@@ -14,43 +14,32 @@ const ZERO: NutritionValues = {
   fibre: 0,
 };
 
-/** M2-1: grams × per-100 g value / 100, for every field. Unknown fibre stays unknown. */
+/** M2-1: grams × per-100 g value / 100, for every field. Unknown values stay unknown (M2-3). */
 export function itemNutrition(per100g: NutritionValues, grams: number): NutritionValues {
-  const scale = (value: number) => (grams * value) / 100;
-  return {
-    kcal: scale(per100g.kcal),
-    fat: scale(per100g.fat),
-    saturates: scale(per100g.saturates),
-    carbs: scale(per100g.carbs),
-    sugars: scale(per100g.sugars),
-    protein: scale(per100g.protein),
-    salt: scale(per100g.salt),
-    fibre: per100g.fibre === null ? null : scale(per100g.fibre),
-  };
+  const result = { ...ZERO };
+  for (const nutrient of NUTRIENTS) {
+    const value = per100g[nutrient];
+    result[nutrient] = value === null ? null : (grams * value) / 100;
+  }
+  return result;
 }
 
-function add(a: NutritionValues, b: NutritionValues): NutritionValues {
-  return {
-    kcal: a.kcal + b.kcal,
-    fat: a.fat + b.fat,
-    saturates: a.saturates + b.saturates,
-    carbs: a.carbs + b.carbs,
-    sugars: a.sugars + b.sugars,
-    protein: a.protein + b.protein,
-    salt: a.salt + b.salt,
-    fibre: a.fibre === null || b.fibre === null ? null : a.fibre + b.fibre,
-  };
-}
-
-/** Sums totals. A sum that includes unknown fibre is unknown (M2-3). */
+/** Sums totals per nutrient. A nutrient's sum that includes an unknown value is unknown (M2-3). */
 export function sumNutrition(totals: readonly NutritionValues[]): NutritionValues {
-  // A fresh accumulator, so an empty result can't be mutated into the shared ZERO.
-  return totals.reduce(add, { ...ZERO });
+  const result = { ...ZERO };
+  for (const total of totals) {
+    for (const nutrient of NUTRIENTS) {
+      const sum = result[nutrient];
+      const value = total[nutrient];
+      result[nutrient] = sum === null || value === null ? null : sum + value;
+    }
+  }
+  return result;
 }
 
 /**
  * M2-2: the sum of the meal's non-skipped items. Every non-skipped item contributes, 0 g items
- * included, so a 0 g item with unknown fibre makes the fibre total unknown.
+ * included, so a 0 g item with an unknown value makes that nutrient's total unknown.
  */
 export function mealNutrition(
   items: readonly PreparedMealItem[],
