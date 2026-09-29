@@ -29,6 +29,7 @@ jobs:
   e2e:
     name: E2E (Playwright, phone viewport)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
@@ -67,6 +68,7 @@ jobs:
   image:
     name: Production image builds
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
