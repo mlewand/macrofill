@@ -8,7 +8,7 @@ Diet tracking PWA. It logs a multi-ingredient meal while you make it, using a Bl
 
 ## Prerequisites
 
-- Node.js 24 (see `.nvmrc`)
+- Node.js 24, version 24.15 or later (see `.nvmrc` and `engines`)
 - pnpm, via Corepack: `corepack enable`. The version comes from `packageManager` in `package.json`.
 - Docker with Compose, for the local Postgres and the production image
 
