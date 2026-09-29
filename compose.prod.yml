@@ -1,0 +1,21 @@
+# Production on the LAN server. Build and start with:
+#   docker compose -f compose.prod.yml up -d --build
+# Needs DATABASE_URL and POSTGRES_NETWORK in the environment or a .env file next to this one.
+services:
+  app:
+    build: .
+    image: macrofill:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must point at the app's own database and role}
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    networks:
+      - postgres
+
+networks:
+  # The existing Docker network the host's Postgres container is on.
+  # TODO: the network's name isn't known yet; set POSTGRES_NETWORK.
+  postgres:
+    external: true
+    name: ${POSTGRES_NETWORK:?POSTGRES_NETWORK must name the external Docker network of the host Postgres}

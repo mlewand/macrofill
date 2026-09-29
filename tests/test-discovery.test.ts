@@ -6,7 +6,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 
 // Projects allowed to have no tests yet. Remove an entry as soon as the project gets tests
 // (and drop --passWithNoTests from its package test script).
-const allowedEmpty = new Set(['api', 'scale']);
+const allowedEmpty = new Set(['scale']);
 
 // With Vitest projects, a project that discovers no tests doesn't fail the run, so a broken
 // include glob or config would silently drop its tests. This guards against that.

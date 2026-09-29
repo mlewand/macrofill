@@ -1,0 +1,21 @@
+# Local development: only Postgres runs here; web and api run on the host (`pnpm dev`).
+# Pinned to the production host's major version.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: macrofill
+      POSTGRES_PASSWORD: macrofill
+      POSTGRES_DB: macrofill
+    ports:
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U macrofill -d macrofill']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  db-data:
