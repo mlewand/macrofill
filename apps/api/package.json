@@ -7,14 +7,21 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
+    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node24 --sourcemap --outfile=dist/server.mjs",
+    "start": "node --enable-source-maps dist/server.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.1",
     "@macrofill/domain": "workspace:*",
-    "hono": "^4.13.0"
+    "hono": "^4.13.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/node": "^24.19.0"
+    "@types/node": "^24.19.0",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.23.0"
   }
 }
