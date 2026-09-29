@@ -118,6 +118,41 @@ describe('POST /api/meals', () => {
       expect(await count('prepared_meal_items')).toBe(0);
     });
 
+    it('a retry with a different consumption entry id is a conflict, not a replay', async () => {
+      await post(request());
+      const body = request();
+      const otherEntryId = 'f1c7a5e6-8b9d-4c0e-9f1a-1b0c9d8e7f6a';
+      const res = await post({
+        ...body,
+        consumptionEntry: { ...body.consumptionEntry, id: otherEntryId },
+      });
+      expect(res.status).toBe(409);
+      expect(await count('consumption_entries')).toBe(1);
+    });
+
+    it("a retry naming another user's consumption entry id is a conflict", async () => {
+      await post(request());
+      const otherEntryId = 'f1c7a5e6-8b9d-4c0e-9f1a-1b0c9d8e7f6a';
+      const otherMealId = 'a2d8b6f7-9c0e-4d1f-8a2b-2c1d0e9f8a7b';
+      await database.db.execute(
+        sql`insert into users (id, username, timezone) values (${otherUserId}, 'other', 'UTC')`,
+      );
+      await database.db.execute(
+        sql`insert into prepared_meals (id, owner_id, input_method, started_at, finished_at)
+            values (${otherMealId}, ${otherUserId}, 'direct', now(), now())`,
+      );
+      await database.db.execute(
+        sql`insert into consumption_entries (id, owner_id, prepared_meal_id, eaten_at, portion)
+            values (${otherEntryId}, ${otherUserId}, ${otherMealId}, now(), '{"type":"whole"}')`,
+      );
+      const body = request();
+      const res = await post({
+        ...body,
+        consumptionEntry: { ...body.consumptionEntry, id: otherEntryId },
+      });
+      expect(res.status).toBe(409);
+    });
+
     it('a consumption entry id already in use is a conflict, and nothing is saved', async () => {
       await post(request());
       const res = await post({

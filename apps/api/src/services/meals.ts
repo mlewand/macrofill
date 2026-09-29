@@ -24,7 +24,7 @@ export async function saveMeal(
     return await db.transaction(async (tx) => {
       const repos = createRepositories(tx, ownerId);
       const saved = await stored(repos, request.meal.id);
-      if (saved) return { status: 'replayed' as const, body: saved };
+      if (saved) return replay(saved, request);
 
       const issues = await references(repos, request);
       if (issues.length > 0) return { status: 'invalid' as const, issues };
@@ -32,7 +32,7 @@ export async function saveMeal(
       if (!(await repos.meals.insertIfAbsent(request.meal))) {
         // Lost a race with a concurrent retry, or the id belongs to someone else.
         const raced = await stored(repos, request.meal.id);
-        if (raced) return { status: 'replayed' as const, body: raced };
+        if (raced) return replay(raced, request);
         throw new Conflict();
       }
       if (
@@ -49,6 +49,15 @@ export async function saveMeal(
     if (error instanceof Conflict) return { status: 'conflict' };
     throw error;
   }
+}
+
+/**
+ * A genuine retry resends the same ids (the client generates them once per meal). A request for a
+ * stored meal naming a different entry is not a retry: it's a conflict, whoever owns that id.
+ */
+function replay(saved: SaveMealResponse, request: SaveMealRequest): SaveMealResult {
+  if (saved.consumptionEntry.id !== request.consumptionEntry.id) throw new Conflict();
+  return { status: 'replayed', body: saved };
 }
 
 async function stored(repos: Repositories, mealId: string): Promise<SaveMealResponse | undefined> {
