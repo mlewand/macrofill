@@ -37,6 +37,12 @@ Net removal of an ingredient recorded as a negative item.
 
 Until then: item grams must be ≥ 0.
 
+## Unknown nutrition values beyond fibre
+
+Let any per-100 g value on a product be unknown, not just fibre, for products whose label or source lacks it. Each unknown value then makes only that nutrient's meal and day total unknown, as M2-3 does for fibre, and M2-6 counts it as 0 in the sum.
+
+Until then: only fibre can be unknown (M2-3); every other value is required.
+
 ## Usage data consent
 
 Before serving other users: consent or opt-out for usage events, and including them in per-user data export and deletion (GDPR).
