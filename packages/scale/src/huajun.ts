@@ -49,7 +49,10 @@ export class HuajunDriver implements ScaleDriver {
       this.#transport(),
       this.#monotonicNow ? { monotonicNow: this.#monotonicNow } : {},
     );
+    // Close the connection this one replaces, if any. Not awaited: the chooser needs the gesture.
+    const replaced = this.#scale;
     this.#scale = scale;
+    void replaced?.disconnect().catch(() => undefined);
     scale.onReading((reading) => {
       if (this.#scale !== scale) return;
       const mapped = toScaleReading(reading);
