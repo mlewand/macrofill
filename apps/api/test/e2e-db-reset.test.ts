@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 import { queryRows, type Database } from '../src/db/client';
+import { createServer, type Socket } from 'node:net';
 import {
+  connectAdminClient,
   createDatabaseIfMissing,
   prepareE2eDatabase,
   resetDatabase,
@@ -167,6 +169,25 @@ describe('e2e database reset', () => {
         }),
       ).rejects.toThrow();
       expect(database!.close).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('connectAdminClient', () => {
+    it('gives up on an unresponsive server instead of hanging setup', async () => {
+      const sockets = new Set<Socket>();
+      const server = createServer((socket) => sockets.add(socket));
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address() as { port: number };
+      try {
+        const started = performance.now();
+        await expect(
+          connectAdminClient(`postgres://u:p@127.0.0.1:${port}/postgres`, 500),
+        ).rejects.toThrow();
+        expect(performance.now() - started).toBeLessThan(3000);
+      } finally {
+        for (const socket of sockets) socket.destroy();
+        server.close();
+      }
     });
   });
 });

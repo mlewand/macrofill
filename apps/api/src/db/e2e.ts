@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import pg from 'pg';
 import { seed } from '../seed/seed';
 import type { Database } from './client';
 
@@ -20,6 +21,16 @@ export function e2eDatabaseName(databaseUrl: string): string {
 export interface AdminClient {
   query: (text: string, params?: unknown[]) => Promise<{ rowCount: number | null }>;
   end: () => Promise<void>;
+}
+
+/**
+ * Connects to the server's maintenance database, giving up after `timeoutMs` (default 5 s) so an
+ * unreachable server fails e2e setup instead of hanging it.
+ */
+export async function connectAdminClient(adminUrl: string, timeoutMs = 5000): Promise<AdminClient> {
+  const admin = new pg.Client({ connectionString: adminUrl, connectionTimeoutMillis: timeoutMs });
+  await admin.connect();
+  return admin;
 }
 
 /** Creates the database unless it exists; returns whether it did. Always closes `admin`. */
