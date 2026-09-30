@@ -49,6 +49,9 @@ export function createViteConfig(env: Env): UserConfig {
  */
 function pwa() {
   return VitePWA({
+    // The new service worker takes over at once, but nothing reloads the page: registerSW.js
+    // only registers, so an in-progress meal (kept in memory) survives a deploy and the next
+    // load gets the new version. e2e/pwa.spec.ts checks this.
     registerType: 'autoUpdate',
     includeAssets: ['icons/apple-touch-icon.png'],
     manifest: {
