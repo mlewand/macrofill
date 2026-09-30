@@ -286,6 +286,9 @@ function StepScreen(props: {
 
           {typing || pending?.type === 'needsCorrection' ? (
             <Correction
+              // Focused when asked for; not for a negative step, where a keyboard would cover
+              // the live weight.
+              focus={typing}
               disabled={!canCorrect(state)}
               waiting={!state.wrongUnit && !canCorrect(state)}
               onUse={(grams) => dispatch({ type: 'correct', grams })}
@@ -318,6 +321,7 @@ function StepScreen(props: {
 
 /** M6-5: typed grams for the current step, instead of the scale's. */
 function Correction(props: {
+  focus: boolean;
   disabled: boolean;
   /** The scale hasn't settled: the grams can be used once it has. */
   waiting: boolean;
@@ -341,6 +345,7 @@ function Correction(props: {
       <label htmlFor={id}>{t('step.grams')}</label>
       <input
         id={id}
+        autoFocus={props.focus}
         className="grams"
         type="text"
         inputMode="decimal"
@@ -384,6 +389,7 @@ function ManualStep(props: { state: ScaleModeState; dispatch: (action: ScaleMode
       <label htmlFor={id}>{t('step.grams')}</label>
       <input
         id={id}
+        autoFocus
         className="grams"
         type="text"
         inputMode="decimal"

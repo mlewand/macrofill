@@ -15,6 +15,8 @@ test('M5-1 to M5-6: log a meal with Direct Entry, with skip, undo and a summary 
 
   // Step 1, curd: the default product is preselected.
   await expect(page.getByText('Step 1 of 5')).toBeVisible();
+  // Each step's grams input is focused, ready to type into (M5-3).
+  await expect(grams).toBeFocused();
   await expect(page.getByRole('radio', { name: 'Polmlek Twaróg półtłusty' })).toBeChecked();
   await grams.fill('-3');
   await next.click();
@@ -24,6 +26,7 @@ test('M5-1 to M5-6: log a meal with Direct Entry, with skip, undo and a summary 
 
   // Step 2, milk: go back, and the curd's grams are restored (M5-5).
   await expect(page.getByText('Step 2 of 5')).toBeVisible();
+  await expect(grams).toBeFocused();
   await page.getByRole('button', { name: en.step.undo }).click();
   await expect(grams).toHaveValue('200');
   await next.click();
