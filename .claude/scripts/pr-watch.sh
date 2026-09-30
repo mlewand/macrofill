@@ -18,8 +18,12 @@ interval=${2:-120}
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner) || exit 1
 me=$(gh api user --jq .login) || exit 1
 
-seed=false
-[[ -f $state ]] || { seed=true; : >"$state"; }
+# A fresh state marks the PRs open at the first pass "seeding:N": their existing history is only
+# recorded, silently, until it has been fetched completely. The marker is per PR and kept in the
+# state file, so a PR whose fetch keeps failing doesn't silence the others, or a restarted watch.
+fresh=false
+[[ -f $state ]] || { fresh=true; : >"$state"; }
+seeding() { grep -qx "seeding:$1" "$state"; }
 
 # Prints "KEY<TAB>MESSAGE" lines for everything that has happened on PR $1. Fails if any request
 # fails, so a caller can tell a complete list from a partial one.
@@ -46,7 +50,7 @@ events() {
 }
 
 # Prints the events on PR $1 not seen before, and records them as seen. Fails, recording nothing,
-# if the events couldn't all be fetched.
+# if the events couldn't all be fetched. A seeding PR prints nothing, and stops seeding once done.
 report() {
   local all key message
   all=$(events "$1") || return 1
@@ -55,9 +59,12 @@ report() {
     grep -qxF "$key" "$state" && continue
     # Printed before it's recorded: if the watch dies in between, the event comes again rather
     # than never.
-    $seed || echo "$message"
+    seeding "$1" || echo "$message"
     echo "$key" >>"$state"
   done <<<"$all"
+  if seeding "$1"; then
+    { grep -vx "seeding:$1" "$state" || true; } >"$state.tmp" && mv "$state.tmp" "$state"
+  fi
 }
 
 while true; do
@@ -77,19 +84,20 @@ while true; do
       # Activity since the last pass comes before the merge or close. If it can't all be fetched,
       # keep the PR tracked and try again on the next pass.
       report "$n" || continue
-      $seed || echo "PR #$n: $status"
+      echo "PR #$n: $status"
       { grep -vx "$key" "$state" || true; } >"$state.tmp" && mv "$state.tmp" "$state"
     fi
   done < <(grep '^open:' "$state")
 
-  complete=true
+  if $fresh; then
+    for n in $open; do echo "seeding:$n" >>"$state"; done
+    fresh=false
+  fi
+
   for n in $open; do
     grep -qx "open:$n" "$state" || echo "open:$n" >>"$state"
-    report "$n" || complete=false
+    # A failed fetch is retried on the next pass; seeding PRs stay seeding until one succeeds.
+    report "$n" || true
   done
-
-  # The first pass only records what's there. It ends once every PR's events were fetched, or
-  # a PR's history would come out as new on the next pass.
-  $complete && seed=false
   sleep "$interval"
 done
