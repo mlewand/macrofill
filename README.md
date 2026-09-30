@@ -62,6 +62,25 @@ Web Bluetooth and PWA installation need HTTPS. On the LAN, a Caddy reverse proxy
 
 3. Restart `pnpm dev` and open `https://macrofill-dev.example.lan` in Chrome on the phone.
 
+### Scale Mode without the scale
+
+A flag in the browser switches Scale Mode to a mock scale, the same one the e2e tests use. In the browser console:
+
+```js
+localStorage.setItem('macrofill.mockScale', '1'); // then reload; removeItem to switch it off
+```
+
+After "Connect scale", drive the mock from the console with readings from `scaleScript()`:
+
+```js
+const s = macrofillScaleScript();
+await macrofillScale.play(s.baseline(312).take());           // bowl on, then tap Start
+await macrofillScale.play(s.add(214, { overMs: 2000 }).stable().take()); // then tap Next
+macrofillScale.drop();                                         // the scale switches off
+```
+
+The tracker's settings (stability tolerance and window, the wait for a stable reading, the tolerance below zero) are in `apps/web/src/scaleMode/settings.ts`.
+
 ## Tests and checks
 
 | Command | What it runs |
@@ -69,7 +88,7 @@ Web Bluetooth and PWA installation need HTTPS. On the LAN, a Caddy reverse proxy
 | `pnpm lint` | ESLint (including the package import rules) and `prettier --check` |
 | `pnpm typecheck` | `tsc` for every package |
 | `pnpm test` | Vitest: unit, component and API integration tests |
-| `pnpm test:e2e` | Playwright on phone and tablet viewports (portrait), against the production build served by the api |
+| `pnpm test:e2e` | Playwright on phone and tablet viewports (portrait), against the production build served by the api. Scale Mode runs on the mock scale, switched on with the flag above |
 | `pnpm format` | Format with Prettier |
 
 Before the first `pnpm test:e2e`, install the browser once: `pnpm --filter @macrofill/web exec playwright install --with-deps chromium`. The e2e tests use **their own database**, never the dev one: `DATABASE_URL`'s database with `_e2e` added (`macrofill_e2e`), on the same server. Every run creates it if it's missing, wipes it, migrates and seeds it, so runs start from the same state and your dev data stays as it is. Only `pnpm db:up` is needed first. To use another database, set `E2E_DATABASE_URL` (see `.env.example`). The reset refuses any database whose name doesn't end in `_e2e`. On a Postgres where the app's role can't create databases, create the `_e2e` database once yourself, owned by that role. The Vitest API tests need no database; they use PGlite in-process.

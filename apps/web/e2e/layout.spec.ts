@@ -1,5 +1,7 @@
+import { scaleScript } from '@macrofill/scale';
 import { expect, test, type Page } from '@playwright/test';
 import en from '../src/i18n/en.json' with { type: 'json' };
+import { play, useMockScale } from './scale';
 
 /**
  * M7-6 on the current screen: every primary action button spans the full width of its column and
@@ -51,4 +53,28 @@ test('M7-6: every screen works in portrait, with full-width primary buttons at l
   await page.getByRole('button', { name: en.summary.save }).click();
   await expect(page.getByRole('status')).toHaveText(en.saved.title);
   await checkLayout(page, 'saved');
+});
+
+test('M7-6: Scale Mode works in portrait, and the live weight is at least 48 px', async ({
+  page,
+}) => {
+  await useMockScale(page);
+  const script = scaleScript({ intervalMs: 50 });
+  await page.goto('/');
+  await page.getByRole('button', { name: en.home.weighMeal }).click();
+  await page.getByRole('button', { name: 'Curd' }).click();
+  await checkLayout(page, 'connect');
+
+  await page.getByRole('button', { name: en.scale.connect }).click();
+  await play(page, script.baseline(312, { forMs: 0 }).take());
+  await expect(page.getByRole('button', { name: en.scale.start })).toBeEnabled();
+  await checkLayout(page, 'start');
+
+  await page.getByRole('button', { name: en.scale.start }).click();
+  await play(page, script.add(214.5).take());
+  const live = page.getByLabel(en.scale.added);
+  await expect(live).toHaveText('214.5 g');
+  const fontSize = await live.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(fontSize, 'live weight font size').toBeGreaterThanOrEqual(48);
+  await checkLayout(page, 'scale step');
 });
