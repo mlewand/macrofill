@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import en from '../src/i18n/en.json' with { type: 'json' };
 
 // Runs against the production build and a seeded database. It adds a meal on every run, so
@@ -52,3 +52,58 @@ test('M5-1 to M5-6: log a meal with Direct Entry, with skip, undo and a summary 
   await page.getByRole('button', { name: en.summary.save }).click();
   await expect(page.getByRole('status')).toHaveText(en.saved.title);
 });
+
+test('M5-8: a page reload resumes Direct Entry at the same step, with what was entered', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: en.home.logMeal }).click();
+  await page.getByRole('button', { name: 'Curd' }).click();
+  const grams = page.getByLabel(en.step.grams);
+  await grams.fill('200');
+  await page.getByRole('button', { name: en.step.next }).click();
+  await expect(page.getByText('Step 2 of 5')).toBeVisible();
+  await grams.fill('50,5');
+  // Kept once IndexedDB has it; a reload within milliseconds of typing may lose the last change.
+  await expect
+    .poll(async () => {
+      const draft = (await keptDraft(page)) as { current: number; steps: { grams: string }[] };
+      return [draft?.current, draft?.steps[1]?.grams];
+    })
+    .toEqual([1, '50,5']);
+
+  await page.reload();
+  await expect(page.getByText('Step 2 of 5')).toBeVisible();
+  await expect(grams).toHaveValue('50,5');
+  await page.getByRole('button', { name: en.step.undo }).click();
+  await expect(grams).toHaveValue('200');
+
+  // Discarding ends it: the next reload starts at home.
+  await page.getByRole('button', { name: en.step.discard }).click();
+  await page.getByRole('button', { name: en.step.confirmDiscard, exact: true }).click();
+  await expect(page.getByRole('button', { name: en.home.logMeal })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: en.home.logMeal })).toBeVisible();
+  await expect(page.getByText(/Step \d of/)).toHaveCount(0);
+});
+
+/** The Direct Entry session the page keeps in IndexedDB (M5-8). */
+function keptDraft(page: Page): Promise<unknown> {
+  return page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const open = indexedDB.open('macrofill');
+        open.onerror = () => reject(open.error ?? new Error('open failed'));
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains('drafts')) return resolve(undefined);
+          const get = db.transaction('drafts').objectStore('drafts').get('directEntry');
+          get.onsuccess = () => {
+            resolve(get.result);
+            db.close();
+          };
+          get.onerror = () => reject(get.error ?? new Error('get failed'));
+        };
+      }),
+  );
+}

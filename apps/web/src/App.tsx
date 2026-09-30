@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
+import type { DirectEntryState } from './directEntry/state';
 import { ScaleMode } from './scaleMode/ScaleMode';
+import { useDraftStore } from './storage/drafts';
 import { TodayView } from './today/TodayView';
 
 type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
@@ -11,6 +13,24 @@ type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
 export function App() {
   const { t } = useTranslation();
   const [screen, setScreen] = useState<Screen>('home');
+  // M5-8: a Direct Entry session kept from before a reload opens again.
+  const drafts = useDraftStore();
+  const [resume, setResume] = useState<DirectEntryState>();
+  useEffect(() => {
+    let current = true;
+    void drafts.load().then((draft) => {
+      if (!current || !draft) return;
+      setResume(draft);
+      setScreen('directEntry');
+    });
+    return () => {
+      current = false;
+    };
+  }, [drafts]);
+  const leaveDirectEntry = (next: Screen) => {
+    setResume(undefined);
+    setScreen(next);
+  };
 
   useEffect(() => {
     // index.html has a static title only for the first paint.
@@ -47,8 +67,9 @@ export function App() {
           {(catalog) => (
             <DirectEntry
               catalog={catalog}
-              onSaved={() => setScreen('saved')}
-              onCancel={() => setScreen('home')}
+              onSaved={() => leaveDirectEntry('saved')}
+              onCancel={() => leaveDirectEntry('home')}
+              {...(resume ? { resume } : {})}
             />
           )}
         </WithCatalog>

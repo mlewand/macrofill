@@ -26,7 +26,11 @@
       "empty": "Enter the weight in grams.",
       "negative": "Grams can't be negative.",
       "invalid": "Enter a number, like 3,2 or 3.2."
-    }
+    },
+    "discard": "Discard meal",
+    "discardQuestion": "Discard this meal? What you entered so far is lost.",
+    "confirmDiscard": "Discard",
+    "keep": "Keep"
   },
   "scale": {
     "status": {

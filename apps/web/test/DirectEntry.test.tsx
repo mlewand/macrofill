@@ -3,6 +3,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiContext, type Api } from '../src/api/api';
 import { App } from '../src/App';
+import type { DirectEntryState } from '../src/directEntry/state';
+import { DraftContext, type DraftStore } from '../src/storage/drafts';
 import en from '../src/i18n/en.json';
 import { fakeApi as baseFakeApi, stored } from './support/api';
 
@@ -302,5 +304,135 @@ describe('Direct Entry', () => {
     fireEvent.click(save);
     fireEvent.click(save);
     expect(api.saveMeal).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** An in-memory draft store, as IndexedDB would keep it across a reload. */
+function memoryDrafts(initial?: DirectEntryState) {
+  let kept = initial;
+  const store: DraftStore = {
+    load: vi.fn(() => Promise.resolve(kept)),
+    save: vi.fn((state: DirectEntryState) => {
+      kept = state;
+      return Promise.resolve();
+    }),
+    clear: vi.fn(() => {
+      kept = undefined;
+      return Promise.resolve();
+    }),
+  };
+  return { store, kept: () => kept };
+}
+
+function renderWithDrafts(drafts: DraftStore, api = fakeApi()) {
+  const view = render(
+    <ApiContext value={api}>
+      <DraftContext value={drafts}>
+        <App />
+      </DraftContext>
+    </ApiContext>,
+  );
+  return { api, view };
+}
+
+const curdBowl = catalog.recipes[0]!;
+const draftAtMilk: DirectEntryState = {
+  recipe: curdBowl,
+  inputMethod: 'direct',
+  mealId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+  entryId: 'c8f4d2b3-5e6a-4f7b-8c9d-8e7f6a5b4c3d',
+  startedAt: '2026-01-15T07:00:00.000Z',
+  steps: [
+    { productId: '1de22574-2eab-46f7-bd0f-4910acdb36c2', grams: '150', skipped: false },
+    { productId: '2fb48689-9acc-4a8a-9b1f-f0bf8e44b474', grams: '3,5', skipped: false },
+  ],
+  current: 1,
+};
+
+describe('Direct Entry across a reload (M5-8)', () => {
+  it('M5-8: every change to the session is kept, from picking the recipe on', async () => {
+    const drafts = memoryDrafts();
+    renderWithDrafts(drafts.store);
+    click(en.home.logMeal);
+    fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+    await vi.waitFor(() => expect(drafts.kept()).toMatchObject({ current: 0 }));
+    typeGrams('200');
+    click(en.step.next);
+    await vi.waitFor(() =>
+      expect(drafts.kept()).toMatchObject({ current: 1, steps: [{ grams: '200' }, {}] }),
+    );
+  });
+
+  it('M5-8: a kept session resumes at the same step, with what was entered', async () => {
+    const drafts = memoryDrafts(draftAtMilk);
+    renderWithDrafts(drafts.store);
+    expect(await screen.findByText('Step 2 of 2')).toBeInTheDocument();
+    expect(grams()).toHaveValue('3,5');
+    click(en.step.undo);
+    expect(grams()).toHaveValue('150');
+    expect(checkedProduct()).toEqual(['Almette Curd']);
+  });
+
+  it('M5-8: saving the meal clears the kept session, with the ids it started with', async () => {
+    const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+    const { api } = renderWithDrafts(drafts.store);
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(drafts.kept()).toBeUndefined();
+    expect(vi.mocked(api.saveMeal).mock.calls[0]![0]).toMatchObject({
+      meal: { id: draftAtMilk.mealId, startedAt: draftAtMilk.startedAt },
+      consumptionEntry: { id: draftAtMilk.entryId },
+    });
+  });
+
+  it('M5-8: Discard meal, once confirmed, clears the kept session and goes home', async () => {
+    const drafts = memoryDrafts(draftAtMilk);
+    renderWithDrafts(drafts.store);
+    await screen.findByText('Step 2 of 2');
+    click(en.step.discard);
+    // Asks first; Keep goes back to the step.
+    click(en.step.keep);
+    expect(drafts.kept()).toBeDefined();
+    click(en.step.discard);
+    click(en.step.confirmDiscard);
+    expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+    expect(drafts.kept()).toBeUndefined();
+  });
+
+  it('M5-8: the summary can discard the meal too', async () => {
+    const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+    renderWithDrafts(drafts.store);
+    await screen.findByRole('heading', { name: en.summary.title });
+    click(en.step.discard);
+    click(en.step.confirmDiscard);
+    expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+    expect(drafts.kept()).toBeUndefined();
+  });
+
+  it('M5-8: a session for a recipe whose steps changed since is dropped', async () => {
+    const changed = {
+      ...draftAtMilk,
+      recipe: { ...curdBowl, steps: curdBowl.steps.slice(0, 1) },
+      steps: draftAtMilk.steps.slice(0, 1),
+      current: 0,
+    };
+    const drafts = memoryDrafts(changed);
+    renderWithDrafts(drafts.store);
+    expect(await screen.findByRole('heading', { name: en.recipes.title })).toBeInTheDocument();
+    expect(drafts.kept()).toBeUndefined();
+  });
+
+  it('M5-8: a kept product that is gone from the catalog is unpicked', async () => {
+    const drafts = memoryDrafts({
+      ...draftAtMilk,
+      current: 0,
+      steps: [
+        { productId: '7d0f4a1e-0000-4000-8000-000000000000', grams: '150', skipped: false },
+        draftAtMilk.steps[1]!,
+      ],
+    });
+    renderWithDrafts(drafts.store);
+    await screen.findByText('Step 1 of 2');
+    expect(checkedProduct()).toEqual([]);
   });
 });

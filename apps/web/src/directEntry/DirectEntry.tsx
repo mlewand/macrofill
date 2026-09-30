@@ -7,10 +7,11 @@ import {
   type Recipe,
   type SaveMealRequest,
 } from '@macrofill/domain';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { NutritionTable } from '../NutritionTable';
+import { useDraftStore } from '../storage/drafts';
 import {
   directEntry,
   isSummary,
@@ -25,14 +26,34 @@ import {
 interface Props {
   catalog: Catalog;
   onSaved: () => void;
+  /** Leaving: from the recipe list, or discarding the meal. */
   onCancel: () => void;
+  /** A session kept from before a reload (M5-8). */
+  resume?: DirectEntryState;
 }
 
-/** Direct Entry (M5-1 to M5-6): pick a recipe, enter each step, review and save. */
-export function DirectEntry({ catalog, onSaved, onCancel }: Props) {
-  const [state, setState] = useState<DirectEntryState>();
+/**
+ * Direct Entry (M5-1 to M5-6): pick a recipe, enter each step, review and save. The session is
+ * kept on the device from the recipe pick until it's saved or discarded (M5-8).
+ */
+export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
+  const drafts = useDraftStore();
+  const [resumed] = useState(() => resume && resumable(resume, catalog));
+  const [state, setState] = useState<DirectEntryState | undefined>(resumed);
   const dispatch = (action: DirectEntryAction) =>
     setState((current) => (current ? directEntry(current, action) : current));
+
+  useEffect(() => {
+    // A kept session that no longer fits the catalog is dropped.
+    if (resume && !resumed) void drafts.clear();
+  }, [resume, resumed, drafts]);
+
+  useEffect(() => {
+    if (state) void drafts.save(state);
+  }, [state, drafts]);
+
+  const saved = () => void drafts.clear().then(onSaved);
+  const discard = () => void drafts.clear().then(onCancel);
 
   if (state === undefined) {
     return (
@@ -44,9 +65,67 @@ export function DirectEntry({ catalog, onSaved, onCancel }: Props) {
     );
   }
   return isSummary(state) ? (
-    <Summary state={state} catalog={catalog} dispatch={dispatch} onSaved={onSaved} />
+    <Summary
+      state={state}
+      catalog={catalog}
+      dispatch={dispatch}
+      onSaved={saved}
+      onDiscard={discard}
+    />
   ) : (
-    <StepScreen key={state.current} state={state} catalog={catalog} dispatch={dispatch} />
+    <StepScreen
+      key={state.current}
+      state={state}
+      catalog={catalog}
+      dispatch={dispatch}
+      onDiscard={discard}
+    />
+  );
+}
+
+/**
+ * A kept session, if it still fits the catalog: its recipe with the same steps, in the same order.
+ * Products gone from the catalog since are unpicked.
+ */
+function resumable(draft: DirectEntryState, catalog: Catalog): DirectEntryState | undefined {
+  const recipe = catalog.recipes.find((r) => r.id === draft.recipe.id);
+  const stepKey = (r: Recipe) => r.steps.map((s) => `${s.id}:${s.ingredientClassId}`).join();
+  if (!recipe || stepKey(recipe) !== stepKey(draft.recipe)) return undefined;
+  const products = new Set(catalog.products.map((p) => p.id));
+  return {
+    ...draft,
+    recipe,
+    steps: draft.steps.map((step) =>
+      step.productId === undefined || products.has(step.productId)
+        ? step
+        : { ...step, productId: undefined },
+    ),
+  };
+}
+
+/** Discarding the meal in progress, after a confirmation. */
+export function DiscardMeal({ onDiscard }: { onDiscard: () => void }) {
+  const { t } = useTranslation();
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <button type="button" className="secondary" onClick={() => setConfirming(true)}>
+        {t('step.discard')}
+      </button>
+    );
+  }
+  return (
+    <div className="confirm" role="group" aria-label={t('step.discardQuestion')}>
+      <p>{t('step.discardQuestion')}</p>
+      <div className="row">
+        <button type="button" className="danger" onClick={onDiscard}>
+          {t('step.confirmDiscard')}
+        </button>
+        <button type="button" className="secondary" onClick={() => setConfirming(false)}>
+          {t('step.keep')}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -109,6 +188,7 @@ function StepScreen(props: {
   state: DirectEntryState;
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
+  onDiscard: () => void;
 }) {
   const { t } = useTranslation();
   const { state, catalog, dispatch } = props;
@@ -170,6 +250,7 @@ function StepScreen(props: {
           {t('step.undo')}
         </button>
       </div>
+      <DiscardMeal onDiscard={props.onDiscard} />
     </form>
   );
 }
@@ -225,6 +306,8 @@ export function Summary(props: {
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
   onSaved: () => void;
+  /** Direct Entry only (M5-8). */
+  onDiscard?: () => void;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -311,6 +394,8 @@ export function Summary(props: {
       >
         {t('step.undo')}
       </button>
+      {/* Not once a save was sent: the meal may be saved already. */}
+      {props.onDiscard && !frozen && <DiscardMeal onDiscard={props.onDiscard} />}
     </section>
   );
 }
