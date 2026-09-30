@@ -9,6 +9,9 @@ test('M4-1, M4-2: the app asks to log in, refuses a wrong password and accepts t
   page,
 }) => {
   await page.goto('/');
+  // The form replaces the app, which stays hidden (and mounted) under it.
+  await expect(page.getByRole('dialog', { name: en.login.title })).toBeVisible();
+  await expect(page.getByRole('button', { name: en.home.weighMeal })).toBeHidden();
   const dialog = await logIn(page, 'wrong password');
   await expect(dialog.getByRole('alert')).toHaveText(en.login.invalid);
   await logIn(page);
