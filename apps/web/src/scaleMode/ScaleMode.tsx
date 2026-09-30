@@ -111,7 +111,9 @@ function Session(props: {
   };
 
   const status = (
-    <p className="scale-status">
+    // M6-1: announced when it changes. A live region rather than role="status", which the waiting
+    // and proposal messages on the same screen already use.
+    <p className="scale-status" aria-live="polite" aria-atomic="true">
       {t(`scale.status.${connection === 'failed' ? 'idle' : connection}`)}
     </p>
   );
