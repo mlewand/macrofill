@@ -84,28 +84,55 @@ CI (GitHub Actions) runs lint, typecheck, the Vitest tests, the e2e tests and a 
 
 ## Production deploy
 
-One Docker image: the api serves the built web app, on one origin. It runs on the LAN server behind the Caddy HTTPS reverse proxy, next to the host's existing Postgres.
+One Docker image: the api serves the built web app, on one origin. It runs on the LAN server behind the Caddy HTTPS reverse proxy, next to the host's existing Postgres container.
 
-1. On the host's Postgres, create a database and a role that owns only that database.
-2. On the LAN server, check out the repo and create a `.env` next to `compose.prod.yml`:
+**LAN only for now:** there's no login yet; every request acts as the seeded user. Don't forward the port or publish the hostname outside your network.
+
+You need Docker with Compose v2 and git on the server, the Postgres container (CI tests against Postgres 17), and Caddy.
+
+1. **Create the database and its role** on the host Postgres. `-U` is the container's superuser: `docker exec <pg-container> printenv POSTGRES_USER` shows it, and it's `postgres` if that prints nothing.
 
    ```sh
-   DATABASE_URL=postgres://macrofill:<password>@<postgres-container>:5432/macrofill
-   POSTGRES_NETWORK=<external Docker network of the Postgres container>
+   docker exec -it <pg-container> psql -U <superuser> -d postgres \
+     -c "CREATE ROLE macrofill LOGIN PASSWORD '<password>';" \
+     -c "CREATE DATABASE macrofill OWNER macrofill;"
+   ```
+
+2. **Find the Postgres container's Docker network:**
+
+   ```sh
+   docker inspect <pg-container> --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+   ```
+
+3. **Clone the repo and create `.env`** next to `compose.prod.yml`. URL-encode special characters in the password (`@` → `%40`, `/` → `%2F`). `APP_PORT` is the port on the server; inside the container the app always listens on 3000.
+
+   ```sh
+   git clone git@github.com:mlewand/macrofill.git && cd macrofill
+   cat > .env <<'ENV'
+   DATABASE_URL=postgres://macrofill:<password>@<pg-container>:5432/macrofill
+   POSTGRES_NETWORK=<network from step 2>
    APP_PORT=3000
+   ENV
    ```
 
-3. Build the image, apply migrations, load the seed data and start:
+4. **Deploy:**
 
    ```sh
-   docker compose -f compose.prod.yml build
-   docker compose -f compose.prod.yml run --rm app node migrate.mjs
-   docker compose -f compose.prod.yml run --rm app node seed.mjs
-   docker compose -f compose.prod.yml up -d
+   ./deploy.sh
    ```
 
-4. Point a Caddy site at `<lan-server-ip>:3000`.
+   It builds the image, applies migrations, loads the seed data (safe to repeat), starts the container and waits until its health check passes, then prints `Macrofill is up and healthy.` If something fails it stops there, with a non-zero exit code and the reason; if the container doesn't turn healthy it prints the recent logs.
 
-The container's healthcheck calls `/api/health`, which checks the database connection; `docker compose -f compose.prod.yml ps` shows the status.
+5. **Point a Caddy site at the server:**
 
-Updating means pulling the repo and running the same steps again. The seed step is needed only when the seed data changed. Migrations run only through the explicit `migrate.mjs` step: an app that's newer than the database schema refuses to start.
+   ```
+   <prod-hostname> {
+     reverse_proxy <lan-server-ip>:<APP_PORT>
+   }
+   ```
+
+6. On the phone, open `https://<prod-hostname>` in Chrome, then ⋮ → **Install app**.
+
+**Updating:** `git pull && ./deploy.sh`.
+
+The container's healthcheck calls `/api/health`, which checks the database connection. `docker compose -f compose.prod.yml ps` shows the status, and `docker compose -f compose.prod.yml logs app` shows the logs. "Database schema is behind" means migrations haven't run; `deploy.sh` runs them. Migrations run only through that explicit step: an app that's newer than the database schema refuses to start. Include the `macrofill` database in the host's `pg_dump` backups.

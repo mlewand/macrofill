@@ -95,3 +95,25 @@ jobs:
           cache-to: type=gha,mode=max
       # M4-8, M4-9: refuses an unmigrated schema; migrate, seed and healthcheck work in the image.
       - run: tooling/ci/image-smoke.sh macrofill:ci postgres://macrofill:macrofill@localhost:5432/macrofill
+
+  deploy-script:
+    name: Deploy script
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # Like the LAN box: a Postgres container on its own Docker network, with the app's database
+      # and role created as README.md says. Then deploy.sh twice: a first deploy and an update.
+      - run: docker network create pg-net
+      - run: |
+          docker run -d --name host-pg --network pg-net -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin postgres:17
+          until docker exec host-pg pg_isready -U admin; do sleep 1; done
+          sleep 2
+          docker exec host-pg psql -U admin -d postgres \
+            -c "CREATE ROLE macrofill LOGIN PASSWORD 'secret';" \
+            -c "CREATE DATABASE macrofill OWNER macrofill;"
+      - run: printf 'DATABASE_URL=postgres://macrofill:secret@host-pg:5432/macrofill\nPOSTGRES_NETWORK=pg-net\nAPP_PORT=23874\n' > .env
+      - run: ./deploy.sh
+      - run: curl -sf http://localhost:23874/api/health
+      - run: ./deploy.sh
+      - run: curl -sf http://localhost:23874/api/health
