@@ -4,15 +4,27 @@ import { newSessionToken, SESSION_TTL_MS, sessionId } from '../auth/sessions';
 import type { Db } from '../db/client';
 import { createAuthRepository } from '../repositories/auth';
 
-// One per process, started when the first service is built.
+// One per process. `startServer` waits for it before listening, so from the first request an
+// unknown username takes as long as a wrong password.
 let dummy: Promise<string> | undefined;
-function dummyHash(): Promise<string> {
+let ready = false;
+
+/** The hash an unknown username's password is checked against; made on first use. */
+export function dummyHash(): Promise<string> {
   if (dummy === undefined) {
     dummy = hashPassword(newSessionToken());
-    // Only ever awaited on a login; don't report a failure before that.
-    dummy.catch(() => undefined);
+    dummy.then(
+      () => (ready = true),
+      // Only ever awaited on a login or at startup; don't report a failure twice.
+      () => undefined,
+    );
   }
   return dummy;
+}
+
+/** Whether the dummy hash is made. */
+export function authReady(): boolean {
+  return ready;
 }
 
 export type LoginResult = { status: 'ok'; token: string; expiresAt: Date } | { status: 'invalid' };

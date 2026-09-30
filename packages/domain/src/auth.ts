@@ -1,9 +1,12 @@
 import { z } from 'zod';
 
-/** M4-1: the login form. Bounded, so a huge body can't make the server hash megabytes. */
+/** The longest password: a login can't make the server hash megabytes. */
+export const PASSWORD_MAX_LENGTH = 1024;
+
+/** M4-1: the login form. */
 export const loginRequestSchema = z.object({
   username: z.string().min(1).max(200),
-  password: z.string().min(1).max(1024),
+  password: z.string().min(1).max(PASSWORD_MAX_LENGTH),
 });
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;

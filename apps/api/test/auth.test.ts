@@ -1,13 +1,17 @@
 import { sql } from 'drizzle-orm';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PASSWORD_MAX_LENGTH } from '@macrofill/domain';
 import { createApp } from '../src/app';
+import * as password from '../src/auth/password';
 import { hashPassword } from '../src/auth/password';
 import { resetPassword } from '../src/auth/reset';
 import { SESSION_COOKIE, SESSION_TTL_MS } from '../src/auth/sessions';
 import { queryRows, type Database } from '../src/db/client';
 import { seedData } from '../src/seed/data';
 import { seed, seedPasswordsFromEnv, seedPasswordVariable } from '../src/seed/seed';
-import { createMigratedTestDatabase } from './support/db';
+import { authReady } from '../src/services/auth';
+import { startServer } from '../src/start';
+import { createMigratedTestDatabase, migrationsDir } from './support/db';
 import { logIn, seedUsername, TEST_PASSWORD, withCookie } from './support/session';
 
 const NOW = new Date('2026-01-15T11:00:00.000Z');
@@ -138,6 +142,22 @@ describe('login and sessions (M4-1, M4-2)', () => {
   });
 });
 
+describe('startup (M4-1)', () => {
+  it('M4-1: the api listens only once unknown usernames take as long as wrong passwords (regression: #34)', async () => {
+    const database = await createMigratedTestDatabase();
+    try {
+      const listen = vi.fn(() => {
+        // The dummy hash an unknown username is checked against is ready before any login.
+        expect(authReady()).toBe(true);
+      });
+      await startServer({ port: 0, databaseUrl: 'unused', migrationsDir }, database, listen);
+      expect(listen).toHaveBeenCalledOnce();
+    } finally {
+      await database.close();
+    }
+  });
+});
+
 describe('seed passwords (M4-1, M4-5)', () => {
   let database: Database;
 
@@ -176,6 +196,14 @@ describe('seed passwords (M4-1, M4-5)', () => {
       body: JSON.stringify({ username: seedUsername, password: TEST_PASSWORD }),
     });
     expect(res.status).toBe(204);
+  });
+
+  it('M4-5: seeding a user who has a password hashes nothing', async () => {
+    await seed(database.db, undefined, { [seedUsername]: TEST_PASSWORD });
+    const spy = vi.spyOn(password, 'hashPassword');
+    await seed(database.db, undefined, { [seedUsername]: TEST_PASSWORD });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   it('M4-5: seeding again keeps the password hash (it is set only while none is)', async () => {
@@ -240,6 +268,24 @@ describe('password command (M4-1)', () => {
       'No user named nobody.',
     );
     await expect(resetPassword(database.db, seedUsername, 'short')).rejects.toThrow(/at least 8/);
+  });
+
+  it('M4-1: a password too long to log in with can not be set (regression: #34)', async () => {
+    const longest = 'x'.repeat(PASSWORD_MAX_LENGTH);
+    await expect(resetPassword(database.db, seedUsername, `${longest}x`)).rejects.toThrow(
+      `at most ${PASSWORD_MAX_LENGTH}`,
+    );
+    await expect(seed(database.db, undefined, { [seedUsername]: `${longest}x` })).rejects.toThrow(
+      `at most ${PASSWORD_MAX_LENGTH}`,
+    );
+    // The longest settable one logs in.
+    await resetPassword(database.db, seedUsername, longest);
+    const res = await createApp({ db: database.db }).request('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: seedUsername, password: longest }),
+    });
+    expect(res.status).toBe(204);
   });
 
   it('M4-1: two hashes of one password differ (random salt)', async () => {

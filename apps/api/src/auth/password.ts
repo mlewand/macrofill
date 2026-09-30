@@ -1,3 +1,4 @@
+import { PASSWORD_MAX_LENGTH } from '@macrofill/domain';
 import { randomBytes } from 'node:crypto';
 import { argon2id, argon2Verify } from 'hash-wasm';
 
@@ -17,9 +18,12 @@ export function verifyPassword(password: string, hash: string): Promise<boolean>
   return argon2Verify({ password, hash });
 }
 
-/** Refuses a password too short to set. */
+/** Refuses a password too short to set, or too long to log in with (`loginRequestSchema`). */
 export function assertSettablePassword(password: string): void {
   if (password.length < MIN_PASSWORD_LENGTH) {
     throw new Error(`A password needs at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  if (password.length > PASSWORD_MAX_LENGTH) {
+    throw new Error(`A password can have at most ${PASSWORD_MAX_LENGTH} characters.`);
   }
 }

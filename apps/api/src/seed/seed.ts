@@ -111,12 +111,13 @@ export async function seed(
     const withoutPassword: string[] = [];
     for (const { user } of data.users) {
       const password = passwords[user.username];
-      if (password !== undefined) {
-        await auth.setInitialPasswordHash(user.username, await hashPassword(password));
-      }
-      if ((await auth.userByUsername(user.username))?.passwordHash == null) {
+      // Hashing takes a while on purpose, so only for a user without a password.
+      if ((await auth.userByUsername(user.username))?.passwordHash != null) continue;
+      if (password === undefined) {
         withoutPassword.push(user.username);
+        continue;
       }
+      await auth.setInitialPasswordHash(user.username, await hashPassword(password));
     }
     return { withoutPassword };
   });

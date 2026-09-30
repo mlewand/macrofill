@@ -42,6 +42,8 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         <input
           id={usernameId}
           name="username"
+          // The form replaces the screen, so typing starts here.
+          autoFocus
           autoComplete="username"
           autoCapitalize="none"
           required

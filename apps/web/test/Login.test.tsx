@@ -67,6 +67,7 @@ describe('login (M4-1, M4-2)', () => {
   it('M4-2: the login form uses the browser password manager fields', async () => {
     renderApp(loggedOutApi());
     const dialog = await screen.findByRole('dialog', { name: en.login.title });
+    expect(within(dialog).getByLabelText(en.login.username)).toHaveFocus();
     expect(within(dialog).getByLabelText(en.login.username)).toHaveAttribute(
       'autocomplete',
       'username',

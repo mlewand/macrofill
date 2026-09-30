@@ -26,13 +26,15 @@ compose run --rm app node migrate.mjs
 
 step 'Loading seed data'
 # Initial passwords (M4-1) go to the seed run only, never to the running app. The seed sets one
-# only for a user without a password, so a later reset (password.mjs) is kept.
+# only for a user without a password, so a later reset (password.mjs) is kept. They're exported
+# and passed by name (`-e KEY`), so they never show in a process's command line.
 seed_env=()
 while IFS= read -r line; do
   key=${line%%=*}
   value=${line#*=}
   if [[ $value =~ ^\"(.*)\"$ || $value =~ ^\'(.*)\'$ ]]; then value=${BASH_REMATCH[1]}; fi
-  seed_env+=(-e "$key=$value")
+  export "$key=$value"
+  seed_env+=(-e "$key")
 done < <(grep -E '^SEED_PASSWORD_[A-Z0-9_]+=' .env || true)
 compose run --rm "${seed_env[@]}" app node seed.mjs
 
