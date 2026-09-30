@@ -70,7 +70,8 @@ export class HuajunDriver implements ScaleDriver {
     const scale = this.#scale;
     this.#scale = undefined;
     await scale?.disconnect();
-    this.#setState('disconnected');
+    // A connect() started meanwhile owns the state now; a failed one reports it itself.
+    if (this.#scale === undefined) this.#setState('disconnected');
   }
 
   onReading(cb: (r: ScaleReading) => void): () => void {

@@ -149,6 +149,27 @@ describe('HuajunDriver', () => {
     expect(slow.disconnects).toBeGreaterThan(0);
   });
 
+  it('a disconnect that finishes after a new connect leaves it connected (regression: #25)', async () => {
+    const [first, second] = [new FakeTransport(), new FakeTransport()];
+    let finishDisconnect = () => {};
+    first.disconnect = () =>
+      new Promise<void>((resolve) => {
+        finishDisconnect = () => {
+          first.drop();
+          resolve();
+        };
+      });
+    const { driver, readings, states } = driverWith([first, second]);
+    await driver.connect();
+    const disconnecting = driver.disconnect();
+    await driver.connect();
+    finishDisconnect();
+    await disconnecting;
+    expect(states.at(-1)).toBe('connected');
+    second.onData!(raw);
+    expect(readings).toHaveLength(1);
+  });
+
   it('a failed connect rejects and stays disconnected', async () => {
     const transport = new FakeTransport();
     transport.failConnect = true;
