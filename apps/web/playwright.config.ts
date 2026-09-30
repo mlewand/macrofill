@@ -48,6 +48,9 @@ export default defineConfig({
       API_PORT: String(port),
       WEB_DIST: fileURLToPath(new URL('dist', import.meta.url)),
       DATABASE_URL: e2eDatabaseUrl(),
+      // The reset loads the root .env and the server doesn't; pin the migrations so both use the
+      // repo's, whatever .env or the shell says (e.g. the production image's /app/drizzle).
+      MIGRATIONS_DIR: `${repoRoot}/apps/api/drizzle`,
     },
     // Never reuse a running server: the reset above must run every time, and a stale server could
     // even be connected to the dev database. A busy port fails the run instead.
