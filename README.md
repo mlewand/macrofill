@@ -72,7 +72,7 @@ Web Bluetooth and PWA installation need HTTPS. On the LAN, a Caddy reverse proxy
 | `pnpm test:e2e` | Playwright on a phone viewport, against the production build served by the api |
 | `pnpm format` | Format with Prettier |
 
-Before the first `pnpm test:e2e`, install the browser once: `pnpm --filter @macrofill/web exec playwright install --with-deps chromium`. The e2e tests use the database from `DATABASE_URL` (the root `.env`), so run `pnpm db:up`, `pnpm db:migrate` and `pnpm db:seed` first. The Vitest API tests need no database; they use PGlite in-process.
+Before the first `pnpm test:e2e`, install the browser once: `pnpm --filter @macrofill/web exec playwright install --with-deps chromium`. The e2e tests use **their own database**, never the dev one: `DATABASE_URL`'s database with `_e2e` added (`macrofill_e2e`), on the same server. Every run creates it if it's missing, wipes it, migrates and seeds it, so runs start from the same state and your dev data stays as it is. Only `pnpm db:up` is needed first. To use another database, set `E2E_DATABASE_URL` (see `.env.example`). The reset refuses any database whose name doesn't end in `_e2e`. On a Postgres where the app's role can't create databases, create the `_e2e` database once yourself, owned by that role. The Vitest API tests need no database; they use PGlite in-process.
 
 Running a subset:
 

@@ -1,8 +1,30 @@
 import { defineConfig, devices } from '@playwright/test';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
 
 const port = 4173;
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+
+/**
+ * e2e gets its own database, reset before every run, so it never touches the dev data:
+ * E2E_DATABASE_URL, or else DATABASE_URL with `_e2e` added to the database name
+ * (`macrofill` → `macrofill_e2e`). Both come from the environment or the root .env.
+ */
+function e2eDatabaseUrl(): string {
+  const dotEnvPath = `${repoRoot}/.env`;
+  const dotEnv = existsSync(dotEnvPath) ? parseEnv(readFileSync(dotEnvPath, 'utf8')) : {};
+  const env = { ...dotEnv, ...process.env };
+  if (env.E2E_DATABASE_URL) return env.E2E_DATABASE_URL;
+  if (!env.DATABASE_URL) {
+    throw new Error(
+      'e2e needs DATABASE_URL or E2E_DATABASE_URL, in the environment or the root .env.',
+    );
+  }
+  const url = new URL(env.DATABASE_URL);
+  url.pathname = `${url.pathname}_e2e`;
+  return url.toString();
+}
 
 // e2e runs against the production build served by the api, like the deployed image.
 export default defineConfig({
@@ -18,15 +40,21 @@ export default defineConfig({
   },
   projects: [{ name: 'phone', use: { ...devices['Pixel 7'] } }],
   webServer: {
-    // The api needs a migrated database: DATABASE_URL from the environment or the root .env.
-    command: 'pnpm build && node --env-file-if-exists=.env apps/api/dist/server.mjs',
+    // Build, reset the e2e database (create if missing, migrate, seed), then serve.
+    command: 'pnpm build && pnpm --filter @macrofill/api e2e:db && node apps/api/dist/server.mjs',
     cwd: repoRoot,
     url: `http://localhost:${port}/`,
     env: {
       API_PORT: String(port),
       WEB_DIST: fileURLToPath(new URL('dist', import.meta.url)),
+      DATABASE_URL: e2eDatabaseUrl(),
+      // The reset loads the root .env and the server doesn't; pin the migrations so both use the
+      // repo's, whatever .env or the shell says (e.g. the production image's /app/drizzle).
+      MIGRATIONS_DIR: `${repoRoot}/apps/api/drizzle`,
     },
-    reuseExistingServer: !process.env.CI,
+    // Never reuse a running server: the reset above must run every time, and a stale server could
+    // even be connected to the dev database. A busy port fails the run instead.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

@@ -11,8 +11,8 @@ export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 export interface Database {
   db: Db;
   /** Applies pending migrations. Only the explicit migrate command calls this (M4-9). */
-  migrate(migrationsFolder: string): Promise<void>;
-  close(): Promise<void>;
+  migrate: (migrationsFolder: string) => Promise<void>;
+  close: () => Promise<void>;
 }
 
 export interface ConnectOptions {
