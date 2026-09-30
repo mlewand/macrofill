@@ -182,8 +182,49 @@ describe('weight tracker', () => {
       expect(trackerStatus(state)).toBe('needsCorrection');
       expect(state.pending).toEqual({ type: 'needsCorrection', reading: 0, amount: -526 });
       expect(amounts(state)).toEqual([214]);
-      // Confirm and Next can't record it.
-      expect(amounts(run([confirm, next], state))).toEqual([214]);
+      // Confirm can't record it, and Next reading the same weight again asks again.
+      expect(amounts(track(state, confirm))).toEqual([214]);
+      const again = track(state, next);
+      expect(trackerStatus(again)).toBe('needsCorrection');
+      expect(amounts(again)).toEqual([214]);
+    });
+
+    it('M3-6: Next reads the scale again, e.g. once a lifted bowl is back', () => {
+      const lifted = run([...stableAt(0, 312), start, ...stableAt(1000, 526), next]);
+      const negative = run([...stableAt(2000, 0), next], lifted);
+      expect(trackerStatus(negative)).toBe('needsCorrection');
+      const waiting = run([reading(3000, 530, false), next], negative);
+      expect(trackerStatus(waiting)).toBe('waiting');
+      expect(amounts(run([reading(3225, 540, true)], waiting))).toEqual([214, 14]);
+    });
+
+    it('M3-6: an amount down to -0.3 g counts as 0, for the jitter of a stable scale (regression: #22)', () => {
+      // The real scale flickers between 525.6 and 525.7 g while flagged stable.
+      const started = [...stableAt(0, 525.7), start];
+      const jitter = run([...started, ...stableAt(1000, 525.4)]);
+      expect(currentAmount(jitter)).toBe(0);
+      expect(track(jitter, next).steps).toEqual([
+        { skipped: false, grams: 0, weightSource: 'scale', reading: 525.4 },
+      ]);
+      const below = run([...started, ...stableAt(1000, 525.3), next]);
+      expect(trackerStatus(below)).toBe('needsCorrection');
+      expect(currentAmount(below)).toBeCloseTo(-0.4, 9);
+    });
+
+    it('M3-6: the tolerance below 0 is configurable', () => {
+      const strict = createTracker({ negativeToleranceGrams: 0 });
+      const state = run([...stableAt(0, 525.7), start, ...stableAt(1000, 525.6), next], strict);
+      expect(trackerStatus(state)).toBe('needsCorrection');
+    });
+
+    it('M3-4, M3-6: after the wait, a reading below the tolerance asks for a correction, not a confirmation', () => {
+      const tapped = [...stableAt(0, 312), start, reading(1000, 311.8, false), next];
+      expect(run([...tapped, reading(2500, 311.8, false)]).pending).toEqual({
+        type: 'confirming',
+        reading: 311.8,
+        amount: 0,
+      });
+      expect(trackerStatus(run([...tapped, reading(2500, 300, false)]))).toBe('needsCorrection');
     });
 
     it('M3-6: a correction records the typed grams, and the next step counts from the tared reading', () => {

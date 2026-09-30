@@ -19,12 +19,18 @@ export interface TrackerConfig {
   stabilityWindowMs: number;
   /** M3-4: how long Next waits for a stable reading before proposing the last one. */
   stableWaitMs: number;
+  /**
+   * M3-6: a step amount this far below 0 counts as 0, since a stable scale still flickers by a few
+   * tenths of a gram. Further below 0, the step needs a correction.
+   */
+  negativeToleranceGrams: number;
 }
 
 export const defaultTrackerConfig: TrackerConfig = {
   stabilityToleranceGrams: 1,
   stabilityWindowMs: 1000,
   stableWaitMs: 1500,
+  negativeToleranceGrams: 0.3,
 };
 
 export type TrackerEvent =
@@ -55,7 +61,7 @@ export type PendingNext =
   | { type: 'waiting'; deadline: number }
   /** M3-4: still unstable after the wait; the user confirms or corrects. */
   | { type: 'confirming'; reading: number; amount: number }
-  /** M3-6: the amount would be below 0; the user corrects or undoes. */
+  /** M3-6: the amount would be below 0; the user corrects, reads the scale again, or undoes. */
   | { type: 'needsCorrection'; reading: number; amount: number };
 
 export type TrackerStatus = 'idle' | 'measuring' | PendingNext['type'];
@@ -90,7 +96,13 @@ export function trackerStatus(state: TrackerState): TrackerStatus {
 export function currentAmount(state: TrackerState): number | undefined {
   const reference = referenceReading(state);
   if (reference === undefined || state.latest === undefined) return undefined;
-  return state.latest.grams - reference;
+  return withinTolerance(state, state.latest.grams - reference);
+}
+
+/** M3-6: an amount just below 0 is the scale's flicker, so it counts as 0. */
+function withinTolerance(state: TrackerState, amount: number): number {
+  // The epsilon absorbs float error in differences of decimals: 525.4 - 525.7 < -0.3.
+  return amount < 0 && amount >= -state.config.negativeToleranceGrams - 1e-9 ? 0 : amount;
 }
 
 /** The reading the current step counts from: the last recorded Next, or the baseline. */
@@ -115,9 +127,8 @@ export function track(state: TrackerState, event: TrackerEvent): TrackerState {
     case 'start':
       return state;
     case 'next':
-      if (pending?.type === 'waiting' || pending?.type === 'needsCorrection' || !latest) {
-        return state;
-      }
+      // From a proposal or a negative step too: the scale is read again.
+      if (pending?.type === 'waiting' || !latest) return state;
       return latest.stable
         ? recordReading(state, latest.grams)
         : {
@@ -174,13 +185,14 @@ function onReading(state: TrackerState, reading: TimedReading): TrackerState {
   if (state.pending?.type !== 'waiting') return next;
   if (stable) return recordReading(next, grams);
   if (timestamp < state.pending.deadline) return next;
-  const amount = grams - referenceReading(next)!;
+  const amount = withinTolerance(next, grams - referenceReading(next)!);
+  if (amount < 0) return { ...next, pending: { type: 'needsCorrection', reading: grams, amount } };
   return { ...next, pending: { type: 'confirming', reading: grams, amount } };
 }
 
 /** Records the current step from a scale reading, unless its amount would be below 0 (M3-6). */
 function recordReading(state: TrackerState, reading: number): TrackerState {
-  const amount = reading - referenceReading(state)!;
+  const amount = withinTolerance(state, reading - referenceReading(state)!);
   if (amount < 0) return { ...state, pending: { type: 'needsCorrection', reading, amount } };
   return record(state, { skipped: false, grams: amount, weightSource: 'scale', reading });
 }
