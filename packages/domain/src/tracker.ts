@@ -139,10 +139,14 @@ export function track(state: TrackerState, event: TrackerEvent): TrackerState {
       return pending?.type === 'confirming' ? recordReading(state, pending.reading) : state;
     case 'correct': {
       if (!Number.isFinite(event.grams) || event.grams < 0) return state;
-      const reading =
+      // The next step counts from the latest reading if it's stable: it's what's on the scale
+      // now, also when it settled after a proposal or a negative step. Otherwise from the reading
+      // Next captured, or else the latest one.
+      const captured =
         pending?.type === 'confirming' || pending?.type === 'needsCorrection'
           ? pending.reading
-          : latest?.grams;
+          : undefined;
+      const reading = latest?.stable ? latest.grams : (captured ?? latest?.grams);
       if (reading === undefined) return state;
       return record(state, { skipped: false, grams: event.grams, weightSource: 'manual', reading });
     }

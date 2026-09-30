@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import en from '../src/i18n/en.json' with { type: 'json' };
 
 // The build the e2e server serves (WEB_DIST in playwright.config.ts).
 const swPath = fileURLToPath(new URL('../dist/sw.js', import.meta.url));
@@ -55,7 +56,7 @@ test('M7-7: a new version taking over mid-meal does not reload the page or lose 
   expect(firstVersion).toMatch(/\/sw\.js$/);
 
   // Start a meal and type some grams, all only in memory.
-  await page.getByRole('button', { name: 'Log a meal' }).click();
+  await page.getByRole('button', { name: en.home.logMeal }).click();
   await page.getByRole('button', { name: 'Curd' }).click();
   await page.getByLabel('Grams').fill('123,4');
   await page.evaluate(() => {

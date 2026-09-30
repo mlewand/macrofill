@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
+import { ScaleMode } from './scaleMode/ScaleMode';
 import { TodayView } from './today/TodayView';
 
-type Screen = 'home' | 'directEntry' | 'saved';
+type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
 
 export function App() {
   const { t } = useTranslation();
@@ -21,11 +22,25 @@ export function App() {
       {screen === 'home' && (
         <section>
           <h1>{t('app.name')}</h1>
+          <button type="button" className="primary" onClick={() => setScreen('scaleMode')}>
+            {t('home.weighMeal')}
+          </button>
           <button type="button" className="primary" onClick={() => setScreen('directEntry')}>
             {t('home.logMeal')}
           </button>
           <TodayView />
         </section>
+      )}
+      {screen === 'scaleMode' && (
+        <WithCatalog>
+          {(catalog) => (
+            <ScaleMode
+              catalog={catalog}
+              onSaved={() => setScreen('saved')}
+              onCancel={() => setScreen('home')}
+            />
+          )}
+        </WithCatalog>
       )}
       {screen === 'directEntry' && (
         <WithCatalog>

@@ -6,7 +6,8 @@
     "retry": "Try again"
   },
   "home": {
-    "logMeal": "Log a meal"
+    "weighMeal": "Weigh a meal",
+    "logMeal": "Type in a meal"
   },
   "recipes": {
     "title": "What are you making?",
@@ -26,6 +27,33 @@
       "negative": "Grams can't be negative.",
       "invalid": "Enter a number, like 3,2 or 3.2."
     }
+  },
+  "scale": {
+    "status": {
+      "idle": "Scale not connected",
+      "connecting": "Connecting to the scale…",
+      "connected": "Scale connected",
+      "dropped": "Scale disconnected"
+    },
+    "connect": "Connect scale",
+    "connectHint": "Turn the scale on and set it to grams, then connect. The list shows all nearby devices: pick the scale.",
+    "connectFailed": "Couldn't connect to the scale. Try again.",
+    "placeBowl": "Put the empty bowl or plate on the scale, wait until the weight settles, then tap Start.",
+    "start": "Start",
+    "added": "Added in this step",
+    "total": "On the scale: {{grams}} g",
+    "wrongUnit": "The scale isn't showing grams. Switch it to grams to go on.",
+    "waiting": "Waiting for the weight to settle…",
+    "unstable": "The weight didn't settle. Use {{grams}} g?",
+    "confirm": "Use this weight",
+    "readAgain": "Read the scale again",
+    "negative": "The amount is below zero, for example after a tare. Enter the grams by hand, read the scale again, or undo.",
+    "enterManually": "Enter grams by hand",
+    "useGrams": "Use these grams",
+    "correctionNeedsStable": "Hold still: the grams can be used once the weight settles.",
+    "recorded": "{{product}}: {{grams}} g recorded",
+    "dropped": "The scale disconnected. Enter the remaining weights by hand.",
+    "smallAmounts": "The scale can miss a few grams added slowly: add small, calorie-dense items in one go, or enter them by hand."
   },
   "summary": {
     "title": "Summary",

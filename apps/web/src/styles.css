@@ -195,3 +195,18 @@ button.danger {
 .confirm p {
   margin: 0 0 0.5rem;
 }
+
+/* M6-3, M7-6: the step's amount in large digits, readable from a propped-up phone. */
+.live-weight {
+  margin: 0;
+  font-size: 4rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.scale-status {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
