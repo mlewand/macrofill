@@ -96,6 +96,15 @@ describe('MockScaleDriver', () => {
     ).toBe(false);
   });
 
+  it('M3-5: a mock without a stable flag drops the flag from its script (regression: #24)', async () => {
+    const { driver, readings } = connected({ capabilities: { hasStableFlag: false } });
+    await driver.connect();
+    void driver.play(scaleScript().baseline(312, { forMs: 225 }).add(5).build());
+    await vi.runAllTimersAsync();
+    expect(readings).toHaveLength(3);
+    expect(readings.every((r) => !('stable' in r))).toBe(true);
+  });
+
   it('M3-14: a reading without grams means the scale shows another unit', async () => {
     const { driver, readings } = connected();
     await driver.connect();

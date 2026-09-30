@@ -118,6 +118,8 @@ export class MockScaleDriver implements ScaleDriver {
       }
       this.#last = { at, scriptTime: reading.timestamp };
       const played: ScaleReading = { ...reading, timestamp: at, raw: new Uint8Array(0) };
+      // A scale without the flag never reports it, whatever the script says (M3-5).
+      if (!this.capabilities.hasStableFlag) delete played.stable;
       for (const cb of this.#readingListeners) cb(played);
     }
     this.#segments.shift();
