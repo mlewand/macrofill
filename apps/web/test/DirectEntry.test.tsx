@@ -282,4 +282,14 @@ describe('Direct Entry', () => {
     expect(second).toEqual(first);
     expect(second?.meal.items[0]).toMatchObject({ grams: 200 });
   });
+
+  it('an immediate double tap on Save sends one request', async () => {
+    const api = await openCurdBowl(fakeApi(() => new Promise(() => {})));
+    click(en.step.skip);
+    click(en.step.skip);
+    const save = screen.getByRole('button', { name: en.summary.save });
+    fireEvent.click(save);
+    fireEvent.click(save);
+    expect(api.saveMeal).toHaveBeenCalledTimes(1);
+  });
 });
