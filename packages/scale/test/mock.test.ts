@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MockScaleDriver, isWrongUnit, scaleScript, type ScaleReading } from '../src/index.js';
+import { isWrongUnit, scaleScript, type ScaleReading } from '../src/index.js';
+import { MockScaleDriver } from '../src/mock.js';
 
 beforeEach(() => {
   vi.useFakeTimers();

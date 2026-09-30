@@ -1,6 +1,7 @@
 import type { Reading, ScaleTransport } from '@mlewand/huajun-ble-scale';
 import { describe, expect, it, vi } from 'vitest';
-import { HuajunDriver, toScaleReading, type ScaleReading } from '../src/index.js';
+import { HuajunDriver, toScaleReading } from '../src/huajun.js';
+import type { ScaleReading } from '../src/index.js';
 
 const capacitor = vi.hoisted(() => ({ options: [] as unknown[] }));
 vi.mock('@mlewand/huajun-ble-scale/capacitor', () => ({

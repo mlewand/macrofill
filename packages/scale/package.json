@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./huajun": "./src/huajun.ts",
+    "./mock": "./src/mock.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
