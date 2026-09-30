@@ -117,7 +117,7 @@ describe('Scale Mode state', () => {
     }
   });
 
-  it('skip and undo keep the flow and the tracker on the same step', () => {
+  it('M3-3: skip and undo keep the flow and the tracker on the same step', () => {
     const script = scaleScript().baseline(312);
     let state = apply(play(start(), script.take()), { type: 'start' });
     state = apply(play(state, script.add(214).stable().take()), { type: 'next' });
@@ -137,7 +137,7 @@ describe('Scale Mode state', () => {
     expectInStep(state);
   });
 
-  it('Next, confirm and correct need a product, so the flow can take the step', () => {
+  it('M6-4: Next, confirm and correct need a product, so the flow can take the step', () => {
     const script = scaleScript().baseline(312);
     let state = apply(play(start([undefined, milk, cucumber]), script.take()), { type: 'start' });
     state = play(state, script.add(214).stable().take());
@@ -162,7 +162,7 @@ describe('Scale Mode state', () => {
     expect(canNext(state)).toBe(true);
   });
 
-  it('after the scale drops, the remaining steps take typed grams, and the meal still saves as a scale meal', () => {
+  it('M6-5: after the scale drops, the remaining steps take typed grams, and the meal still saves as a scale meal', () => {
     const script = scaleScript().baseline(312);
     let state = apply(play(start(), script.take()), { type: 'start' });
     state = apply(play(state, script.add(214).stable().take()), { type: 'next' });

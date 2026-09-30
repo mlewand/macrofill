@@ -212,7 +212,7 @@ describe('Scale Mode', () => {
     ]);
   });
 
-  it('after the scale drops, the remaining steps take typed grams', async () => {
+  it('M6-5: after the scale drops, the remaining steps take typed grams', async () => {
     const s = await started();
     await s.play(s.script.add(214).stable({ forMs: 0 }));
     fireEvent.click(button(en.step.next));
@@ -232,7 +232,7 @@ describe('Scale Mode', () => {
     ]);
   });
 
-  it('skip and undo work on the scale steps', async () => {
+  it('M3-3: skip and undo work on the scale steps', async () => {
     await started();
     fireEvent.click(button(en.step.skip));
     expect(screen.getByText('Step 2 of 2')).toBeVisible();
@@ -258,7 +258,7 @@ describe('Scale Mode', () => {
     expect(release).toHaveBeenCalled();
   });
 
-  it('a failing wake lock never blocks the session', async () => {
+  it('M6-9: a failing wake lock never blocks the session', async () => {
     vi.stubGlobal('navigator', {
       ...navigator,
       wakeLock: { request: () => Promise.reject(new Error('not allowed')) },
@@ -269,7 +269,7 @@ describe('Scale Mode', () => {
 });
 
 describe('Home', () => {
-  it('offers Scale Mode next to Direct Entry', async () => {
+  it('M6-1: offers Scale Mode next to Direct Entry', async () => {
     const api: Api = fakeApi({ catalog: () => Promise.resolve(catalog) });
     const driver = new MockScaleDriver();
     render(
