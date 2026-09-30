@@ -110,7 +110,7 @@ describe('HuajunDriver', () => {
     expect(states).toEqual(['connected', 'disconnected']);
   });
 
-  it('a new connection uses a new transport, and the old one is ignored', async () => {
+  it('M6-1: a new connection uses a new transport, and the old one is ignored', async () => {
     const [first, second] = [new FakeTransport(), new FakeTransport()];
     const { driver, readings, states } = driverWith([first, second]);
     await driver.connect();
@@ -122,7 +122,7 @@ describe('HuajunDriver', () => {
     expect(states).toEqual(['connected', 'disconnected', 'connected']);
   });
 
-  it('an older connect that finishes late reports nothing (regression: #25)', async () => {
+  it('M6-1: an older connect that finishes late reports nothing (regression: #25)', async () => {
     const slow = new FakeTransport();
     let finishSlow = () => {};
     slow.connect = () => new Promise<void>((resolve) => (finishSlow = resolve));
@@ -136,7 +136,7 @@ describe('HuajunDriver', () => {
     expect(states).toEqual([]);
   });
 
-  it('a disconnect while connecting cancels the connection (regression: #25)', async () => {
+  it('M6-1: a disconnect while connecting cancels the connection (regression: #25)', async () => {
     const slow = new FakeTransport();
     let finishSlow = () => {};
     slow.connect = () => new Promise<void>((resolve) => (finishSlow = resolve));
@@ -149,7 +149,7 @@ describe('HuajunDriver', () => {
     expect(slow.disconnects).toBeGreaterThan(0);
   });
 
-  it('a disconnect that finishes after a new connect leaves it connected (regression: #25)', async () => {
+  it('M6-1: a disconnect that finishes after a new connect leaves it connected (regression: #25)', async () => {
     const [first, second] = [new FakeTransport(), new FakeTransport()];
     let finishDisconnect = () => {};
     first.disconnect = () =>
@@ -170,7 +170,7 @@ describe('HuajunDriver', () => {
     expect(readings).toHaveLength(1);
   });
 
-  it('a failed connect rejects and stays disconnected', async () => {
+  it('M6-1: a failed connect rejects and stays disconnected', async () => {
     const transport = new FakeTransport();
     transport.failConnect = true;
     const { driver, states } = driverWith([transport]);
