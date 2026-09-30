@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv, type UserConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 type Env = Record<string, string | undefined>;
 
@@ -30,7 +31,7 @@ export function createViteConfig(env: Env): UserConfig {
     .filter((h) => h !== '');
 
   return {
-    plugins: [react()],
+    plugins: [react(), pwa()],
     server: {
       proxy: { '/api': `http://localhost:${apiPort}` },
       ...(env.DEV_HOST ? { host: env.DEV_HOST } : {}),
@@ -38,6 +39,39 @@ export function createViteConfig(env: Env): UserConfig {
       ...(hmrClientPort === undefined ? {} : { hmr: { clientPort: hmrClientPort } }),
     },
   };
+}
+
+/**
+ * M7-7: installable PWA. The service worker precaches the built app and falls back to index.html
+ * for navigations, but never caches or answers `/api`: the server is the source of truth.
+ * The api serves sw.js and the manifest with `Cache-Control: no-cache` (M1-5), so installed
+ * copies pick up new versions.
+ */
+function pwa() {
+  return VitePWA({
+    registerType: 'autoUpdate',
+    includeAssets: ['icons/apple-touch-icon.png'],
+    manifest: {
+      name: 'Macrofill',
+      short_name: 'Macrofill',
+      description: 'Log meals while you make them and track daily macros.',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#ffffff',
+      theme_color: '#2f6f3e',
+      icons: [
+        { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    },
+    workbox: {
+      navigateFallback: '/index.html',
+      navigateFallbackDenylist: [/^\/api(\/|$)/],
+    },
+  });
 }
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
