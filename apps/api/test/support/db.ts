@@ -26,9 +26,18 @@ export function createTestDatabase(): Promise<Database> {
 
 /** A migrated test database. */
 export async function createMigratedTestDatabase(): Promise<Database> {
-  const database = await createTestDatabase();
-  await database.migrate(migrationsDir);
-  return database;
+  return migrated(await createTestDatabase(), migrationsDir);
+}
+
+/** Migrates `database`. If that fails, closes it (dropping a server database) and rethrows. */
+export async function migrated(database: Database, dir: string): Promise<Database> {
+  try {
+    await database.migrate(dir);
+    return database;
+  } catch (error) {
+    await database.close();
+    throw error;
+  }
 }
 
 function createPgliteDatabase(): Database {
