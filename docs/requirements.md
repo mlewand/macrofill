@@ -230,7 +230,7 @@ The app has to be well tested with automated tests at every step, both while bui
 - Scale parsing is tested in `@mlewand/huajun-ble-scale`. The app tests only the mapping from the library's `Reading` to `ScaleReading`.
 - `apps/api`: integration tests against PGlite, calling the app in-process (no network).
 - Authorization tests: a user can never read or modify another user's data, for every endpoint.
-- `apps/web`: component tests (Vitest + Testing Library); Playwright e2e on a phone viewport with `MockScaleDriver` injected in the test build. Scenarios: full meal (Scale Mode and Direct Entry), skip, manual correction, undo, scale disconnect with automatic reconnect, negative step leading to correction, wrong unit, Today totals.
+- `apps/web`: component tests (Vitest + Testing Library); Playwright e2e on a phone viewport with `MockScaleDriver` injected into the production build by the test: the bundle honours a flag the test sets before the page loads, and loads the mock as a separate chunk, so e2e tests the artifact that ships. Scenarios: full meal (Scale Mode and Direct Entry), skip, manual correction, undo, scale disconnect with automatic reconnect, negative step leading to correction, wrong unit, Today totals.
 - Real hardware (Web Bluetooth + my scale) can't run in CI: short manual smoke checklist per release.
 - Line coverage thresholds: 90% for `domain`, 70% for `scale`, `api` and `web`.
 - Acceptance criteria in this doc are written as testable statements; agents write the tests first.
