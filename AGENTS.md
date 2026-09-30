@@ -14,7 +14,6 @@ Current phase: **B**, in progress since 2026-09-30. Phase A's exit was confirmed
 
 Handover from Phase A. Delete each point once it's resolved, and this section once it's empty.
 
-- **Library ready.** `@mlewand/huajun-ble-scale@0.0.4` (npm) has everything Phase B and C need: `Reading.receivedAtMonotonic` (use it for `ScaleReading.timestamp`), `toReading` for replays, and `CapacitorTransport` `deviceId` reconnect. See `docs/TODO.md`. It isn't a dependency of `packages/scale` yet. If pnpm's `minimumReleaseAge` still holds it back when it's needed, depend on the library's GitHub release tag instead (approved), with a `docs/TODO.md` item to switch back to the npm package.
 - **Verified on real hardware so far:** Web Bluetooth readings from the scale in Chrome on Android over HTTPS; automatic reconnect with the library's new API, but only in a native Capacitor Android build (M6-6 is Phase C).
 - **M7-6's remaining part:** the live weight must be at least 48 px. Extend `apps/web/e2e/layout.spec.ts` when Scale Mode exists.
 
