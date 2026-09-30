@@ -60,7 +60,7 @@ Root scripts; keep this list in sync with `package.json`. Rows marked *(pending)
 | `pnpm db:seed` | Load seed data from `apps/api/src/seed/data.ts` (idempotent) |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | Checks that must pass before finishing. `lint` runs ESLint and `prettier --check` |
 | `pnpm format` | Format with Prettier |
-| `pnpm test:e2e` | Playwright tests on a phone viewport, against the production build served by the api. Uses its own database (`DATABASE_URL` + `_e2e`, or `E2E_DATABASE_URL`), wiped and reseeded each run |
+| `pnpm test:e2e` | Playwright tests on phone and tablet viewports (portrait), against the production build served by the api. Uses its own database (`DATABASE_URL` + `_e2e`, or `E2E_DATABASE_URL`), wiped and reseeded each run |
 
 Running a subset of tests (Vitest projects are named `domain`, `scale`, `web`, `api` and `repo` for the root `tests/`):
 
