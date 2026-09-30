@@ -8,13 +8,17 @@ Read before any work:
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current phase: **B**, in progress since 2026-09-30. Phase A's exit was confirmed on 2026-09-30: a real meal logged with Direct Entry on the phone, visible on the tablet, on the production box. Update this line when a phase's exit criteria are met.
+Current phase: **C**, about to start. Phase B's exit was confirmed on 2026-10-01: a real meal logged with the scale on the phone, on the production box. No Phase C code exists yet. Update this line when a phase's exit criteria are met.
 
-## Starting Phase B
+## Starting Phase C
 
-Handover from Phase A. Delete each point once it's resolved, and this section once it's empty.
+Handover from Phase B. Delete each point once it's resolved, and this section once it's empty.
 
-- **Verified on real hardware so far:** Web Bluetooth readings from the scale in Chrome on Android over HTTPS; automatic reconnect with the library's new API, but only in a native Capacitor Android build (M6-6 is Phase C).
+- **Scale library from npm, first.** `packages/scale` depends on the library through the tarball on its GitHub release `v0.0.4`, because pnpm's `minimumReleaseAge` held back the npm release (published 2026-09-30, 09:49 UTC). Switch to `^0.0.4` as its own small PR once `pnpm add` adds no `minimumReleaseAgeExclude` entry. It's an exception to "don't implement `docs/TODO.md` items": a pending maintenance step, not a deferred feature. That PR deletes the TODO item "Scale library from npm".
+- **Automatic reconnect (M6-6) on the web isn't proven yet.** On real hardware it has only worked in a native Capacitor Android build. The PWA uses Web Bluetooth, where `new CapacitorTransport({ deviceId })` is expected to work within the page session of the first pick (`docs/TODO.md`). Check it on the phone before building on it. The Phase B stand-in, typed grams after a drop, is the `manual` flag in `apps/web/src/scaleMode/state.ts`. What's missing is the reconnect itself. `HuajunDriver` creates each transport without a `deviceId`, so a second `connect()` opens the chooser; reconnecting needs the ID picked on the first connect (`CapacitorTransport.deviceId`). Scale Mode also needs the retry with backoff. `MockScaleDriver` already reconnects (`connect()` after `drop()`), so the M6-8 reconnect scenario can use it as it is.
+- **Recording (M3-11, M6-7).** Readings carry `raw`, but nothing records them yet. The mock's `raw` is empty, so only real sessions can be re-parsed. Replay uses the library's `parseFrame` and `toReading`.
+- **Coverage thresholds (M1-3)** have never been measured. Measure first; `scale` and `web` may need tests to reach them.
+- **Tracker decisions from Phase B**, beyond the criteria text, are in the descriptions of #22, #27 and #29: correction references, undo back to before Start, and M3-1 kept literal for a stalled stream. The tracker's settings, for tuning on the real scale, are in `apps/web/src/scaleMode/settings.ts`.
 
 ## How to work
 
@@ -36,6 +40,7 @@ Handover from Phase A. Delete each point once it's resolved, and this section on
 - PR descriptions list the criterion IDs they cover.
 - Do branch work in a `git worktree`, and keep the main checkout on `master`: it may be serving the dev server, and switching branches under a running Vite can break its config reload. Pull `master` there after merges.
 - A PR is ready for review when CI is green. Reviews come from Codex by default. GitHub Copilot reviews are for bigger or riskier PRs, and are requested less often. Address every finding, including points that appear only in the review summary; answer those with a PR comment. Reply on inline threads with the fixing commit and resolve them. Check a finding before fixing it, and if it doesn't hold, say why, with evidence.
+- At the end of a phase, before its exit, a cumulative review covers everything the phase changed. A base branch at master's commit from the phase's start, and a head branch starting as current master, in a PR marked as not to be merged into that base. Fixes go on the head branch, so they're reviewed in context. When it's approved, retarget the PR to `master` (its diff shrinks to the fixes), merge it, and delete both branches. Phase B's was #29, covering #22 to #28. #30, a small UI change merged after it, was reviewed on its own.
 - Request the first review, and a re-review after each round of fixes (every thread answered and resolved, CI green on the new head), once per round. Codex answers only to the maintainer's account, so the request is a PR comment posted as the maintainer, with exactly this text: `Asking for @codex review on @mlewand behalf.` Copilot is requested as a reviewer, also as the maintainer. How an agent gets that access is harness-specific (Claude Code: see `CLAUDE.md`). Without it, tell the maintainer the PR is ready instead.
 
 ## Conventions
