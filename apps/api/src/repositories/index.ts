@@ -1,22 +1,27 @@
 import type {
   CatalogProduct,
   ConsumptionEntry,
+  DailyTargets,
   IngredientClass,
+  LocalizedText,
+  NutritionValues,
   PreparedMeal,
   PreparedMealItem,
   Recipe,
   SaveMealRequest,
 } from '@macrofill/domain';
-import { and, asc, eq, inArray, isNull, max, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   consumptionEntries,
+  dailyTargets,
   ingredientClasses,
   preparedMealItems,
   preparedMeals,
   products,
   recipeSteps,
   recipes,
+  users,
 } from '../db/schema';
 
 /**
@@ -25,6 +30,34 @@ import {
  */
 export function createRepositories(db: Db, ownerId: string) {
   return {
+    user: {
+      async timezone(): Promise<string> {
+        const [user] = await db
+          .select({ timezone: users.timezone })
+          .from(users)
+          .where(eq(users.id, ownerId));
+        if (!user) throw new Error('Current user not found.');
+        return user.timezone;
+      },
+    },
+
+    dailyTargets: {
+      /** The user's targets; all unset (not tracked) when there's no row. */
+      async get(): Promise<DailyTargets> {
+        const [row] = await db
+          .select({
+            protein: dailyTargets.protein,
+            fat: dailyTargets.fat,
+            carbs: dailyTargets.carbs,
+            fibre: dailyTargets.fibre,
+            kcal: dailyTargets.kcal,
+          })
+          .from(dailyTargets)
+          .where(eq(dailyTargets.ownerId, ownerId));
+        return row ?? { protein: null, fat: null, carbs: null, fibre: null, kcal: null };
+      },
+    },
+
     ingredientClasses: {
       all(): Promise<IngredientClass[]> {
         return db.select().from(ingredientClasses).orderBy(asc(ingredientClasses.id));
@@ -155,6 +188,37 @@ export function createRepositories(db: Db, ownerId: string) {
         return true;
       },
 
+      /** Weighed items of the given meals, with each product's nutrition per 100 g. */
+      async weighedItems(mealIds: readonly string[]) {
+        if (mealIds.length === 0) return [];
+        const rows = await db
+          .select({ item: preparedMealItems, product: products })
+          .from(preparedMealItems)
+          .innerJoin(products, eq(products.id, preparedMealItems.productId))
+          .where(
+            and(
+              inArray(preparedMealItems.preparedMealId, [...mealIds]),
+              eq(preparedMealItems.ownerId, ownerId),
+              eq(preparedMealItems.skipped, false),
+            ),
+          );
+        return rows.map(({ item, product: p }) => ({
+          preparedMealId: item.preparedMealId,
+          item: toItem(item),
+          per100g: {
+            kcal: p.kcal,
+            fat: p.fat,
+            saturates: p.saturates,
+            carbs: p.carbs,
+            sugars: p.sugars,
+            protein: p.protein,
+            salt: p.salt,
+            fibre: p.fibre,
+          } satisfies NutritionValues,
+          productId: p.id,
+        }));
+      },
+
       async find(id: string): Promise<PreparedMeal | undefined> {
         const [meal] = await db
           .select()
@@ -197,6 +261,43 @@ export function createRepositories(db: Db, ownerId: string) {
           .onConflictDoNothing()
           .returning({ id: consumptionEntries.id });
         return inserted.length > 0;
+      },
+
+      /** Entries eaten on `day` (YYYY-MM-DD) in `timezone`, newest first, with the recipe name. */
+      async onDay(day: string, timezone: string) {
+        const rows = await db
+          .select({ entry: consumptionEntries, recipeName: recipes.name })
+          .from(consumptionEntries)
+          .innerJoin(
+            preparedMeals,
+            and(
+              eq(preparedMeals.id, consumptionEntries.preparedMealId),
+              eq(preparedMeals.ownerId, ownerId),
+            ),
+          )
+          .leftJoin(recipes, eq(recipes.id, preparedMeals.recipeId))
+          .where(
+            and(
+              eq(consumptionEntries.ownerId, ownerId),
+              sql`(${consumptionEntries.eatenAt} at time zone ${timezone})::date = ${day}::date`,
+            ),
+          )
+          .orderBy(desc(consumptionEntries.eatenAt), desc(consumptionEntries.id));
+        return rows.map(({ entry, recipeName }) => ({
+          id: entry.id,
+          preparedMealId: entry.preparedMealId,
+          eatenAt: entry.eatenAt.toISOString(),
+          recipeName: recipeName satisfies LocalizedText | null,
+        }));
+      },
+
+      /** Deletes the user's entry; returns whether there was one. The prepared meal stays. */
+      async delete(id: string): Promise<boolean> {
+        const deleted = await db
+          .delete(consumptionEntries)
+          .where(and(eq(consumptionEntries.id, id), eq(consumptionEntries.ownerId, ownerId)))
+          .returning({ id: consumptionEntries.id });
+        return deleted.length > 0;
       },
 
       async findByMeal(preparedMealId: string): Promise<ConsumptionEntry | undefined> {

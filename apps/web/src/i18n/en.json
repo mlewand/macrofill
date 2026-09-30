@@ -1,5 +1,72 @@
 {
   "app": {
-    "name": "Macrofill"
+    "name": "Macrofill",
+    "loading": "Loading…",
+    "loadFailed": "Couldn't load recipes and products.",
+    "retry": "Try again"
+  },
+  "home": {
+    "logMeal": "Log a meal"
+  },
+  "recipes": {
+    "title": "What are you making?",
+    "cancel": "Cancel"
+  },
+  "step": {
+    "progress": "Step {{current}} of {{total}}",
+    "product": "Product",
+    "noProducts": "No products for this ingredient yet.",
+    "grams": "Grams",
+    "next": "Next",
+    "skip": "Skip",
+    "undo": "Undo",
+    "problem": {
+      "product": "Pick a product.",
+      "empty": "Enter the weight in grams.",
+      "negative": "Grams can't be negative.",
+      "invalid": "Enter a number, like 3,2 or 3.2."
+    }
+  },
+  "summary": {
+    "title": "Summary",
+    "gramsFor": "Grams of {{product}}",
+    "skipped": "Skipped",
+    "total": "Meal total",
+    "save": "Save meal",
+    "saving": "Saving…",
+    "saveFailed": "Couldn't save the meal. Check the connection and try again."
+  },
+  "saved": {
+    "title": "Meal saved",
+    "done": "Done"
+  },
+  "nutrient": {
+    "protein": "Protein",
+    "fat": "Fat",
+    "carbs": "Carbs",
+    "fibre": "Fibre",
+    "kcal": "Energy"
+  },
+  "unit": {
+    "grams": "{{value}} g",
+    "kcal": "{{value}} kcal"
+  },
+  "unknown": "unknown",
+  "today": {
+    "title": "Today",
+    "loadFailed": "Couldn't load today's meals.",
+    "empty": "Nothing logged today yet.",
+    "nutrient": "Nutrient",
+    "eaten": "Eaten",
+    "target": "Target",
+    "remaining": "Left",
+    "meals": "Meals",
+    "meal": "Meal",
+    "delete": "Delete",
+    "deleteLabel": "Delete {{meal}} eaten at {{time}}",
+    "confirmDelete": "Delete this meal from today?",
+    "confirm": "Delete",
+    "keep": "Keep",
+    "deleteFailed": "Couldn't delete the meal. Try again."
   }
 }
