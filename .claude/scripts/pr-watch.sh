@@ -19,35 +19,41 @@ me=$(gh api user --jq .login) || exit 1
 seed=false
 [[ -f $state ]] || { seed=true; : >"$state"; }
 
-# Prints "KEY<TAB>MESSAGE" lines for everything that has happened on PR $1.
+# Prints "KEY<TAB>MESSAGE" lines for everything that has happened on PR $1. Fails if any request
+# fails, so a caller can tell a complete list from a partial one.
 events() {
-  local n=$1 skip_me="select(.user.login != \"$me\")"
+  local n=$1 skip_me="select(.user.login != \"$me\")" failed=0 comments key message
   gh api "repos/$repo/pulls/$n/reviews" --paginate --jq ".[] | $skip_me |
-    \"review:\(.id)\tPR #$n: review by \(.user.login), \(.state)\""
+    \"review:\(.id)\tPR #$n: review by \(.user.login), \(.state)\"" || failed=1
   gh api "repos/$repo/pulls/$n/comments" --paginate --jq ".[] | $skip_me |
-    \"inline:\(.id)\tPR #$n: inline comment by \(.user.login) on \(.path):\(.line // .original_line) (id \(.id))\""
-  gh api "repos/$repo/issues/$n/comments" --paginate --jq ".[] |
+    \"inline:\(.id)\tPR #$n: inline comment by \(.user.login) on \(.path):\(.line // .original_line) (id \(.id))\"" || failed=1
+  comments=$(gh api "repos/$repo/issues/$n/comments" --paginate --jq ".[] |
     if .user.login == \"$me\" then \"mine:\(.id)\" else
-    \"comment:\(.id)\tPR #$n: comment by \(.user.login): \(.body | gsub(\"\\\\s+\"; \" \") | .[0:120])\" end" |
-    while IFS=$'\t' read -r key message; do
-      if [[ $key == mine:* ]]; then
-        # Reactions from others on the user's own comments, e.g. Codex's 👍 on "@codex review".
-        gh api "repos/$repo/issues/comments/${key#mine:}/reactions" --paginate --jq ".[] | $skip_me |
-          \"reaction:\(.id)\tPR #$n: \(.user.login) reacted \(.content) to comment ${key#mine:}\""
-      else
-        printf '%s\t%s\n' "$key" "$message"
-      fi
-    done
+    \"comment:\(.id)\tPR #$n: comment by \(.user.login): \(.body | gsub(\"\\\\s+\"; \" \") | .[0:120])\" end") || failed=1
+  while IFS=$'\t' read -r key message; do
+    [[ -z $key ]] && continue
+    if [[ $key == mine:* ]]; then
+      # Reactions from others on the user's own comments, e.g. Codex's 👍 on "@codex review".
+      gh api "repos/$repo/issues/comments/${key#mine:}/reactions" --paginate --jq ".[] | $skip_me |
+        \"reaction:\(.id)\tPR #$n: \(.user.login) reacted \(.content) to comment ${key#mine:}\"" || failed=1
+    else
+      printf '%s\t%s\n' "$key" "$message"
+    fi
+  done <<<"$comments"
+  return "$failed"
 }
 
-# Prints the events on PR $1 not seen before, and records them as seen.
+# Prints the events on PR $1 not seen before, and records them as seen. Fails, recording nothing,
+# if the events couldn't all be fetched.
 report() {
-  local key message
+  local all key message
+  all=$(events "$1") || return 1
   while IFS=$'\t' read -r key message; do
+    [[ -z $key ]] && continue
     grep -qxF "$key" "$state" && continue
     echo "$key" >>"$state"
     $seed || echo "$message"
-  done < <(events "$1")
+  done <<<"$all"
 }
 
 while true; do
@@ -64,8 +70,9 @@ while true; do
     if ! grep -qx "$n" <<<"$open"; then
       status=$(gh pr view "$n" --repo "$repo" --json state --jq .state) || continue
       [[ $status == OPEN ]] && continue
-      # Activity since the last pass comes before the merge or close.
-      report "$n"
+      # Activity since the last pass comes before the merge or close. If it can't all be fetched,
+      # keep the PR tracked and try again on the next pass.
+      report "$n" || continue
       $seed || echo "PR #$n: $status"
       { grep -vx "$key" "$state" || true; } >"$state.tmp" && mv "$state.tmp" "$state"
     fi
