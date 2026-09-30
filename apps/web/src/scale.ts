@@ -20,7 +20,10 @@ export const MOCK_SCALE_KEY = 'macrofill.mockScale';
 
 /** The page's handles on the mock scale, for e2e tests and the browser console. */
 export interface MockScaleWindow {
-  /** The current session's mock scale: `macrofillScale.play(readings)`, `macrofillScale.drop()`. */
+  /**
+   * The connected session's mock scale: `macrofillScale.play(readings)`, `macrofillScale.drop()`.
+   * Set on "Connect scale".
+   */
   macrofillScale?: MockScaleDriver;
   /** `scaleScript()`, to build readings in the console. */
   macrofillScaleScript?: typeof scaleScript;
@@ -38,7 +41,11 @@ export async function scaleDriverFactory(real: () => ScaleDriver): Promise<() =>
   handles.macrofillScaleScript = scaleScript;
   return () => {
     const driver = new MockScaleDriver();
-    handles.macrofillScale = driver;
+    // Exposed once connected: in development, StrictMode creates a second driver that the session
+    // discards, and only the kept one is ever connected.
+    driver.onConnectionChange((state) => {
+      if (state === 'connected') handles.macrofillScale = driver;
+    });
     return driver;
   };
 }

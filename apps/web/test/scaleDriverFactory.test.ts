@@ -22,7 +22,18 @@ describe('scale driver factory', () => {
     const create = await scaleDriverFactory(() => real);
     const driver = create();
     expect(driver).toBeInstanceOf(MockScaleDriver);
+    await driver.connect();
     expect((window as MockScaleWindow).macrofillScale).toBe(driver);
     expect((window as MockScaleWindow).macrofillScaleScript).toBeTypeOf('function');
+  });
+
+  it('M6-8: exposes the mock the session connects, not a discarded one (regression: #28)', async () => {
+    localStorage.setItem(MOCK_SCALE_KEY, '1');
+    const create = await scaleDriverFactory(() => real);
+    // StrictMode runs the useState initializer twice in development, and keeps one driver.
+    const kept = create();
+    create();
+    await kept.connect();
+    expect((window as MockScaleWindow).macrofillScale).toBe(kept);
   });
 });
