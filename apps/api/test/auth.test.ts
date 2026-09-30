@@ -106,6 +106,20 @@ describe('login and sessions (M4-1, M4-2)', () => {
     expect(rows[0]!.id).not.toContain(token);
   });
 
+  it("M4-1: logging in removes the user's expired sessions, and keeps the valid ones", async () => {
+    await logIn(app, database.db);
+    now = new Date(NOW.getTime() + SESSION_TTL_MS / 2);
+    await logIn(app, database.db);
+    now = new Date(NOW.getTime() + SESSION_TTL_MS);
+    await logIn(app, database.db);
+    const rows = await queryRows<{ n: number }>(
+      database.db,
+      sql`select count(*)::int as n from sessions`,
+    );
+    // The first one expired; the second and third are valid.
+    expect(rows[0]!.n).toBe(2);
+  });
+
   it('M4-2: an expired session gets 401', async () => {
     const authed = withCookie(app, await logIn(app, database.db));
     now = new Date(NOW.getTime() + SESSION_TTL_MS - 1);

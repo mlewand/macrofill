@@ -30,6 +30,7 @@ step 'Loading seed data'
 # and passed by name (`-e KEY`), so they never show in a process's command line.
 seed_env=()
 while IFS= read -r line; do
+  line=${line%$'\r'}
   key=${line%%=*}
   value=${line#*=}
   if [[ $value =~ ^\"(.*)\"$ || $value =~ ^\'(.*)\'$ ]]; then value=${BASH_REMATCH[1]}; fi

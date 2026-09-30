@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { USERNAME_MAX_LENGTH } from './auth.js';
 import { idSchema } from './common.js';
 
 function isTimeZone(name: string): boolean {
@@ -18,7 +19,7 @@ export const timeZoneSchema = z
 
 export const userSchema = z.object({
   id: idSchema,
-  username: z.string().min(1),
+  username: z.string().min(1).max(USERNAME_MAX_LENGTH),
   /** IANA name; decides which day a consumption entry counts toward (M2-5). */
   timezone: timeZoneSchema,
 });

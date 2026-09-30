@@ -48,6 +48,8 @@ export function createAuthService(db: Db, now: () => Date) {
       const createdAt = now();
       const expiresAt = new Date(createdAt.getTime() + SESSION_TTL_MS);
       await auth.createSession({ id: sessionId(token), ownerId: user.id, createdAt, expiresAt });
+      // Expired sessions are useless; each login tidies up the user's.
+      await auth.deleteExpiredSessions(user.id, createdAt);
       return { status: 'ok', token, expiresAt };
     },
 

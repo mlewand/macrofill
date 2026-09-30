@@ -140,6 +140,8 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
    ENV
    ```
 
+   `deploy.sh` reads `SEED_PASSWORD_*` lines itself: one `KEY=value` per line, optionally in single or double quotes, with no comment after the value.
+
 4. **Deploy:**
 
    ```sh
@@ -160,7 +162,13 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
 
 **Updating:** `git pull && ./deploy.sh`.
 
-**Changing a password:** `docker compose -f compose.prod.yml run --rm -T app node password.mjs mlewand`, then type the new password and press Enter (or pipe it in). Deploys keep it: the seed's initial password applies only to a user without one.
+**Changing a password:** without showing it or keeping it in the shell history:
+
+```sh
+read -rs -p 'New password: ' pw && echo && printf '%s\n' "$pw" | docker compose -f compose.prod.yml run --rm -T app node password.mjs mlewand; unset pw
+```
+
+Deploys keep it: the seed's initial password applies only to a user without one.
 
 **Daily targets and the catalog come from the seed file:** every deploy resets them to `apps/api/src/seed/data.ts`. To change your targets or add a product, edit that file, commit it, and deploy. Edits made directly in the database are overwritten by the next deploy. Logged meals are never touched.
 

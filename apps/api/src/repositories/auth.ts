@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { sessions, users } from '../db/schema';
 
@@ -40,6 +40,13 @@ export function createAuthRepository(db: Db) {
 
     async createSession(session: typeof sessions.$inferInsert): Promise<void> {
       await db.insert(sessions).values(session);
+    },
+
+    /** Removes a user's sessions that expired by `now`. */
+    async deleteExpiredSessions(ownerId: string, now: Date): Promise<void> {
+      await db
+        .delete(sessions)
+        .where(and(eq(sessions.ownerId, ownerId), lte(sessions.expiresAt, now)));
     },
 
     /** The owner of an unexpired session, if any. */
