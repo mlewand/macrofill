@@ -15,15 +15,14 @@ set -uo pipefail
 
 state=${1:?usage: pr-watch.sh STATE_FILE [INTERVAL_SECONDS]}
 interval=${2:-120}
-repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner) || exit 1
-me=$(gh api user --jq .login) || exit 1
 
 # A new state file starts with "since:<time>", when the watch first started. Events from before it
 # are only recorded, silently, on any PR and whenever they're first fetched, so a failing fetch
 # can neither replay old history later nor hide new events. A state without it (e.g. from an
 # older version) prints every unseen event.
 # The time comes from GitHub's clock (a response's Date header), like the event times it's
-# compared with, so a skewed local clock can't silence new events.
+# compared with, so a skewed local clock can't silence new events. It's taken before any other
+# request, so nothing that happens after the start can come out older than it.
 if [[ ! -f $state ]]; then
   now=$(gh api -i rate_limit | sed -n 's/^[Dd]ate: //p' | tr -d '\r') || exit 1
   [[ -n $now ]] || { echo "pr-watch: no Date header from GitHub" >&2; exit 1; }
@@ -31,6 +30,9 @@ if [[ ! -f $state ]]; then
   echo "since:$now" >"$state"
 fi
 since=$(grep -m1 '^since:' "$state" | cut -d: -f2-)
+
+repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner) || exit 1
+me=$(gh api user --jq .login) || exit 1
 
 # Prints "KEY<TAB>TIME<TAB>MESSAGE" lines for everything that has happened on PR $1, TIME in UTC
 # ISO 8601 like GitHub's. Fails if any request fails, so a caller can tell a complete list from a
