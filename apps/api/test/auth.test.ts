@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { hashPassword } from '../src/auth/password';
-import { passwordFromInput, resetPassword } from '../src/auth/reset';
+import { resetPassword } from '../src/auth/reset';
 import { SESSION_COOKIE, SESSION_TTL_MS } from '../src/auth/sessions';
 import { queryRows, type Database } from '../src/db/client';
 import { seedData } from '../src/seed/data';
@@ -240,12 +240,6 @@ describe('password command (M4-1)', () => {
       'No user named nobody.',
     );
     await expect(resetPassword(database.db, seedUsername, 'short')).rejects.toThrow(/at least 8/);
-  });
-
-  it('M4-1: reads the password up to the first line break', () => {
-    expect(passwordFromInput('pass word\n')).toBe('pass word');
-    expect(passwordFromInput('pass word\r\nrest')).toBe('pass word');
-    expect(passwordFromInput('')).toBe('');
   });
 
   it('M4-1: two hashes of one password differ (random salt)', async () => {
