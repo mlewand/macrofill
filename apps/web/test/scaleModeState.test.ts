@@ -176,6 +176,18 @@ describe('Scale Mode state', () => {
     expect(grams(state)).toEqual(['100', '50', '']);
   });
 
+  it('M3-4, M6-5: a correction after a proposal settles counts from the settled reading (regression: #27)', () => {
+    const script = scaleScript().baseline(312);
+    let state = apply(play(start(), script.take()), { type: 'start' });
+    state = apply(play(state, script.add(138).take()), { type: 'next' });
+    state = play(state, script.unstable({ forMs: 2000 }).take());
+    expect(state.tracker.pending?.type).toBe('confirming');
+    state = play(state, script.remove(38).stable({ forMs: 0 }).take());
+    state = apply(state, { type: 'correct', grams: '100' });
+    state = apply(play(state, script.add(50).stable({ forMs: 0 }).take()), { type: 'next' });
+    expect(grams(state)).toEqual(['100', '50', '']);
+  });
+
   it('M3-4, M6-5: a scale that never settles can still be corrected, from the proposal', () => {
     const script = scaleScript().baseline(312);
     let state = apply(play(start(), script.take()), { type: 'start' });

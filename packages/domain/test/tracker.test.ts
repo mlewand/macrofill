@@ -315,6 +315,20 @@ describe('weight tracker', () => {
       ]);
     });
 
+    it('M3-4, M6-5: a correction after the scale settles counts on from the settled reading (regression: #27)', () => {
+      const proposed = run([
+        ...started,
+        reading(1000, 450, false),
+        next,
+        reading(2500, 450, false),
+      ]);
+      expect(trackerStatus(proposed)).toBe('confirming');
+      const state = run([reading(2725, 412, true), correct(100)], proposed);
+      expect(state.steps).toEqual([
+        { skipped: false, grams: 100, weightSource: 'manual', reading: 412 },
+      ]);
+    });
+
     it('M2-2, M6-5: a correction must be a non-negative number', () => {
       const state = run([...started, ...stableAt(1000, 526)]);
       for (const grams of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
