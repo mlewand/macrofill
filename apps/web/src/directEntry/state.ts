@@ -1,17 +1,21 @@
 import { parseGrams, type Recipe, type SaveMealRequest } from '@macrofill/domain';
 
-// Direct Entry flow state (M5-1 to M5-6). A pure reducer over plain JSON: no DOM, no clock, no
-// randomness. Ids and times come in, so the state can be persisted as is (M5-8, Phase C).
+// Meal flow state (M5-1 to M5-6), shared by Direct Entry and Scale Mode (M6-4, M6-5). A pure
+// reducer over plain JSON: no DOM, no clock, no randomness. Ids and times come in, so the state can
+// be persisted as is (M5-8, Phase C).
 
 export interface StepDraft {
   productId: string | undefined;
   /** The grams input as typed; parsed with `parseGrams` (M5-3). */
   grams: string;
   skipped: boolean;
+  /** Set while `grams` is the amount the scale recorded; typed grams are manual (M6-5). */
+  fromScale?: true;
 }
 
 export interface DirectEntryState {
   recipe: Recipe;
+  inputMethod: 'direct' | 'scale';
   /** Generated once per meal, so a retried save is idempotent (M4-6). */
   mealId: string;
   entryId: string;
@@ -25,6 +29,8 @@ export interface DirectEntryState {
 export type DirectEntryAction =
   | { type: 'selectProduct'; productId: string }
   | { type: 'setGrams'; grams: string }
+  /** Scale Mode: the tracker recorded the current step's amount (M6-4). */
+  | { type: 'record'; grams: number }
   | { type: 'next' }
   | { type: 'skip' }
   | { type: 'undo' }
@@ -37,9 +43,12 @@ export function startDirectEntry(input: {
   mealId: string;
   entryId: string;
   startedAt: string;
+  /** Default `direct`. */
+  inputMethod?: 'direct' | 'scale';
 }): DirectEntryState {
   return {
     recipe: input.recipe,
+    inputMethod: input.inputMethod ?? 'direct',
     mealId: input.mealId,
     entryId: input.entryId,
     startedAt: input.startedAt,
@@ -68,13 +77,28 @@ export function directEntry(state: DirectEntryState, action: DirectEntryAction):
     ...state,
     steps: state.steps.map((step, i) => (i === index ? { ...step, ...change } : step)),
   });
+  const replace = (index: number, draft: StepDraft): DirectEntryState => ({
+    ...state,
+    steps: state.steps.map((step, i) => (i === index ? draft : step)),
+  });
   const step = state.steps[state.current];
 
   switch (action.type) {
     case 'selectProduct':
       return step ? update(state.current, { productId: action.productId }) : state;
     case 'setGrams':
-      return step ? update(state.current, { grams: action.grams }) : state;
+      return step ? replace(state.current, typed(step, action.grams)) : state;
+    case 'record': {
+      if (!step) return state;
+      const recorded: StepDraft = {
+        productId: step.productId,
+        grams: String(action.grams),
+        skipped: false,
+        fromScale: true,
+      };
+      if (stepProblem(recorded) !== undefined) return state;
+      return { ...replace(state.current, recorded), current: state.current + 1 };
+    }
     case 'next':
       if (!step || stepProblem(step) !== undefined) return state;
       return { ...update(state.current, { skipped: false }), current: state.current + 1 };
@@ -92,7 +116,7 @@ export function directEntry(state: DirectEntryState, action: DirectEntryAction):
       // M5-6: in the summary, any weighed item's grams can be edited.
       const target = state.steps[action.index];
       if (!isSummary(state) || !target || target.skipped) return state;
-      return update(action.index, { grams: action.grams });
+      return replace(action.index, typed(target, action.grams));
     }
   }
 }
@@ -108,7 +132,7 @@ export function saveRequest(state: DirectEntryState, now: string): SaveMealReque
     meal: {
       id: state.mealId,
       recipeId: state.recipe.id,
-      inputMethod: 'direct',
+      inputMethod: state.inputMethod,
       startedAt: state.startedAt,
       finishedAt: now,
       items,
@@ -133,8 +157,13 @@ export function mealItems(state: DirectEntryState): SaveMealRequest['meal']['ite
       skipped: false,
       productId: draft.productId,
       grams: grams.grams,
-      weightSource: 'manual',
+      weightSource: draft.fromScale ? 'scale' : 'manual',
     });
   }
   return items;
+}
+
+/** A draft with typed grams: no longer the scale's amount. */
+function typed(step: StepDraft, grams: string): StepDraft {
+  return { productId: step.productId, grams, skipped: step.skipped };
 }
