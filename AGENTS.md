@@ -81,6 +81,7 @@ Running a subset of tests (Vitest projects are named `domain`, `scale`, `web`, `
 - by criterion ID: `pnpm test -t 'M3-6'`, or `pnpm test:e2e -g 'M6-8'`
 - one project: `pnpm test --project domain`, or `pnpm -F @macrofill/domain test`
 - one file: `pnpm test packages/domain/test/tsconfig.test.ts`
+- api tests on a real Postgres, as CI's M1-6 job: `API_TEST_DATABASE_URL=<server url> pnpm test --project api` (the role needs CREATEDB)
 
 ## Saving coding agent information
 

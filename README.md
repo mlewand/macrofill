@@ -92,7 +92,7 @@ The tracker's settings (stability tolerance and window, the wait for a stable re
 | `pnpm test:e2e` | Playwright on phone and tablet viewports (portrait), against the production build served by the api. Scale Mode runs on the mock scale, switched on with the flag above |
 | `pnpm format` | Format with Prettier |
 
-Before the first `pnpm test:e2e`, install the browser once: `pnpm --filter @macrofill/web exec playwright install --with-deps chromium`. The e2e tests use **their own database**, never the dev one: `DATABASE_URL`'s database with `_e2e` added (`macrofill_e2e`), on the same server. Every run creates it if it's missing, wipes it, migrates and seeds it, so runs start from the same state and your dev data stays as it is. Only `pnpm db:up` is needed first. To use another database, set `E2E_DATABASE_URL` (see `.env.example`). The reset refuses any database whose name doesn't end in `_e2e`. On a Postgres where the app's role can't create databases, create the `_e2e` database once yourself, owned by that role. The Vitest API tests need no database; they use PGlite in-process.
+Before the first `pnpm test:e2e`, install the browser once: `pnpm --filter @macrofill/web exec playwright install --with-deps chromium`. The e2e tests use **their own database**, never the dev one: `DATABASE_URL`'s database with `_e2e` added (`macrofill_e2e`), on the same server. Every run creates it if it's missing, wipes it, migrates and seeds it, so runs start from the same state and your dev data stays as it is. Only `pnpm db:up` is needed first. To use another database, set `E2E_DATABASE_URL` (see `.env.example`). The reset refuses any database whose name doesn't end in `_e2e`. On a Postgres where the app's role can't create databases, create the `_e2e` database once yourself, owned by that role. The Vitest API tests need no database; they use PGlite in-process. CI also runs them against Postgres 17, the host's version (M1-6). To do the same locally: `API_TEST_DATABASE_URL=postgres://macrofill:macrofill@localhost:5432/macrofill pnpm test --project api`. Each test creates its own database on that server and drops it afterwards, so the role needs CREATEDB (the Compose one has it).
 
 Running a subset:
 
@@ -100,7 +100,7 @@ Running a subset:
 - one project (`domain`, `scale`, `web`, `api`, or `repo` for the root `tests/`): `pnpm test --project domain`
 - one file: `pnpm test packages/domain/test/tsconfig.test.ts`
 
-CI (GitHub Actions) runs lint, typecheck, the Vitest tests, the e2e tests and a production image build with a smoke test (`tooling/ci/image-smoke.sh`) on every push.
+CI (GitHub Actions) runs lint, typecheck, the Vitest tests with coverage, the API tests again on Postgres 17, the e2e tests and a production image build with a smoke test (`tooling/ci/image-smoke.sh`) on every push.
 
 ## Production deploy
 
