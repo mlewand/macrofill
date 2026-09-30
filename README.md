@@ -135,4 +135,6 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
 
 **Updating:** `git pull && ./deploy.sh`.
 
+**Daily targets and the catalog come from the seed file:** every deploy resets them to `apps/api/src/seed/data.ts`. To change your targets or add a product, edit that file, commit it, and deploy. Edits made directly in the database are overwritten by the next deploy. Logged meals are never touched.
+
 The container's healthcheck calls `/api/health`, which checks the database connection. `docker compose -f compose.prod.yml ps` shows the status, and `docker compose -f compose.prod.yml logs app` shows the logs. "Database schema is behind" means migrations haven't run; `deploy.sh` runs them. Migrations run only through that explicit step: an app that's newer than the database schema refuses to start. Include the `macrofill` database in the host's `pg_dump` backups.

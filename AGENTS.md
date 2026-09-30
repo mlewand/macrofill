@@ -8,7 +8,19 @@ Read before any work:
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current phase: **A**. Update this line when a phase's exit criteria are met.
+Current phase: **B**, about to start. Phase A's exit was confirmed on 2026-09-30: a real meal logged with Direct Entry on the phone, visible on the tablet, on the production box. No Phase B code exists yet. Update this line when a phase's exit criteria are met.
+
+## Starting Phase B
+
+Handover from Phase A. Delete each point once it's resolved, and this section once it's empty.
+
+- **Library ready.** `@mlewand/huajun-ble-scale@0.0.4` (npm) has everything Phase B and C need: `Reading.receivedAtMonotonic` (use it for `ScaleReading.timestamp`), `toReading` for replays, and `CapacitorTransport` `deviceId` reconnect. See `docs/TODO.md`. It isn't a dependency of `packages/scale` yet. If pnpm's `minimumReleaseAge` holds it back, depending on the library's GitHub repo is an acceptable fallback; ask first.
+- **Decide first, and state the choice in the first PR that needs it:**
+  - **Where `scaleScript()` lives.** M3-12 says unit tests feed its output to the tracker, but the tracker is in `domain`, which must not import `scale`. Either tracker tests that use the builder live in `packages/scale`, or `domain` tests use plain timed-reading fixtures.
+  - **How e2e injects `MockScaleDriver`.** e2e runs against the *production* build served by the api (M1-5). The requirements say the mock is injected in the test build. Choose between a hook the real bundle honours and a separate e2e build, and ask if the choice changes what e2e really tests.
+  - **`fast-check`** for M3-10's property test: a new dependency, so mind the release-age hold.
+- **Verified on real hardware so far:** Web Bluetooth readings from the scale in Chrome on Android over HTTPS; automatic reconnect with the library's new API, but only in a native Capacitor Android build (M6-6 is Phase C).
+- **M7-6's remaining part:** the live weight must be at least 48 px. Extend `apps/web/e2e/layout.spec.ts` when Scale Mode exists.
 
 ## How to work
 
@@ -28,6 +40,8 @@ Current phase: **A**. Update this line when a phase's exit criteria are met.
 - Commit as you go: one commit per small, self-contained change, where possible.
 - Open a PR once the branch holds a deliverable. Keep PRs reasonably sized. If the work is bigger, split it into stacked PRs (each branch based on the previous one) and name the base PR in the description.
 - PR descriptions list the criterion IDs they cover.
+- Do branch work in a `git worktree`, and keep the main checkout on `master`: it may be serving the dev server, and switching branches under a running Vite can break its config reload. Pull `master` there after merges.
+- A PR is ready when CI is green. The maintainer asks GitHub Copilot to review it. Address every finding, including points that appear only in the review summary; answer those with a PR comment. Reply on inline threads with the fixing commit and resolve them. Check a finding before fixing it, and if it doesn't hold, say why, with evidence.
 
 ## Conventions
 
