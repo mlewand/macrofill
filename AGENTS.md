@@ -8,7 +8,7 @@ Read before any work:
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current phase: **B**, about to start. Phase A's exit was confirmed on 2026-09-30: a real meal logged with Direct Entry on the phone, visible on the tablet, on the production box. No Phase B code exists yet. Update this line when a phase's exit criteria are met.
+Current phase: **B**, in progress since 2026-09-30. Phase A's exit was confirmed on 2026-09-30: a real meal logged with Direct Entry on the phone, visible on the tablet, on the production box. Update this line when a phase's exit criteria are met.
 
 ## Starting Phase B
 
