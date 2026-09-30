@@ -21,8 +21,9 @@ me=$(gh api user --jq .login) || exit 1
 # A fresh state marks the PRs open at the first pass "seeding:N": their existing history is only
 # recorded, silently, until it has been fetched completely. The marker is per PR and kept in the
 # state file, so a PR whose fetch keeps failing doesn't silence the others, or a restarted watch.
-fresh=false
-[[ -f $state ]] || { fresh=true; : >"$state"; }
+# A new state file starts with a "fresh" line, kept until the first listing succeeds, so a watch
+# restarted before that is still fresh.
+[[ -f $state ]] || echo fresh >"$state"
 seeding() { grep -qx "seeding:$1" "$state"; }
 
 # Prints "KEY<TAB>MESSAGE" lines for everything that has happened on PR $1. Fails if any request
@@ -89,9 +90,9 @@ while true; do
     fi
   done < <(grep '^open:' "$state")
 
-  if $fresh; then
+  if grep -qx fresh "$state"; then
     for n in $open; do echo "seeding:$n" >>"$state"; done
-    fresh=false
+    { grep -vx fresh "$state" || true; } >"$state.tmp" && mv "$state.tmp" "$state"
   fi
 
   for n in $open; do
