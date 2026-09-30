@@ -114,6 +114,18 @@ describe('Scale Mode', () => {
     expect(button(en.scale.start)).toBeVisible();
   });
 
+  it('M6-1: connection changes are announced to screen readers (regression: #29)', async () => {
+    await session({ connect: false });
+    const status = screen.getByText(en.scale.status.idle);
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+    fireEvent.click(button(en.scale.connect));
+    expect(await screen.findByText(en.scale.status.connected)).toHaveAttribute(
+      'aria-live',
+      'polite',
+    );
+  });
+
   it('M6-1: a failed or cancelled connect offers Connect again', async () => {
     const s = await session({ connect: false });
     vi.spyOn(s.driver, 'connect').mockRejectedValueOnce(new Error('chooser cancelled'));

@@ -112,6 +112,13 @@ describe('weight tracker', () => {
       ]);
     });
 
+    it('M3-4: a stable reading after the wait is proposed, not recorded (regression: #29)', () => {
+      // The stream paused past the 1.5 s deadline; the next reading, seconds later, is stable.
+      const late = run([...tapped, reading(7000, 526, true)]);
+      expect(late.pending).toEqual({ type: 'confirming', reading: 526, amount: 214 });
+      expect(late.steps).toEqual([]);
+    });
+
     it('M3-4: the wait is configurable', () => {
       const waiting = run(tapped, createTracker({ stableWaitMs: 300 }));
       expect(trackerStatus(track(waiting, reading(1300, 525, false)))).toBe('confirming');
@@ -159,6 +166,25 @@ describe('weight tracker', () => {
       expect(trackerStatus(run([reading(0, 312), reading(1000, 312.6), start], strict))).toBe(
         'idle',
       );
+    });
+
+    it('M3-5, M3-14: without a flag, stability starts over after the scale shows another unit (regression: #29)', () => {
+      const before = [reading(0, 312), reading(500, 312), reading(1000, 312)];
+      const back = run([
+        ...before,
+        reading(1200, undefined),
+        reading(2400, undefined),
+        reading(2600, 312),
+        start,
+      ]);
+      expect(trackerStatus(back)).toBe('idle');
+      expect(run([reading(3100, 312), reading(3600, 312), start], back).baseline).toBe(312);
+    });
+
+    it('M3-5: without a flag, a gap in the readings longer than the window breaks stability (regression: #29)', () => {
+      const gap = run([reading(0, 312), reading(1500, 312), start]);
+      expect(trackerStatus(gap)).toBe('idle');
+      expect(run([reading(2000, 312), reading(2500, 312), start], gap).baseline).toBe(312);
     });
 
     it('M3-5: a reading without the flag, from a scale that has one, falls back to the software rule', () => {
@@ -245,10 +271,11 @@ describe('weight tracker', () => {
   });
 
   describe('M3-14: readings without grams', () => {
-    it('M3-14: are ignored', () => {
+    it('M3-14: are ignored, except that the stability history starts over', () => {
       const before = run([...stableAt(0, 312), start, ...stableAt(1000, 526)]);
       const after = run([reading(1500, undefined, true), reading(1725, undefined, false)], before);
-      expect(after).toEqual(before);
+      expect({ ...after, recent: [] }).toEqual({ ...before, recent: [] });
+      expect(after.recent).toEqual([]);
     });
 
     it('M3-14: never end a wait for a stable reading', () => {

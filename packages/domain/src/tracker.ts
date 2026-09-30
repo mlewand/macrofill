@@ -160,8 +160,10 @@ export function track(state: TrackerState, event: TrackerEvent): TrackerState {
 }
 
 function onReading(state: TrackerState, reading: TimedReading): TrackerState {
-  // M3-14: a reading without grams changes nothing.
-  if (reading.grams === undefined) return state;
+  // M3-14: a reading without grams changes no amount. The weight is unknown while it lasts, so
+  // software stability (M3-5) starts over when grams come back.
+  if (reading.grams === undefined)
+    return state.recent.length === 0 ? state : { ...state, recent: [] };
   const { stabilityToleranceGrams, stabilityWindowMs } = state.config;
   const grams = reading.grams;
   const timestamp = reading.timestamp;
@@ -174,11 +176,13 @@ function onReading(state: TrackerState, reading: TimedReading): TrackerState {
   const kept = recent.slice(first);
 
   // M3-5: the scale's flag when present. Otherwise the weight must have stayed within the
-  // tolerance of this reading since at least the window's start.
+  // tolerance of this reading since at least the window's start, with no gap between readings
+  // longer than the window: nothing is known about the weight during a gap.
   let stable = reading.stable;
   if (stable === undefined) {
     let since = timestamp;
     for (let i = kept.length - 1; i >= 0; i--) {
+      if (since - kept[i]!.timestamp > stabilityWindowMs) break;
       if (Math.abs(kept[i]!.grams - grams) > stabilityToleranceGrams) break;
       since = kept[i]!.timestamp;
     }
@@ -187,8 +191,9 @@ function onReading(state: TrackerState, reading: TimedReading): TrackerState {
 
   const next: TrackerState = { ...state, recent: kept, latest: { grams, timestamp, stable } };
   if (state.pending?.type !== 'waiting') return next;
-  if (stable) return recordReading(next, grams);
-  if (timestamp < state.pending.deadline) return next;
+  // M3-4: within the wait, a stable reading is recorded. From the deadline on, the reading is only
+  // proposed, stable or not: after a pause in the stream it may no longer be what Next was for.
+  if (timestamp < state.pending.deadline) return stable ? recordReading(next, grams) : next;
   const amount = withinTolerance(next, grams - referenceReading(next)!);
   if (amount < 0) return { ...next, pending: { type: 'needsCorrection', reading: grams, amount } };
   return { ...next, pending: { type: 'confirming', reading: grams, amount } };
