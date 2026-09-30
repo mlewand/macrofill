@@ -50,15 +50,20 @@ export function DirectEntry({ catalog, onSaved, onCancel }: Props) {
   );
 }
 
-function start(recipe: Recipe, catalog: Catalog): DirectEntryState {
+/** Per step, the product the picker preselects (M5-2). Shared with Scale Mode. */
+export function preselectedProducts(recipe: Recipe, catalog: Catalog): (string | undefined)[] {
   const lastUsed = lastUsedMap(catalog.products);
+  return recipe.steps.map(
+    (step) =>
+      productPicker(productsOf(catalog, step.ingredientClassId), lastUsed, step.defaultProductId)
+        .preselectedId,
+  );
+}
+
+function start(recipe: Recipe, catalog: Catalog): DirectEntryState {
   return startDirectEntry({
     recipe,
-    preselected: recipe.steps.map(
-      (step) =>
-        productPicker(productsOf(catalog, step.ingredientClassId), lastUsed, step.defaultProductId)
-          .preselectedId,
-    ),
+    preselected: preselectedProducts(recipe, catalog),
     // Once per meal, never per save attempt: a retry must send the same ids (M4-6).
     mealId: crypto.randomUUID(),
     entryId: crypto.randomUUID(),
@@ -75,7 +80,7 @@ function lastUsedMap(products: readonly CatalogProduct[]): Map<string, string> {
   );
 }
 
-function RecipePicker(props: {
+export function RecipePicker(props: {
   recipes: Recipe[];
   onPick: (recipe: Recipe) => void;
   onCancel: () => void;
@@ -109,19 +114,7 @@ function StepScreen(props: {
   const { state, catalog, dispatch } = props;
   const gramsId = useId();
   const [attempted, setAttempted] = useState(false);
-  const step = state.recipe.steps[state.current]!;
   const draft = state.steps[state.current]!;
-  const ingredientClass = catalog.ingredientClasses.find((c) => c.id === step.ingredientClassId);
-  // M5-2: products of this step's class, most recently used first, then the default.
-  const options = useMemo(
-    () =>
-      productPicker(
-        productsOf(catalog, step.ingredientClassId),
-        lastUsedMap(catalog.products),
-        step.defaultProductId,
-      ).options,
-    [catalog, step],
-  );
   const problem = stepProblem(draft);
 
   return (
@@ -135,24 +128,12 @@ function StepScreen(props: {
       <p className="progress">
         {t('step.progress', { current: state.current + 1, total: state.steps.length })}
       </p>
-      <h1>{ingredientClass?.name.en ?? step.ingredientClassId}</h1>
-
-      <fieldset>
-        <legend>{t('step.product')}</legend>
-        {options.length === 0 && <p>{t('step.noProducts')}</p>}
-        {options.map((product) => (
-          <label key={product.id} className="option">
-            <input
-              type="radio"
-              name="product"
-              value={product.id}
-              checked={draft.productId === product.id}
-              onChange={() => dispatch({ type: 'selectProduct', productId: product.id })}
-            />
-            {product.name}
-          </label>
-        ))}
-      </fieldset>
+      <StepHeading state={state} catalog={catalog} />
+      <ProductChoices
+        state={state}
+        catalog={catalog}
+        onSelect={(productId) => dispatch({ type: 'selectProduct', productId })}
+      />
 
       <label htmlFor={gramsId}>{t('step.grams')}</label>
       <input
@@ -191,7 +172,53 @@ function StepScreen(props: {
   );
 }
 
-function Summary(props: {
+/** The current step's ingredient class, as the heading. */
+export function StepHeading({ state, catalog }: { state: DirectEntryState; catalog: Catalog }) {
+  const step = state.recipe.steps[state.current]!;
+  const ingredientClass = catalog.ingredientClasses.find((c) => c.id === step.ingredientClassId);
+  return <h1>{ingredientClass?.name.en ?? step.ingredientClassId}</h1>;
+}
+
+/** M5-2: products of the current step's class, most recently used first, then the default. */
+export function ProductChoices(props: {
+  state: DirectEntryState;
+  catalog: Catalog;
+  onSelect: (productId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { state, catalog } = props;
+  const step = state.recipe.steps[state.current]!;
+  const draft = state.steps[state.current]!;
+  const options = useMemo(
+    () =>
+      productPicker(
+        productsOf(catalog, step.ingredientClassId),
+        lastUsedMap(catalog.products),
+        step.defaultProductId,
+      ).options,
+    [catalog, step],
+  );
+  return (
+    <fieldset>
+      <legend>{t('step.product')}</legend>
+      {options.length === 0 && <p>{t('step.noProducts')}</p>}
+      {options.map((product) => (
+        <label key={product.id} className="option">
+          <input
+            type="radio"
+            name="product"
+            value={product.id}
+            checked={draft.productId === product.id}
+            onChange={() => props.onSelect(product.id)}
+          />
+          {product.name}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+export function Summary(props: {
   state: DirectEntryState;
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
