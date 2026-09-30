@@ -24,7 +24,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       # Vitest projects: domain and scale unit tests, api integration tests, web component tests.
-      - run: pnpm test
+      # With coverage: below the per-package line thresholds, the run fails (M1-3).
+      - run: pnpm test:coverage
 
   e2e:
     name: E2E (Playwright, phone viewport)
