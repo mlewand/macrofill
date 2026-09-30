@@ -11,6 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@macrofill/domain": "workspace:*"
+    "@capacitor-community/bluetooth-le": "^8.3.0",
+    "@capacitor/core": "^8.5.2",
+    "@macrofill/domain": "workspace:*",
+    "@mlewand/huajun-ble-scale": "https://github.com/mlewand/huajun-bluetooth-kitchen-scale-api/releases/download/v0.0.4/mlewand-huajun-ble-scale-0.0.4.tgz"
   }
 }

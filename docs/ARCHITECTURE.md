@@ -11,7 +11,7 @@ apps/api ──────────────────────► p
 | Path | Role | May import |
 |---|---|---|
 | `packages/domain` | Pure TypeScript, no I/O. Entity types, zod schemas (the API contract), macro calculation, weight tracker, usage event catalog. | only `zod` |
-| `packages/scale` | Scale abstraction: `ScaleDriver` interface, `HuajunDriver` (adapter over `@mlewand/huajun-ble-scale`), `MockScaleDriver`, `ReplayScaleDriver`, test builder, session recorder. | `domain` |
+| `packages/scale` | Scale abstraction: `ScaleDriver` interface, `HuajunDriver` (adapter over `@mlewand/huajun-ble-scale`), `MockScaleDriver`, `ReplayScaleDriver`, test builder, session recorder. | `domain`, `@mlewand/huajun-ble-scale` (its Capacitor entry needs `@capacitor-community/bluetooth-le` and `@capacitor/core` installed) |
 | `apps/web` | React + Vite PWA. UI, i18n, IndexedDB session state and save outbox. The only place that talks to the scale. | `domain`, `scale`, types from `api` (for the `hc` client) |
 | `apps/api` | Hono + Drizzle + Postgres. Auth, owner-scoped repositories, persistence. In production it also serves the built `apps/web` (one container, one origin). | `domain` |
 
