@@ -35,7 +35,7 @@ describe('M4-9: migrations run only explicitly; the api refuses a schema that is
   const config = { port: 0, databaseUrl: 'unused', migrationsDir };
 
   it('a fresh database has every migration pending, and the api refuses to start', async () => {
-    database = createTestDatabase();
+    database = await createTestDatabase();
     expect(await pendingMigrations(database.db, migrationsDir)).toBeGreaterThan(0);
     const serve = vi.fn();
     await expect(startServer(config, database, serve)).rejects.toBeInstanceOf(SchemaBehindError);
@@ -43,7 +43,7 @@ describe('M4-9: migrations run only explicitly; the api refuses a schema that is
   });
 
   it('checking the schema does not migrate it', async () => {
-    database = createTestDatabase();
+    database = await createTestDatabase();
     // Names the command both in the repo and in the production image.
     await expect(assertSchemaCurrent(database.db, migrationsDir)).rejects.toThrow(
       /pnpm db:migrate.*node migrate\.mjs/,
@@ -54,7 +54,7 @@ describe('M4-9: migrations run only explicitly; the api refuses a schema that is
   });
 
   it('a fully migrated database starts', async () => {
-    database = createTestDatabase();
+    database = await createTestDatabase();
     await database.migrate(migrationsDir);
     expect(await pendingMigrations(database.db, migrationsDir)).toBe(0);
     const serve = vi.fn(() => 'server');
@@ -63,7 +63,7 @@ describe('M4-9: migrations run only explicitly; the api refuses a schema that is
   });
 
   it('a database one migration short refuses to start', async () => {
-    database = createTestDatabase();
+    database = await createTestDatabase();
     await database.migrate(migrationsDir);
     const newer = migrationsWithOneMore();
     tempDirs.push(newer);
@@ -76,7 +76,7 @@ describe('M4-9: migrations run only explicitly; the api refuses a schema that is
   });
 
   it('migrating twice is a no-op', async () => {
-    database = createTestDatabase();
+    database = await createTestDatabase();
     await database.migrate(migrationsDir);
     await database.migrate(migrationsDir);
     expect(await pendingMigrations(database.db, migrationsDir)).toBe(0);
