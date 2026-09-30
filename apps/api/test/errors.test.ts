@@ -16,6 +16,21 @@ describe('describeError', () => {
     expect(describeError({ code: 'ECONNREFUSED' })).toBe('{"code":"ECONNREFUSED"}');
   });
 
+  it("spells out an AggregateError, whose message is empty (Node's connect to every address of a host)", () => {
+    const refused = (address: string) =>
+      Object.assign(new Error(`connect ECONNREFUSED ${address}:5432`), { code: 'ECONNREFUSED' });
+    const aggregate = Object.assign(
+      new AggregateError([refused('::1'), refused('127.0.0.1')], ''),
+      {
+        code: 'ECONNREFUSED',
+      },
+    );
+    const wrapped = new Error('Failed query: select 1', { cause: aggregate });
+    expect(describeError(wrapped)).toBe(
+      'Failed query: select 1\n  caused by: ECONNREFUSED: connect ECONNREFUSED ::1:5432; connect ECONNREFUSED 127.0.0.1:5432',
+    );
+  });
+
   it('stops on a cause cycle', () => {
     const a = new Error('a');
     const b = new Error('b', { cause: a });
