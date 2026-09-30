@@ -55,7 +55,7 @@ describe('MockScaleDriver', () => {
     expect(readings[1]!.timestamp).toBeGreaterThan(readings[0]!.timestamp);
   });
 
-  it('reports connection changes, and stops playing on disconnect or a drop', async () => {
+  it('M3-12: reports connection changes, and stops playing on disconnect or a drop', async () => {
     const { driver, readings, states } = connected();
     await driver.connect();
     const played = driver.play(scaleScript().baseline(312, { forMs: 2000 }).build());
@@ -70,12 +70,12 @@ describe('MockScaleDriver', () => {
     expect(states).toEqual(['connected', 'disconnected', 'connected', 'disconnected']);
   });
 
-  it('refuses to play while disconnected', async () => {
+  it('M3-12: refuses to play while disconnected', async () => {
     const { driver } = connected();
     await expect(driver.play(scaleScript().baseline(312).build())).rejects.toThrow();
   });
 
-  it('stops calling a listener after it unsubscribes', async () => {
+  it('M3-12: stops calling a listener after it unsubscribes', async () => {
     const driver = new MockScaleDriver({ now: () => Date.now() });
     const seen: ScaleReading[] = [];
     const off = driver.onReading((r) => seen.push(r));
@@ -85,7 +85,7 @@ describe('MockScaleDriver', () => {
     expect(seen).toEqual([]);
   });
 
-  it('has a stable flag and no tare, unless told otherwise', () => {
+  it('M3-12: has a stable flag and no tare, unless told otherwise', () => {
     expect(new MockScaleDriver().capabilities).toEqual({
       hasStableFlag: true,
       canTare: false,
@@ -105,7 +105,7 @@ describe('MockScaleDriver', () => {
     expect(readings.every((r) => !('stable' in r))).toBe(true);
   });
 
-  it('never claims tare, since it has none (regression: #24)', () => {
+  it('M3-12: never claims tare, since it has none (regression: #24)', () => {
     // @ts-expect-error: canTare is not an option.
     const driver = new MockScaleDriver({ capabilities: { canTare: true } });
     expect(driver.capabilities.canTare).toBe(false);
