@@ -8,7 +8,7 @@
 #
 # Usage: pr-watch.sh STATE_FILE [INTERVAL_SECONDS]
 #   STATE_FILE holds the IDs already seen, so a restarted watch doesn't repeat events. Keep it
-#   outside the repo. If it doesn't exist, the first pass only records what's there already.
+#   outside the repo. If it doesn't exist, events from before the watch starts are only recorded.
 #   INTERVAL_SECONDS defaults to 120.
 
 set -uo pipefail
@@ -18,54 +18,51 @@ interval=${2:-120}
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner) || exit 1
 me=$(gh api user --jq .login) || exit 1
 
-# A fresh state marks the PRs open at the first pass "seeding:N": their existing history is only
-# recorded, silently, until it has been fetched completely. The marker is per PR and kept in the
-# state file, so a PR whose fetch keeps failing doesn't silence the others, or a restarted watch.
-# A new state file starts with a "fresh" line, kept until the first listing succeeds, so a watch
-# restarted before that is still fresh.
-[[ -f $state ]] || echo fresh >"$state"
-seeding() { grep -qx "seeding:$1" "$state"; }
+# A new state file starts with "since:<time>", when the watch first started. Events from before it
+# are only recorded, silently, on any PR and whenever they're first fetched, so a failing fetch
+# can neither replay old history later nor hide new events. A state without it (e.g. from an
+# older version) prints every unseen event.
+[[ -f $state ]] || echo "since:$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$state"
+since=$(grep -m1 '^since:' "$state" | cut -d: -f2-)
 
-# Prints "KEY<TAB>MESSAGE" lines for everything that has happened on PR $1. Fails if any request
-# fails, so a caller can tell a complete list from a partial one.
+# Prints "KEY<TAB>TIME<TAB>MESSAGE" lines for everything that has happened on PR $1, TIME in UTC
+# ISO 8601 like GitHub's. Fails if any request fails, so a caller can tell a complete list from a
+# partial one.
 events() {
-  local n=$1 skip_me="select(.user.login != \"$me\")" failed=0 comments key message
+  local n=$1 skip_me="select(.user.login != \"$me\")" failed=0 comments key time message
   gh api "repos/$repo/pulls/$n/reviews" --paginate --jq ".[] | $skip_me |
-    \"review:\(.id)\tPR #$n: review by \(.user.login), \(.state)\"" || failed=1
+    \"review:\(.id)\t\(.submitted_at)\tPR #$n: review by \(.user.login), \(.state)\"" || failed=1
   gh api "repos/$repo/pulls/$n/comments" --paginate --jq ".[] | $skip_me |
-    \"inline:\(.id)\tPR #$n: inline comment by \(.user.login) on \(.path):\(.line // .original_line) (id \(.id))\"" || failed=1
+    \"inline:\(.id)\t\(.created_at)\tPR #$n: inline comment by \(.user.login) on \(.path):\(.line // .original_line) (id \(.id))\"" || failed=1
   comments=$(gh api "repos/$repo/issues/$n/comments" --paginate --jq ".[] |
     if .user.login == \"$me\" then \"mine:\(.id)\" else
-    \"comment:\(.id)\tPR #$n: comment by \(.user.login): \(.body | gsub(\"\\\\s+\"; \" \") | .[0:120])\" end") || failed=1
-  while IFS=$'\t' read -r key message; do
+    \"comment:\(.id)\t\(.created_at)\tPR #$n: comment by \(.user.login): \(.body | gsub(\"\\\\s+\"; \" \") | .[0:120])\" end") || failed=1
+  while IFS=$'\t' read -r key time message; do
     [[ -z $key ]] && continue
     if [[ $key == mine:* ]]; then
-      # Reactions from others on the user's own comments, e.g. Codex's 👍 on "@codex review".
+      # Reactions from others on the user's own comments, e.g. Codex's 👍 on its re-review request.
       gh api "repos/$repo/issues/comments/${key#mine:}/reactions" --paginate --jq ".[] | $skip_me |
-        \"reaction:\(.id)\tPR #$n: \(.user.login) reacted \(.content) to comment ${key#mine:}\"" || failed=1
+        \"reaction:\(.id)\t\(.created_at)\tPR #$n: \(.user.login) reacted \(.content) to comment ${key#mine:}\"" || failed=1
     else
-      printf '%s\t%s\n' "$key" "$message"
+      printf '%s\t%s\t%s\n' "$key" "$time" "$message"
     fi
   done <<<"$comments"
   return "$failed"
 }
 
 # Prints the events on PR $1 not seen before, and records them as seen. Fails, recording nothing,
-# if the events couldn't all be fetched. A seeding PR prints nothing, and stops seeding once done.
+# if the events couldn't all be fetched. Events from before `since` are recorded without printing.
 report() {
-  local all key message
+  local all key time message
   all=$(events "$1") || return 1
-  while IFS=$'\t' read -r key message; do
+  while IFS=$'\t' read -r key time message; do
     [[ -z $key ]] && continue
     grep -qxF "$key" "$state" && continue
     # Printed before it's recorded: if the watch dies in between, the event comes again rather
     # than never.
-    seeding "$1" || echo "$message"
+    [[ -n $since && $time < $since ]] || echo "$message"
     echo "$key" >>"$state"
   done <<<"$all"
-  if seeding "$1"; then
-    { grep -vx "seeding:$1" "$state" || true; } >"$state.tmp" && mv "$state.tmp" "$state"
-  fi
 }
 
 while true; do
@@ -90,14 +87,9 @@ while true; do
     fi
   done < <(grep '^open:' "$state")
 
-  if grep -qx fresh "$state"; then
-    for n in $open; do echo "seeding:$n" >>"$state"; done
-    { grep -vx fresh "$state" || true; } >"$state.tmp" && mv "$state.tmp" "$state"
-  fi
-
   for n in $open; do
     grep -qx "open:$n" "$state" || echo "open:$n" >>"$state"
-    # A failed fetch is retried on the next pass; seeding PRs stay seeding until one succeeds.
+    # A failed fetch is retried on the next pass.
     report "$n" || true
   done
   sleep "$interval"
