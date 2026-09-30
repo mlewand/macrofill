@@ -248,6 +248,17 @@ describe('Scale Mode', () => {
     expect(button(en.scale.enterManually)).toBeDisabled();
   });
 
+  it('M6-5: typed grams wait until the weight settles (regression: #27)', async () => {
+    const s = await started();
+    await s.play(s.script.add(100).stable({ forMs: 0 }));
+    fireEvent.click(button(en.scale.enterManually));
+    await s.play(s.script.add(20));
+    expect(button(en.scale.useGrams)).toBeDisabled();
+    expect(screen.getByText(en.scale.correctionNeedsStable)).toBeVisible();
+    await s.play(s.script.stable({ forMs: 0 }));
+    expect(button(en.scale.useGrams)).toBeEnabled();
+  });
+
   it('M3-3: skip and undo work on the scale steps', async () => {
     await started();
     fireEvent.click(button(en.step.skip));

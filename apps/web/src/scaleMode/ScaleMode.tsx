@@ -285,6 +285,7 @@ function StepScreen(props: {
           {typing || pending?.type === 'needsCorrection' ? (
             <Correction
               disabled={!canCorrect(state)}
+              waiting={!state.wrongUnit && !canCorrect(state)}
               onUse={(grams) => dispatch({ type: 'correct', grams })}
             />
           ) : (
@@ -314,7 +315,13 @@ function StepScreen(props: {
 }
 
 /** M6-5: typed grams for the current step, instead of the scale's. */
-function Correction({ disabled, onUse }: { disabled: boolean; onUse: (grams: string) => void }) {
+function Correction(props: {
+  disabled: boolean;
+  /** The scale hasn't settled: the grams can be used once it has. */
+  waiting: boolean;
+  onUse: (grams: string) => void;
+}) {
+  const { disabled, onUse } = props;
   const { t } = useTranslation();
   const id = useId();
   const [grams, setGrams] = useState('');
@@ -345,6 +352,7 @@ function Correction({ disabled, onUse }: { disabled: boolean; onUse: (grams: str
           {t(`step.problem.${parsed.reason}`)}
         </p>
       )}
+      {props.waiting && <p className="muted">{t('scale.correctionNeedsStable')}</p>}
       <button type="submit" className="secondary" disabled={disabled}>
         {t('scale.useGrams')}
       </button>

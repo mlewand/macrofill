@@ -50,6 +50,7 @@
     "negative": "The amount is below zero, for example after a tare. Enter the grams by hand, read the scale again, or undo.",
     "enterManually": "Enter grams by hand",
     "useGrams": "Use these grams",
+    "correctionNeedsStable": "Hold still: the grams can be used once the weight settles.",
     "recorded": "{{product}}: {{grams}} g recorded",
     "dropped": "The scale disconnected. Enter the remaining weights by hand.",
     "smallAmounts": "The scale can miss a few grams added slowly: add small, calorie-dense items in one go, or enter them by hand."

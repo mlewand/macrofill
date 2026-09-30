@@ -3,6 +3,7 @@ import { scaleScript } from '@macrofill/scale';
 import { describe, expect, it } from 'vitest';
 import { isSummary, saveRequest } from '../src/directEntry/state';
 import {
+  canCorrect,
   canNext,
   canStart,
   scaleMode,
@@ -160,6 +161,29 @@ describe('Scale Mode state', () => {
     state = apply(state, { type: 'correct', grams: '100' });
     state = apply(play(state, script.add(50).stable({ forMs: 0 }).take()), { type: 'next' });
     expect(grams(state)).toEqual(['100', '50', '']);
+  });
+
+  it('M6-5: typed grams wait for a stable reading, so the next step counts from a settled one (regression: #27)', () => {
+    const script = scaleScript().baseline(312);
+    let state = apply(play(start(), script.take()), { type: 'start' });
+    // Pressing on the bowl: 450 g for a moment, with the ingredient settling at 412 g.
+    state = play(state, script.add(138).take());
+    expect(canCorrect(state)).toBe(false);
+    expect(apply(state, { type: 'correct', grams: '100' })).toEqual(state);
+    state = play(state, script.remove(38).stable({ forMs: 0 }).take());
+    state = apply(state, { type: 'correct', grams: '100' });
+    state = apply(play(state, script.add(50).stable({ forMs: 0 }).take()), { type: 'next' });
+    expect(grams(state)).toEqual(['100', '50', '']);
+  });
+
+  it('M3-4, M6-5: a scale that never settles can still be corrected, from the proposal', () => {
+    const script = scaleScript().baseline(312);
+    let state = apply(play(start(), script.take()), { type: 'start' });
+    state = apply(play(state, script.add(100).take()), { type: 'next' });
+    state = play(state, script.unstable({ forMs: 2000 }).take());
+    expect(canCorrect(state)).toBe(true);
+    state = apply(state, { type: 'correct', grams: '98' });
+    expect(grams(state)[0]).toBe('98');
   });
 
   it('M6-10: while the scale shows another unit, Start and Next are off', () => {
