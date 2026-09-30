@@ -107,8 +107,8 @@ jobs:
       - run: docker network create pg-net
       - run: |
           docker run -d --name host-pg --network pg-net -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin postgres:17
-          until docker exec host-pg pg_isready -U admin; do sleep 1; done
-          sleep 2
+          # Over TCP: during init the image runs a temporary server on the socket only, then restarts.
+          until docker exec host-pg pg_isready -U admin -h 127.0.0.1; do sleep 1; done
           docker exec host-pg psql -U admin -d postgres \
             -c "CREATE ROLE macrofill LOGIN PASSWORD 'secret';" \
             -c "CREATE DATABASE macrofill OWNER macrofill;"
