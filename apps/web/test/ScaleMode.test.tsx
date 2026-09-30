@@ -271,6 +271,31 @@ describe('Scale Mode', () => {
     expect(button(en.scale.useGrams)).toBeEnabled();
   });
 
+  it('M6-5: after the scale drops, each step focuses the grams input', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    act(() => s.driver.drop());
+    expect(screen.getByLabelText(en.step.grams)).toHaveFocus();
+    fireEvent.change(screen.getByLabelText(en.step.grams), { target: { value: '200' } });
+    fireEvent.click(button(en.step.next));
+    expect(screen.getByText('Step 2 of 2')).toBeVisible();
+    expect(screen.getByLabelText(en.step.grams)).toHaveFocus();
+  });
+
+  it('M6-5: Enter grams by hand focuses the grams input, and a negative step does not', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.scale.enterManually));
+    expect(screen.getByLabelText(en.step.grams)).toHaveFocus();
+    fireEvent.change(screen.getByLabelText(en.step.grams), { target: { value: '214' } });
+    fireEvent.click(button(en.scale.useGrams));
+    // A negative step shows the input by itself: no keyboard over the live weight.
+    await s.play(s.script.tare().add(18).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    expect(screen.getByRole('alert')).toHaveTextContent(en.scale.negative);
+    expect(screen.getByLabelText(en.step.grams)).not.toHaveFocus();
+  });
+
   it('M3-3: skip and undo work on the scale steps', async () => {
     await started();
     fireEvent.click(button(en.step.skip));

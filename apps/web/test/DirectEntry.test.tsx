@@ -107,6 +107,17 @@ async function openCurdBowl(api?: Api) {
 }
 
 describe('Direct Entry', () => {
+  it('M5-3: each step focuses the grams input, so no extra tap is needed', async () => {
+    await openCurdBowl();
+    expect(grams()).toHaveFocus();
+    typeGrams('200');
+    click(en.step.next);
+    expect(screen.getByText('Step 2 of 2')).toBeInTheDocument();
+    expect(grams()).toHaveFocus();
+    click(en.step.undo);
+    expect(grams()).toHaveFocus();
+  });
+
   it('M5-1: the user picks a recipe from the seeded list', async () => {
     renderApp();
     click(en.home.logMeal);

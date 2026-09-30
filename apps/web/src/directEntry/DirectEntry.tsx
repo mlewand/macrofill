@@ -136,8 +136,10 @@ function StepScreen(props: {
       />
 
       <label htmlFor={gramsId}>{t('step.grams')}</label>
+      {/* Each step mounts anew, so the grams input is ready to type into (M5-3). */}
       <input
         id={gramsId}
+        autoFocus
         className="grams"
         type="text"
         inputMode="decimal"
