@@ -38,7 +38,11 @@ export default defineConfig({
     baseURL: `http://localhost:${port}`,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'phone', use: { ...devices['Pixel 7'] } }],
+  // M7-6: everything runs on a phone and a tablet, both in portrait.
+  projects: [
+    { name: 'phone', use: { ...devices['Pixel 7'] } },
+    { name: 'tablet', use: { ...devices['Galaxy Tab S4'] } },
+  ],
   webServer: {
     // Build, reset the e2e database (create if missing, migrate, seed), then serve.
     command: 'pnpm build && pnpm --filter @macrofill/api e2e:db && node apps/api/dist/server.mjs',
