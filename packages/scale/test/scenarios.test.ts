@@ -80,7 +80,8 @@ describe('tracker scenarios from scaleScript()', () => {
     state = feed(state, script.add(214).stable().take());
     const before = state;
     state = feed(state, script.wrongUnit({ forMs: 2000 }).take());
-    expect(state).toEqual(before);
+    // Only the software stability history starts over (M3-5); nothing else changes.
+    expect({ ...state, recent: [] }).toEqual({ ...before, recent: [] });
     // The tracker would still record from the stale reading: the UI disables Next (M6-10).
     expect(currentAmount(state)).toBe(214);
   });
