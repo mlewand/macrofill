@@ -61,7 +61,16 @@ export class HuajunDriver implements ScaleDriver {
     scale.onDisconnect(() => {
       if (this.#scale === scale) this.#setState('disconnected');
     });
-    await scale.connect();
+    try {
+      await scale.connect();
+    } catch (error) {
+      // Nothing to disconnect later, and the state doesn't depend on the library's callback.
+      if (this.#scale === scale) {
+        this.#scale = undefined;
+        this.#setState('disconnected');
+      }
+      throw error;
+    }
     // A newer connect() replaced this one meanwhile: let that one report, and don't leak this one.
     if (this.#scale !== scale) return scale.disconnect();
     this.#setState('connected');
@@ -72,9 +81,13 @@ export class HuajunDriver implements ScaleDriver {
     // completes, instead of reporting `connected`.
     const scale = this.#scale;
     this.#scale = undefined;
-    await scale?.disconnect();
-    // A connect() started meanwhile owns the state now; a failed one reports it itself.
-    if (this.#scale === undefined) this.#setState('disconnected');
+    try {
+      await scale?.disconnect();
+    } finally {
+      // Also when the teardown fails: this driver no longer uses that scale. A connect() started
+      // meanwhile owns the state now; a failed one reports it itself.
+      if (this.#scale === undefined) this.#setState('disconnected');
+    }
   }
 
   onReading(cb: (r: ScaleReading) => void): () => void {

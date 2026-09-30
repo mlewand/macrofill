@@ -191,6 +191,25 @@ describe('HuajunDriver', () => {
     expect(states).toEqual(['connected', 'disconnected']);
   });
 
+  it('M6-1: a disconnect whose transport fails still reports disconnected (regression: #25)', async () => {
+    const transport = new FakeTransport();
+    transport.disconnect = () => Promise.reject(new Error('GATT error'));
+    const { driver, states } = driverWith([transport]);
+    await driver.connect();
+    await expect(driver.disconnect()).rejects.toThrow('GATT error');
+    expect(states).toEqual(['connected', 'disconnected']);
+  });
+
+  it('M6-1: a failed connect leaves nothing to disconnect (regression: #25)', async () => {
+    const transport = new FakeTransport();
+    transport.failConnect = true;
+    transport.disconnect = () => Promise.reject(new Error('never connected'));
+    const { driver, states } = driverWith([transport]);
+    await expect(driver.connect()).rejects.toThrow('no device');
+    await expect(driver.disconnect()).resolves.toBeUndefined();
+    expect(states).toEqual([]);
+  });
+
   it('M6-1: a failed connect rejects and stays disconnected', async () => {
     const transport = new FakeTransport();
     transport.failConnect = true;
