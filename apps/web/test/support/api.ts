@@ -20,6 +20,7 @@ export const stored = (request: SaveMealRequest): SaveMealResponse => ({
 /** A fake Api for component tests; every method is a spy, and any can be overridden. */
 export function fakeApi(overrides: Partial<Api> = {}): Api {
   return {
+    login: vi.fn(overrides.login ?? (() => Promise.resolve('ok' as const))),
     catalog: vi.fn(overrides.catalog ?? (() => Promise.resolve(emptyCatalog))),
     saveMeal: vi.fn(overrides.saveMeal ?? ((request) => Promise.resolve(stored(request)))),
     today: vi.fn(overrides.today ?? (() => Promise.resolve(emptyToday))),
