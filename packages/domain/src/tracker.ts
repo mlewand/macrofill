@@ -191,8 +191,9 @@ function onReading(state: TrackerState, reading: TimedReading): TrackerState {
 
   const next: TrackerState = { ...state, recent: kept, latest: { grams, timestamp, stable } };
   if (state.pending?.type !== 'waiting') return next;
-  if (stable) return recordReading(next, grams);
-  if (timestamp < state.pending.deadline) return next;
+  // M3-4: within the wait, a stable reading is recorded. From the deadline on, the reading is only
+  // proposed, stable or not: after a pause in the stream it may no longer be what Next was for.
+  if (timestamp < state.pending.deadline) return stable ? recordReading(next, grams) : next;
   const amount = withinTolerance(next, grams - referenceReading(next)!);
   if (amount < 0) return { ...next, pending: { type: 'needsCorrection', reading: grams, amount } };
   return { ...next, pending: { type: 'confirming', reading: grams, amount } };

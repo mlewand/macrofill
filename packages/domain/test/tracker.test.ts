@@ -112,6 +112,13 @@ describe('weight tracker', () => {
       ]);
     });
 
+    it('M3-4: a stable reading after the wait is proposed, not recorded (regression: #29)', () => {
+      // The stream paused past the 1.5 s deadline; the next reading, seconds later, is stable.
+      const late = run([...tapped, reading(7000, 526, true)]);
+      expect(late.pending).toEqual({ type: 'confirming', reading: 526, amount: 214 });
+      expect(late.steps).toEqual([]);
+    });
+
     it('M3-4: the wait is configurable', () => {
       const waiting = run(tapped, createTracker({ stableWaitMs: 300 }));
       expect(trackerStatus(track(waiting, reading(1300, 525, false)))).toBe('confirming');
