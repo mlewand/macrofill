@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Watches the current user's open pull requests in this repo and prints one line per new event:
-# a review, an inline or conversation comment, a reaction to one of the user's own comments (Codex
-# answers "no issues" with only a 👍), and a PR getting merged or closed. The user's own activity
-# is skipped. Meant as a Claude Code Monitor source; see CLAUDE.md.
+# a review, an inline or conversation comment, a reaction to one of the user's own conversation
+# comments (Codex answers "@codex review" with only a 👍 when it finds nothing), and a PR getting
+# merged or closed. Reactions on the user's inline comments aren't watched: that would cost a
+# request per inline reply on every pass, and no reviewer answers through them. The user's own
+# activity is skipped. Meant as a Claude Code Monitor source; see CLAUDE.md.
 #
 # Usage: pr-watch.sh STATE_FILE [INTERVAL_SECONDS]
 #   STATE_FILE holds the IDs already seen, so a restarted watch doesn't repeat events. Keep it
@@ -51,8 +53,10 @@ report() {
   while IFS=$'\t' read -r key message; do
     [[ -z $key ]] && continue
     grep -qxF "$key" "$state" && continue
-    echo "$key" >>"$state"
+    # Printed before it's recorded: if the watch dies in between, the event comes again rather
+    # than never.
     $seed || echo "$message"
+    echo "$key" >>"$state"
   done <<<"$all"
 }
 
