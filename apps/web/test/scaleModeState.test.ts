@@ -212,11 +212,55 @@ describe('Scale Mode state', () => {
     expect(canNext(state)).toBe(true);
   });
 
-  it('M6-5: after the scale drops, the remaining steps take typed grams, and the meal still saves as a scale meal', () => {
+  it('M6-6: while reconnecting, the session is kept and Start, Next and corrections are off', () => {
+    const script = scaleScript().baseline(312);
+    let state = play(start(), script.take());
+    expect(canStart(state)).toBe(true);
+    state = apply(state, { type: 'dropped' });
+    expect(state.reconnecting).toBe(true);
+    // The last reading is from before the drop: nothing may use it.
+    expect(canStart(state)).toBe(false);
+    expect(apply(state, { type: 'start' })).toEqual(state);
+    state = apply(state, { type: 'reconnected' }, { type: 'start' });
+    expect(state.tracker.baseline).toBe(312);
+
+    state = play(state, script.add(214).stable().take());
+    const before = apply(state, { type: 'dropped' });
+    expect(before.manual).toBe(false);
+    expect(canNext(before)).toBe(false);
+    expect(canCorrect(before)).toBe(false);
+    expect(apply(before, { type: 'next' })).toEqual(before);
+    expect(apply(before, { type: 'correct', grams: '5' })).toEqual(before);
+  });
+
+  it('M6-6: after reconnecting, the flow goes on from the new readings', () => {
     const script = scaleScript().baseline(312);
     let state = apply(play(start(), script.take()), { type: 'start' });
     state = apply(play(state, script.add(214).stable().take()), { type: 'next' });
     state = apply(state, { type: 'dropped' });
+    // Readings come again once connected; the first ones may arrive before the event.
+    state = play(state, script.add(50).stable().take());
+    state = apply(state, { type: 'reconnected' });
+    expect(state.reconnecting).toBe(false);
+    state = apply(state, { type: 'next' });
+    expect(grams(state).slice(0, 2)).toEqual(['214', '50']);
+    expectInStep(state);
+  });
+
+  it('M6-6: giving up on reconnecting switches to typed grams; a late reconnect changes nothing', () => {
+    const script = scaleScript().baseline(312);
+    let state = apply(play(start(), script.take()), { type: 'start' });
+    state = apply(state, { type: 'dropped' }, { type: 'finishByHand' });
+    expect(state).toMatchObject({ manual: true, reconnecting: false });
+    expect(apply(state, { type: 'reconnected' })).toEqual(state);
+    expect(apply(state, { type: 'dropped' })).toEqual(state);
+  });
+
+  it('M6-5: after the scale drops, the remaining steps take typed grams, and the meal still saves as a scale meal', () => {
+    const script = scaleScript().baseline(312);
+    let state = apply(play(start(), script.take()), { type: 'start' });
+    state = apply(play(state, script.add(214).stable().take()), { type: 'next' });
+    state = apply(state, { type: 'dropped' }, { type: 'finishByHand' });
     expect(state.manual).toBe(true);
     expect(canNext(state)).toBe(false);
     state = apply(
