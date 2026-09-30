@@ -95,11 +95,14 @@ describe('HuajunDriver', () => {
     const { driver, readings, states } = driverWith([transport]);
     await driver.connect();
     expect(states).toEqual(['connected']);
+    // What the frames decode to is the library's business (M3-13); the mapping is tested above.
+    const other = new Uint8Array([0xac, 0x05, 0x00, 0x00, 0x0c, 0x22, 0xca, 0x70]);
     transport.onData!(raw);
-    transport.onData!(new Uint8Array([0xac, 0x05, 0x00, 0x00, 0x0c, 0x22, 0xca, 0x70]));
-    expect(readings).toHaveLength(2);
-    expect(readings[0]).toMatchObject({ grams: 525.7, stable: true, timestamp: 225 });
-    expect(readings[1]!.grams).toBeUndefined();
+    transport.onData!(other);
+    expect(readings.map((r) => [r.raw, r.timestamp])).toEqual([
+      [raw, 225],
+      [other, 450],
+    ]);
     transport.drop();
     expect(states).toEqual(['connected', 'disconnected']);
   });
@@ -114,6 +117,20 @@ describe('HuajunDriver', () => {
     second.onData!(raw);
     expect(readings).toHaveLength(1);
     expect(states).toEqual(['connected', 'disconnected', 'connected']);
+  });
+
+  it('an older connect that finishes late reports nothing (regression: #25)', async () => {
+    const slow = new FakeTransport();
+    let finishSlow = () => {};
+    slow.connect = () => new Promise<void>((resolve) => (finishSlow = resolve));
+    const failing = new FakeTransport();
+    failing.failConnect = true;
+    const { driver, states } = driverWith([slow, failing]);
+    const first = driver.connect();
+    await expect(driver.connect()).rejects.toThrow('no device');
+    finishSlow();
+    await first;
+    expect(states).toEqual([]);
   });
 
   it('a failed connect rejects and stays disconnected', async () => {

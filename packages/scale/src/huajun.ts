@@ -59,6 +59,8 @@ export class HuajunDriver implements ScaleDriver {
       if (this.#scale === scale) this.#setState('disconnected');
     });
     await scale.connect();
+    // A newer connect() replaced this one meanwhile: let that one report, and don't leak this one.
+    if (this.#scale !== scale) return scale.disconnect();
     this.#setState('connected');
   }
 
