@@ -35,6 +35,8 @@ describe('MockScaleDriver', () => {
       [450, 312, true],
     ]);
     expect(readings.every((r) => r.raw instanceof Uint8Array)).toBe(true);
+    // M3-11: the wall-clock receive time too.
+    expect(readings.map((r) => r.receivedAt - start)).toEqual([0, 225, 450]);
   });
 
   it('M3-12: plays the script it was created with on connect', async () => {

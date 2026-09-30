@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./huajun": "./src/huajun.ts",
-    "./mock": "./src/mock.ts"
+    "./mock": "./src/mock.ts",
+    "./replay": "./src/replay.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

@@ -2,6 +2,8 @@ import type { TimedReading } from '@macrofill/domain';
 
 /** A reading from a scale driver: what the tracker needs, plus the payload it came from. */
 export interface ScaleReading extends TimedReading {
+  /** ms since the epoch, when it was received; `timestamp` is the monotonic time (M3-11). */
+  receivedAt: number;
   /** The original payload, kept for recording and replay. */
   raw: Uint8Array;
 }

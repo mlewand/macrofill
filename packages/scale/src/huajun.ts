@@ -1,23 +1,15 @@
-import { Scale, type Reading, type ScaleTransport } from '@mlewand/huajun-ble-scale';
+import { Scale, type ScaleTransport } from '@mlewand/huajun-ble-scale';
 import { CapacitorTransport } from '@mlewand/huajun-ble-scale/capacitor';
 import type { ConnectionState, ScaleCapabilities, ScaleDriver, ScaleReading } from './driver.js';
+import { toScaleReading } from './reading.js';
+
+export { toScaleReading };
 
 export interface HuajunDriverOptions {
   /** A new BLE transport per connection. Default: the Capacitor transport, which on the web uses Web Bluetooth. */
   transport?: () => ScaleTransport;
   /** Monotonic clock for reading timestamps. Default: the library's, `performance.now()`. */
   monotonicNow?: () => number;
-}
-
-/**
- * M3-13: maps the library's reading to a driver reading. The library decodes the bytes; a reading
- * in another unit has no grams (M3-14).
- */
-export function toScaleReading(reading: Reading): ScaleReading {
-  const mapped: ScaleReading = { timestamp: reading.receivedAtMonotonic, raw: reading.raw };
-  if (reading.grams !== undefined) mapped.grams = reading.grams;
-  if (reading.stable !== undefined) mapped.stable = reading.stable;
-  return mapped;
 }
 
 /** The driver for Huajun kitchen scales, an adapter over `@mlewand/huajun-ble-scale`. */

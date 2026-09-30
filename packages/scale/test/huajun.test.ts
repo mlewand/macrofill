@@ -15,7 +15,7 @@ vi.mock('@mlewand/huajun-ble-scale/capacitor', () => ({
 const raw = new Uint8Array([0xac, 0x05, 0x00, 0x14, 0x89, 0x02, 0xca, 0xe7]);
 
 describe('toScaleReading', () => {
-  it("M3-13: maps the library's reading: grams, stable flag, monotonic time and raw bytes", () => {
+  it("M3-13: maps the library's reading: grams, stable flag, both receive times and raw bytes", () => {
     const reading: Reading = {
       grams: 525.7,
       value: 525.7,
@@ -29,6 +29,7 @@ describe('toScaleReading', () => {
       grams: 525.7,
       stable: true,
       timestamp: 1234.5,
+      receivedAt: 1_780_000_000_000,
       raw,
     });
   });
@@ -36,6 +37,7 @@ describe('toScaleReading', () => {
   it('M3-13: leaves out what the library leaves out', () => {
     expect(toScaleReading({ raw, receivedAt: 0, receivedAtMonotonic: 5 })).toEqual({
       timestamp: 5,
+      receivedAt: 0,
       raw,
     });
   });
@@ -49,7 +51,7 @@ describe('toScaleReading', () => {
       receivedAt: 0,
       receivedAtMonotonic: 5,
     };
-    expect(toScaleReading(reading)).toEqual({ stable: true, timestamp: 5, raw });
+    expect(toScaleReading(reading)).toEqual({ stable: true, timestamp: 5, receivedAt: 0, raw });
   });
 });
 
