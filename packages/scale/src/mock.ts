@@ -4,7 +4,8 @@ import type { ConnectionState, ScaleCapabilities, ScaleDriver, ScaleReading } fr
 export interface MockScaleOptions {
   /** A script to play on connect, e.g. `scaleScript()...build()`. */
   readings?: TimedReading[];
-  capabilities?: Partial<ScaleCapabilities>;
+  /** The mock has no tare, so it never claims one. */
+  capabilities?: Partial<Omit<ScaleCapabilities, 'canTare'>>;
   /** Monotonic clock in ms. Default `performance.now()`. */
   now?: () => number;
 }
@@ -36,10 +37,9 @@ export class MockScaleDriver implements ScaleDriver {
 
   constructor(options: MockScaleOptions = {}) {
     this.capabilities = {
-      hasStableFlag: true,
+      hasStableFlag: options.capabilities?.hasStableFlag ?? true,
       canTare: false,
-      resolutionGrams: 0.1,
-      ...options.capabilities,
+      resolutionGrams: options.capabilities?.resolutionGrams ?? 0.1,
     };
     this.#initial = options.readings;
     this.#now = options.now ?? (() => performance.now());

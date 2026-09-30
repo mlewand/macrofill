@@ -105,6 +105,13 @@ describe('MockScaleDriver', () => {
     expect(readings.every((r) => !('stable' in r))).toBe(true);
   });
 
+  it('never claims tare, since it has none (regression: #24)', () => {
+    // @ts-expect-error: canTare is not an option.
+    const driver = new MockScaleDriver({ capabilities: { canTare: true } });
+    expect(driver.capabilities.canTare).toBe(false);
+    expect('tare' in driver).toBe(false);
+  });
+
   it('M3-14: a reading without grams means the scale shows another unit', async () => {
     const { driver, readings } = connected();
     await driver.connect();
