@@ -182,3 +182,83 @@ describe('Direct Entry flow state', () => {
     expect(saveRequest(broken, '2026-01-15T07:05:00.000Z')).toBeUndefined();
   });
 });
+
+describe('the flow in Scale Mode', () => {
+  const startScale = () =>
+    startDirectEntry({
+      recipe,
+      preselected: [curd, undefined, cucumber],
+      mealId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      entryId: 'c8f4d2b3-5e6a-4f7b-8c9d-8e7f6a5b4c3d',
+      startedAt: '2026-01-15T07:00:00.000Z',
+      inputMethod: 'scale',
+    });
+
+  it('M6-4: a recorded scale amount completes the step', () => {
+    const state = apply(startScale(), { type: 'record', grams: 214.1 });
+    expect(state.current).toBe(1);
+    expect(state.steps[0]).toEqual({
+      productId: curd,
+      grams: '214.1',
+      skipped: false,
+      fromScale: true,
+    });
+  });
+
+  it('M6-4: recording needs a product and non-negative grams, like Next', () => {
+    const atMilk = apply(startScale(), { type: 'record', grams: 214 });
+    expect(apply(atMilk, { type: 'record', grams: 50 })).toEqual(atMilk);
+    expect(apply(startScale(), { type: 'record', grams: -1 })).toEqual(startScale());
+  });
+
+  it('M6-5: typed grams replace a scale amount, during the flow and in the summary', () => {
+    const recorded = apply(startScale(), { type: 'record', grams: 214 }, { type: 'undo' });
+    expect(apply(recorded, { type: 'setGrams', grams: '200' }).steps[0]).toEqual({
+      productId: curd,
+      grams: '200',
+      skipped: false,
+    });
+    const summary = apply(
+      startScale(),
+      { type: 'record', grams: 214 },
+      { type: 'skip' },
+      { type: 'record', grams: 30 },
+    );
+    expect(isSummary(summary)).toBe(true);
+    expect(apply(summary, { type: 'editGrams', index: 2, grams: '25' }).steps[2]).toEqual({
+      productId: cucumber,
+      grams: '25',
+      skipped: false,
+    });
+  });
+
+  it('M6-5: a Scale Mode meal saves with its input method and each weight source', () => {
+    const summary = apply(
+      startScale(),
+      { type: 'record', grams: 214 },
+      { type: 'skip' },
+      { type: 'record', grams: 30 },
+      { type: 'editGrams', index: 0, grams: '200' },
+    );
+    const request = saveRequest(summary, '2026-01-15T07:05:00.000Z')!;
+    expect(saveMealRequestSchema.parse(request)).toEqual(request);
+    expect(request.meal.inputMethod).toBe('scale');
+    expect(request.meal.items).toEqual([
+      {
+        stepId: recipe.steps[0]!.id,
+        skipped: false,
+        productId: curd,
+        grams: 200,
+        weightSource: 'manual',
+      },
+      { stepId: recipe.steps[1]!.id, skipped: true },
+      {
+        stepId: recipe.steps[2]!.id,
+        skipped: false,
+        productId: cucumber,
+        grams: 30,
+        weightSource: 'scale',
+      },
+    ]);
+  });
+});
