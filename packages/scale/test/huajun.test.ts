@@ -181,6 +181,16 @@ describe('HuajunDriver', () => {
     expect(states).toEqual(['connected']);
   });
 
+  it('M6-1: a failed connect that replaces a connection reports disconnected', async () => {
+    const [first, second] = [new FakeTransport(), new FakeTransport()];
+    second.failConnect = true;
+    const { driver, states } = driverWith([first, second]);
+    await driver.connect();
+    await expect(driver.connect()).rejects.toThrow('no device');
+    expect(first.disconnects).toBe(1);
+    expect(states).toEqual(['connected', 'disconnected']);
+  });
+
   it('M6-1: a failed connect rejects and stays disconnected', async () => {
     const transport = new FakeTransport();
     transport.failConnect = true;
