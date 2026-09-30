@@ -88,6 +88,7 @@ The tracker's settings (stability tolerance and window, the wait for a stable re
 | `pnpm lint` | ESLint (including the package import rules) and `prettier --check` |
 | `pnpm typecheck` | `tsc` for every package |
 | `pnpm test` | Vitest: unit, component and API integration tests |
+| `pnpm test:coverage` | The same with line coverage; fails below the per-package thresholds in `docs/ARCHITECTURE.md`, as in CI. Report in `coverage/` |
 | `pnpm test:e2e` | Playwright on phone and tablet viewports (portrait), against the production build served by the api. Scale Mode runs on the mock scale, switched on with the flag above |
 | `pnpm format` | Format with Prettier |
 
