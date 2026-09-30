@@ -40,6 +40,7 @@ Handover from Phase A. Delete each point once it's resolved, and this section on
 - PR descriptions list the criterion IDs they cover.
 - Do branch work in a `git worktree`, and keep the main checkout on `master`: it may be serving the dev server, and switching branches under a running Vite can break its config reload. Pull `master` there after merges.
 - A PR is ready when CI is green. The maintainer asks GitHub Copilot to review it. Address every finding, including points that appear only in the review summary; answer those with a PR comment. Reply on inline threads with the fixing commit and resolve them. Check a finding before fixing it, and if it doesn't hold, say why, with evidence.
+- After fixing the findings of a Codex review, once every thread has a reply and is resolved and CI is green on the new head, comment `@codex review` on the PR to ask for a re-review. Once per round of fixes.
 
 ## Conventions
 
