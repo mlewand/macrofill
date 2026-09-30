@@ -51,5 +51,22 @@
     "grams": "{{value}} g",
     "kcal": "{{value}} kcal"
   },
-  "unknown": "unknown"
+  "unknown": "unknown",
+  "today": {
+    "title": "Today",
+    "loadFailed": "Couldn't load today's meals.",
+    "empty": "Nothing logged today yet.",
+    "nutrient": "Nutrient",
+    "eaten": "Eaten",
+    "target": "Target",
+    "remaining": "Left",
+    "meals": "Meals",
+    "meal": "Meal",
+    "delete": "Delete",
+    "deleteLabel": "Delete {{meal}} eaten at {{time}}",
+    "confirmDelete": "Delete this meal from today?",
+    "confirm": "Delete",
+    "keep": "Keep",
+    "deleteFailed": "Couldn't delete the meal. Try again."
+  }
 }

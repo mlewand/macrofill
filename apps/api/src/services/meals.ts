@@ -6,6 +6,8 @@ import { createRepositories, type Repositories } from '../repositories';
 export type SaveMealResult =
   | { status: 'created' | 'replayed'; body: SaveMealResponse }
   | { status: 'invalid'; issues: Issue[] }
+  /** The meal was saved and its entry has since been deleted (M7-4); it's not brought back. */
+  | { status: 'deleted' }
   /** An id is taken by a meal or entry the user can't see; never reported as success. */
   | { status: 'conflict' };
 
@@ -23,16 +25,16 @@ export async function saveMeal(
   try {
     return await db.transaction(async (tx) => {
       const repos = createRepositories(tx, ownerId);
-      const saved = await stored(repos, request.meal.id);
-      if (saved) return replay(saved, request);
+      const saved = await existing(repos, request);
+      if (saved) return saved;
 
       const issues = await references(repos, request);
       if (issues.length > 0) return { status: 'invalid' as const, issues };
 
       if (!(await repos.meals.insertIfAbsent(request.meal))) {
         // Lost a race with a concurrent retry, or the id belongs to someone else.
-        const raced = await stored(repos, request.meal.id);
-        if (raced) return replay(raced, request);
+        const raced = await existing(repos, request);
+        if (raced) return raced;
         throw new Conflict();
       }
       if (
@@ -49,6 +51,21 @@ export async function saveMeal(
     if (error instanceof Conflict) return { status: 'conflict' };
     throw error;
   }
+}
+
+/**
+ * The outcome for a meal the user already saved, or undefined if there's none. If its entry was
+ * deleted since (M7-4), a late retry must not bring it back.
+ */
+async function existing(
+  repos: Repositories,
+  request: SaveMealRequest,
+): Promise<SaveMealResult | undefined> {
+  const meal = await repos.meals.find(request.meal.id);
+  if (!meal) return undefined;
+  const consumptionEntry = await repos.consumptionEntries.findByMeal(meal.id);
+  if (!consumptionEntry) return { status: 'deleted' };
+  return replay({ meal, consumptionEntry }, request);
 }
 
 /**

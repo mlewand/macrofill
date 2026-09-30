@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
+import { TodayView } from './today/TodayView';
 
 type Screen = 'home' | 'directEntry' | 'saved';
 
@@ -23,6 +24,7 @@ export function App() {
           <button type="button" className="primary" onClick={() => setScreen('directEntry')}>
             {t('home.logMeal')}
           </button>
+          <TodayView />
         </section>
       )}
       {screen === 'directEntry' && (

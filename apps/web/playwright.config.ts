@@ -8,6 +8,8 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 export default defineConfig({
   testDir: 'e2e',
   forbidOnly: !!process.env.CI,
+  // The tests share one database and some add meals, so they run one at a time.
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {

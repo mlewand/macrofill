@@ -28,3 +28,17 @@ export function jsonBody<T extends z.ZodType>(schema: T) {
     return result.data;
   });
 }
+
+/** Validates path parameters with a domain schema; invalid ones get 400 with field-level errors. */
+export function params<T extends z.ZodType>(schema: T) {
+  return validator('param', (value, c) => {
+    const result = schema.safeParse(value);
+    if (!result.success) {
+      return invalidRequest(
+        c,
+        result.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      );
+    }
+    return result.data;
+  });
+}
