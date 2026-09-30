@@ -65,7 +65,12 @@ export class HuajunDriver implements ScaleDriver {
   }
 
   async disconnect(): Promise<void> {
-    await this.#scale?.disconnect();
+    // Cancel the current attempt first: a connect() still in progress then closes itself when it
+    // completes, instead of reporting `connected`.
+    const scale = this.#scale;
+    this.#scale = undefined;
+    await scale?.disconnect();
+    this.#setState('disconnected');
   }
 
   onReading(cb: (r: ScaleReading) => void): () => void {

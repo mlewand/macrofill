@@ -60,7 +60,9 @@ class FakeTransport implements ScaleTransport {
   connect() {
     return this.failConnect ? Promise.reject(new Error('no device')) : Promise.resolve();
   }
+  disconnects = 0;
   disconnect() {
+    this.disconnects++;
     this.drop();
     return Promise.resolve();
   }
@@ -131,6 +133,19 @@ describe('HuajunDriver', () => {
     finishSlow();
     await first;
     expect(states).toEqual([]);
+  });
+
+  it('a disconnect while connecting cancels the connection (regression: #25)', async () => {
+    const slow = new FakeTransport();
+    let finishSlow = () => {};
+    slow.connect = () => new Promise<void>((resolve) => (finishSlow = resolve));
+    const { driver, states } = driverWith([slow]);
+    const pending = driver.connect();
+    await driver.disconnect();
+    finishSlow();
+    await pending;
+    expect(states).toEqual([]);
+    expect(slow.disconnects).toBeGreaterThan(0);
   });
 
   it('a failed connect rejects and stays disconnected', async () => {
