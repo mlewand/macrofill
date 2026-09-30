@@ -41,13 +41,19 @@ events() {
 }
 
 while true; do
-  open=$(gh pr list --repo "$repo" --author "$me" --state open --json number --jq '.[].number') || open=""
+  # If listing fails, skip the pass: an empty list would look like every PR had closed.
+  if ! open=$(gh pr list --repo "$repo" --author "$me" --state open --limit 1000 \
+    --json number --jq '.[].number'); then
+    sleep "$interval"
+    continue
+  fi
 
   # PRs that were open on an earlier pass and aren't now: merged or closed.
   while read -r key; do
     n=${key#open:}
     if ! grep -qx "$n" <<<"$open"; then
       status=$(gh pr view "$n" --repo "$repo" --json state --jq .state) || continue
+      [[ $status == OPEN ]] && continue
       $seed || echo "PR #$n: $status"
       { grep -vx "$key" "$state" || true; } >"$state.tmp" && mv "$state.tmp" "$state"
     fi
