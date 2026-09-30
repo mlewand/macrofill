@@ -78,11 +78,14 @@ while true; do
     fi
   done < <(grep '^open:' "$state")
 
+  complete=true
   for n in $open; do
     grep -qx "open:$n" "$state" || echo "open:$n" >>"$state"
-    report "$n"
+    report "$n" || complete=false
   done
 
-  seed=false
+  # The first pass only records what's there. It ends once every PR's events were fetched, or
+  # a PR's history would come out as new on the next pass.
+  $complete && seed=false
   sleep "$interval"
 done
