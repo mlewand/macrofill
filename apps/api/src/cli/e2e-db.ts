@@ -4,6 +4,7 @@
 import { loadConfig } from '../config';
 import { connect } from '../db/client';
 import { connectAdminClient, prepareE2eDatabase } from '../db/e2e';
+import { describeError } from '../errors';
 
 const config = loadConfig(process.env);
 
@@ -16,6 +17,6 @@ try {
   });
   console.log(`${created ? 'Created' : 'Reset'} database ${name}: migrated and seeded.`);
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(describeError(error));
   process.exitCode = 1;
 }

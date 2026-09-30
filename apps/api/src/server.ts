@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { loadConfig } from './config';
 import { connect } from './db/client';
 import { startServer } from './start';
+import { describeError } from './errors';
 
 const config = loadConfig(process.env);
 const database = connect(config.databaseUrl, { queryTimeoutMs: 3000 });
@@ -16,7 +17,7 @@ try {
     });
   }
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(describeError(error));
   await database.close();
   process.exit(1);
 }
