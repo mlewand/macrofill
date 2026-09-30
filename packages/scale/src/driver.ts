@@ -18,7 +18,10 @@ export type ConnectionState = 'connected' | 'disconnected';
 export interface ScaleDriver {
   readonly id: string;
   readonly capabilities: ScaleCapabilities;
-  /** Must be called from a user gesture. */
+  /**
+   * The first call must come from a user gesture. After a drop, `connect()` reconnects to the same
+   * device without the chooser (M6-6).
+   */
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   onReading(cb: (r: ScaleReading) => void): () => void;
