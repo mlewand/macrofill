@@ -32,12 +32,22 @@ events() {
     while IFS=$'\t' read -r key message; do
       if [[ $key == mine:* ]]; then
         # Reactions from others on the user's own comments, e.g. Codex's 👍 on "@codex review".
-        gh api "repos/$repo/issues/comments/${key#mine:}/reactions" --jq ".[] | $skip_me |
+        gh api "repos/$repo/issues/comments/${key#mine:}/reactions" --paginate --jq ".[] | $skip_me |
           \"reaction:\(.id)\tPR #$n: \(.user.login) reacted \(.content) to comment ${key#mine:}\""
       else
         printf '%s\t%s\n' "$key" "$message"
       fi
     done
+}
+
+# Prints the events on PR $1 not seen before, and records them as seen.
+report() {
+  local key message
+  while IFS=$'\t' read -r key message; do
+    grep -qxF "$key" "$state" && continue
+    echo "$key" >>"$state"
+    $seed || echo "$message"
+  done < <(events "$1")
 }
 
 while true; do
@@ -54,6 +64,8 @@ while true; do
     if ! grep -qx "$n" <<<"$open"; then
       status=$(gh pr view "$n" --repo "$repo" --json state --jq .state) || continue
       [[ $status == OPEN ]] && continue
+      # Activity since the last pass comes before the merge or close.
+      report "$n"
       $seed || echo "PR #$n: $status"
       { grep -vx "$key" "$state" || true; } >"$state.tmp" && mv "$state.tmp" "$state"
     fi
@@ -61,11 +73,7 @@ while true; do
 
   for n in $open; do
     grep -qx "open:$n" "$state" || echo "open:$n" >>"$state"
-    while IFS=$'\t' read -r key message; do
-      grep -qxF "$key" "$state" && continue
-      echo "$key" >>"$state"
-      $seed || echo "$message"
-    done < <(events "$n")
+    report "$n"
   done
 
   seed=false
