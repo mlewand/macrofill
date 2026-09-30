@@ -144,7 +144,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 
 ```typescript
 interface ScaleReading {
-  grams: number;
+  grams?: number;       // absent while the scale shows another unit (M3-14)
   stable?: boolean;     // only when the scale reports it
   timestamp: number;    // ms, monotonic
   raw: Uint8Array;      // original payload, kept for recording/replay
