@@ -219,7 +219,7 @@ describe('weight tracker', () => {
   describe('skip, undo and correction', () => {
     const started = [...stableAt(0, 312), start];
 
-    it('skip records no amount, and the next step still counts from the previous Next', () => {
+    it('M3-3: skip records no amount, and the next step still counts from the previous Next', () => {
       const state = run([...started, skip, ...stableAt(1000, 526), next]);
       expect(state.steps).toEqual([
         { skipped: true },
@@ -227,13 +227,13 @@ describe('weight tracker', () => {
       ]);
     });
 
-    it('skip drops a pending Next', () => {
+    it('M3-3: skip drops a pending Next', () => {
       const state = run([...started, reading(1000, 300, true), next, skip]);
       expect(trackerStatus(state)).toBe('measuring');
       expect(amounts(state)).toEqual(['skipped']);
     });
 
-    it('undo removes the last step, and its amount is measured again from the reading before it', () => {
+    it('M3-3: undo removes the last step, and its amount is measured again from the reading before it', () => {
       const state = run([...started, ...stableAt(1000, 526), next, ...stableAt(2000, 544), next]);
       const undone = track(state, undo);
       expect(amounts(undone)).toEqual([214]);
@@ -241,7 +241,7 @@ describe('weight tracker', () => {
       expect(amounts(track(undone, next))).toEqual([214, 18]);
     });
 
-    it('undo at the first step goes back to before Start, so the baseline is taken again', () => {
+    it('M3-2: undo at the first step goes back to before Start, so the baseline is taken again', () => {
       const state = run([...started, undo]);
       expect(trackerStatus(state)).toBe('idle');
       expect(state.baseline).toBeUndefined();
@@ -249,7 +249,7 @@ describe('weight tracker', () => {
       expect(run([undo])).toEqual(createTracker());
     });
 
-    it('a correction while measuring records the typed grams and counts on from the latest reading', () => {
+    it('M6-5: a correction while measuring records the typed grams and counts on from the latest reading', () => {
       const state = run([
         ...started,
         reading(1000, 520, false),
@@ -262,7 +262,7 @@ describe('weight tracker', () => {
       expect(currentAmount(state)).toBe(20);
     });
 
-    it('a correction replaces a proposal', () => {
+    it('M3-4, M6-5: a correction replaces a proposal', () => {
       const proposed = run([
         ...started,
         reading(1000, 520, false),
@@ -274,7 +274,7 @@ describe('weight tracker', () => {
       ]);
     });
 
-    it('a correction must be a non-negative number', () => {
+    it('M2-2, M6-5: a correction must be a non-negative number', () => {
       const state = run([...started, ...stableAt(1000, 526)]);
       for (const grams of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
         expect(track(state, correct(grams))).toEqual(state);
@@ -282,21 +282,21 @@ describe('weight tracker', () => {
       expect(amounts(track(state, correct(0)))).toEqual([0]);
     });
 
-    it('does nothing before Start', () => {
+    it('M3-2: does nothing before Start', () => {
       const idle = run([...stableAt(0, 312)]);
       for (const event of [next, confirm, skip, undo, correct(10)]) {
         expect(track(idle, event)).toEqual(idle);
       }
     });
 
-    it('Start again, or Next while waiting, changes nothing', () => {
+    it('M3-2, M3-4: Start again, or Next while waiting, changes nothing', () => {
       const measuring = run([...started, ...stableAt(1000, 526)]);
       expect(track(measuring, start)).toEqual(measuring);
       const waiting = run([...started, reading(1000, 520, false), next]);
       expect(track(waiting, next)).toEqual(waiting);
     });
 
-    it('confirm does nothing without a proposal', () => {
+    it('M3-4: confirm does nothing without a proposal', () => {
       const state = run([...started, ...stableAt(1000, 526)]);
       expect(track(state, confirm)).toEqual(state);
     });
