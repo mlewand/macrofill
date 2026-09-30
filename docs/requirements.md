@@ -121,7 +121,8 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
   - No taring between ingredients. The app keeps a running weight. A step's amount = reading at this Next minus reading at the previous Next.
   - The reading at Next is the last stable value, or the app waits up to ~1.5 s for the reading to stabilize. The value is shown for confirmation. (The finger on the phone and a spoon resting on the bowl make the raw value at tap time unreliable.)
   - Use the scale's stable flag when the driver provides it; otherwise software stability detection (readings within ±1 g for 1000 ms, both configurable).
-  - A step amount below 0 is not recorded. The app asks for a manual correction or an undo. Negative (net) amounts are deferred.
+  - A step amount below 0 is not recorded. The app asks for a manual correction, reads the scale again on Next, or undoes. Negative (net) amounts are deferred.
+  - A stable scale still flickers by a few tenths of a gram, so an amount slightly below 0 (by up to 0.3 g, configurable) counts as 0.
   - Only stable readings at Start and Next count, so lifting the bowl or a food item and putting it back before Next needs no handling.
   - MVP0 has no tare, lift or new-zero detection. A tare mid-meal produces a negative step, which goes through manual correction. Detection is deferred (see Deferred from MVP0).
   - Scale disconnect (e.g. auto-off after 1-3 min of stable weight): the app reconnects automatically to the same device and the flow continues. If reconnecting fails, the meal is finished with manual weights.
@@ -144,7 +145,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 
 ```typescript
 interface ScaleReading {
-  grams: number;
+  grams?: number;       // absent while the scale shows another unit (M3-14)
   stable?: boolean;     // only when the scale reports it
   timestamp: number;    // ms, monotonic
   raw: Uint8Array;      // original payload, kept for recording/replay
@@ -296,7 +297,7 @@ IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferr
 - **M3-3:** A step's amount is the stable reading at this Next minus the stable reading at the previous Next (or the baseline, for the first step).
 - **M3-4:** If the reading isn't stable when Next is tapped, the tracker waits up to 1.5 s. If it's still unstable after that, the last reading is proposed and the user must confirm it.
 - **M3-5:** The tracker uses the driver's stable flag when there is one. Otherwise a reading counts as stable when readings stay within ±1 g for 1000 ms. Both values are configurable.
-- **M3-6:** If a step amount would be below 0, the tracker doesn't record it. It emits a "needs correction" state, and the user enters the weight manually (M6-5) or undoes. In MVP0 this is also what happens after a mid-meal tare.
+- **M3-6:** If a step amount would be below 0, the tracker doesn't record it. It emits a "needs correction" state, and the user enters the weight manually (M6-5), taps Next to read the scale again, or undoes. In MVP0 this is also what happens after a mid-meal tare. An amount below 0 by no more than a configurable tolerance (default 0.3 g, the scale's flicker while stable) counts as 0.
 - **M3-10:** Property test: with no manual corrections and non-decreasing stable readings, the sum of step amounts equals the last Next reading minus the baseline.
 - **M3-11:** Every raw frame (bytes and receive time) and every user event is recorded. `ReplayScaleDriver` re-parses the stored bytes with the library's current parser, so replaying a recording gives the same step amounts, and a parser fix can be checked against old recordings. If the library doesn't expose the mapping from a parsed frame to a `Reading`, it gets added to the library rather than duplicated in the app.
 - **M3-12:** Tests describe scale behavior with a fluent builder, e.g. `scaleScript().baseline(312).add(214, { overMs: 3000 }).stable().add(18)`. It compiles to plain data (timed readings), which unit tests feed to the tracker and e2e tests pass into the page for `MockScaleDriver`.

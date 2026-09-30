@@ -7,4 +7,5 @@ export * from './meal.js';
 export * from './nutrition.js';
 export * from './picker.js';
 export * from './time.js';
+export * from './tracker.js';
 export * from './today.js';
