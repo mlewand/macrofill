@@ -148,8 +148,21 @@ jobs:
           docker exec host-pg psql -U admin -d postgres \
             -c "CREATE ROLE macrofill LOGIN PASSWORD 'secret';" \
             -c "CREATE DATABASE macrofill OWNER macrofill;"
-      - run: printf 'DATABASE_URL=postgres://macrofill:secret@host-pg:5432/macrofill\nPOSTGRES_NETWORK=pg-net\nAPP_PORT=23874\n' > .env
+      - run: printf 'DATABASE_URL=postgres://macrofill:secret@host-pg:5432/macrofill\nPOSTGRES_NETWORK=pg-net\nAPP_PORT=23874\nSEED_PASSWORD_MLEWAND="first password"\n' > .env
       - run: ./deploy.sh
       - run: curl -sf http://localhost:23874/api/health
-      - run: ./deploy.sh
-      - run: curl -sf http://localhost:23874/api/health
+      # M4-1: the seed set the initial password from .env, and the password command resets it.
+      - name: Log in, reset the password, deploy again
+        run: |
+          login() {
+            curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+              -d "{\"username\":\"mlewand\",\"password\":\"$1\"}" http://localhost:23874/api/login
+          }
+          test "$(login 'first password')" = 204
+          printf 'second password\n' | docker compose -f compose.prod.yml run --rm -T app node password.mjs mlewand
+          test "$(login 'first password')" = 401
+          test "$(login 'second password')" = 204
+          ./deploy.sh
+          curl -sf http://localhost:23874/api/health
+          # The next deploy's seed keeps the reset password.
+          test "$(login 'second password')" = 204
