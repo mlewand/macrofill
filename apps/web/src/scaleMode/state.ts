@@ -90,6 +90,20 @@ export function canNext(state: ScaleModeState): boolean {
   );
 }
 
+/**
+ * Typed grams can replace the current step's reading (M6-5). Not while the scale shows another
+ * unit, unless a Next already captured its reading: the next step would count from a stale one.
+ */
+export function canCorrect(state: ScaleModeState): boolean {
+  const pending = state.tracker.pending?.type;
+  return (
+    !state.manual &&
+    state.tracker.baseline !== undefined &&
+    hasProduct(state) &&
+    (!state.wrongUnit || pending === 'confirming' || pending === 'needsCorrection')
+  );
+}
+
 function hasProduct(state: ScaleModeState): boolean {
   return !isSummary(state.flow) && state.flow.steps[state.flow.current]?.productId !== undefined;
 }
@@ -129,7 +143,7 @@ export function scaleMode(state: ScaleModeState, action: ScaleModeAction): Scale
       return hasProduct(state) ? tracked(state, { type: 'confirm' }) : state;
     case 'correct': {
       const grams = parseGrams(action.grams);
-      if (!grams.ok || !hasProduct(state) || state.tracker.baseline === undefined) return state;
+      if (!grams.ok || !canCorrect(state)) return state;
       return tracked(state, { type: 'correct', grams: grams.grams });
     }
     case 'skip':

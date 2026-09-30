@@ -20,6 +20,7 @@ import { formatGrams } from '../format';
 import { useCreateScaleDriver } from '../scale';
 import { trackerSettings } from './settings';
 import {
+  canCorrect,
   canNext,
   canStart,
   scaleMode,
@@ -282,9 +283,17 @@ function StepScreen(props: {
           )}
 
           {typing || pending?.type === 'needsCorrection' ? (
-            <Correction onUse={(grams) => dispatch({ type: 'correct', grams })} />
+            <Correction
+              disabled={!canCorrect(state)}
+              onUse={(grams) => dispatch({ type: 'correct', grams })}
+            />
           ) : (
-            <button type="button" className="secondary" onClick={() => setTyping(true)}>
+            <button
+              type="button"
+              className="secondary"
+              disabled={!canCorrect(state)}
+              onClick={() => setTyping(true)}
+            >
               {t('scale.enterManually')}
             </button>
           )}
@@ -305,7 +314,7 @@ function StepScreen(props: {
 }
 
 /** M6-5: typed grams for the current step, instead of the scale's. */
-function Correction({ onUse }: { onUse: (grams: string) => void }) {
+function Correction({ disabled, onUse }: { disabled: boolean; onUse: (grams: string) => void }) {
   const { t } = useTranslation();
   const id = useId();
   const [grams, setGrams] = useState('');
@@ -336,7 +345,7 @@ function Correction({ onUse }: { onUse: (grams: string) => void }) {
           {t(`step.problem.${parsed.reason}`)}
         </p>
       )}
-      <button type="submit" className="secondary">
+      <button type="submit" className="secondary" disabled={disabled}>
         {t('scale.useGrams')}
       </button>
     </form>
@@ -369,7 +378,7 @@ function ManualStep(props: { state: ScaleModeState; dispatch: (action: ScaleMode
         type="text"
         inputMode="decimal"
         autoComplete="off"
-        value={draft.fromScale ? '' : draft.grams}
+        value={draft.grams}
         aria-invalid={attempted && problem !== undefined}
         onChange={(event) => dispatch({ type: 'setGrams', grams: event.target.value })}
       />

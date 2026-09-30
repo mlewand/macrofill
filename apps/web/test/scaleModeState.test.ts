@@ -148,6 +148,20 @@ describe('Scale Mode state', () => {
     expect(grams(state)[0]).toBe('214');
   });
 
+  it('M6-5, M6-10: no typed grams while the scale shows another unit, so no stale reference (regression: #27)', () => {
+    const script = scaleScript().baseline(312);
+    let state = apply(play(start(), script.take()), { type: 'start' });
+    // 100 g added while the scale shows ounces: the last gram reading is still 312 g.
+    state = play(state, script.wrongUnit({ forMs: 0 }).take());
+    state = apply(state, { type: 'correct', grams: '100' });
+    expect(state.flow.current).toBe(0);
+    // Back in grams with the 100 g on: the correction now counts from 412 g.
+    state = play(state, script.add(100).stable({ forMs: 0 }).take());
+    state = apply(state, { type: 'correct', grams: '100' });
+    state = apply(play(state, script.add(50).stable({ forMs: 0 }).take()), { type: 'next' });
+    expect(grams(state)).toEqual(['100', '50', '']);
+  });
+
   it('M6-10: while the scale shows another unit, Start and Next are off', () => {
     const script = scaleScript().baseline(312);
     let state = play(start(), script.wrongUnit().take());

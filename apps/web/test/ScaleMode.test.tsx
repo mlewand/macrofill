@@ -232,6 +232,22 @@ describe('Scale Mode', () => {
     ]);
   });
 
+  it('M6-5: undo after the scale drops shows the grams of the step again (regression: #27)', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    act(() => s.driver.drop());
+    fireEvent.click(button(en.step.undo));
+    expect(screen.getByText('Step 1 of 2')).toBeVisible();
+    expect(screen.getByLabelText(en.step.grams)).toHaveValue('214');
+  });
+
+  it('M6-10: grams by hand are off while the scale shows another unit (regression: #27)', async () => {
+    const s = await started();
+    await s.play(s.script.wrongUnit({ forMs: 0 }));
+    expect(button(en.scale.enterManually)).toBeDisabled();
+  });
+
   it('M3-3: skip and undo work on the scale steps', async () => {
     await started();
     fireEvent.click(button(en.step.skip));
