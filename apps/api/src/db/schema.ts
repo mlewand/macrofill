@@ -41,10 +41,23 @@ function oneOf(column: AnyColumn, values: readonly string[]) {
 export const users = pgTable('users', {
   id: uuid().primaryKey(),
   username: text().notNull().unique(),
-  /** argon2id. Null until login exists (M4-1, Phase C). */
+  /** argon2id, encoded (M4-1). Null until the seed or the password command sets one. */
   passwordHash: text(),
   /** IANA name (M2-5). */
   timezone: text().notNull(),
+});
+
+/**
+ * Login sessions (M4-1). The cookie holds a random token; only its SHA-256 is stored, so a
+ * database dump can't be replayed as a login.
+ */
+export const sessions = pgTable('sessions', {
+  id: text().primaryKey(),
+  ownerId: uuid()
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp({ withTimezone: true }).notNull(),
+  expiresAt: timestamp({ withTimezone: true }).notNull(),
 });
 
 export const dailyTargets = pgTable('daily_targets', {

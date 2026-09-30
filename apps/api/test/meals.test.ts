@@ -6,6 +6,7 @@ import { queryRows, type Database } from '../src/db/client';
 import { seedData } from '../src/seed/data';
 import { seed } from '../src/seed/seed';
 import { createMigratedTestDatabase } from './support/db';
+import { signedIn, type TestApp } from './support/session';
 
 const owner = seedData.users[0]!.user;
 const [curdRecipe] = seedData.recipes.filter((r) => r.name.en === 'Curd');
@@ -42,12 +43,12 @@ function request(overrides: Partial<SaveMealRequest['meal']> = {}): SaveMealRequ
 
 describe('POST /api/meals', () => {
   let database: Database;
-  let app: ReturnType<typeof createApp>;
+  let app: TestApp;
 
   beforeEach(async () => {
     database = await createMigratedTestDatabase();
     await seed(database.db);
-    app = createApp({ db: database.db });
+    app = await signedIn(createApp({ db: database.db }), database.db);
   });
 
   afterEach(async () => {
@@ -242,26 +243,5 @@ describe('POST /api/meals', () => {
         }
       }
     });
-  });
-});
-
-describe('Phase A stub auth', () => {
-  let database: Database;
-
-  afterEach(async () => {
-    await database.close();
-  });
-
-  it('acts as the seeded user; without that user, api routes return 401', async () => {
-    database = await createMigratedTestDatabase();
-    const app = createApp({ db: database.db });
-    const res = await app.request('/api/meals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request()),
-    });
-    expect(res.status).toBe(401);
-    // Health stays outside auth (M4-2 exempts it later).
-    expect((await app.request('/api/health')).status).toBe(200);
   });
 });

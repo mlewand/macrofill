@@ -8,14 +8,46 @@ import {
   recipes,
   users,
 } from '../db/schema';
+import { assertSettablePassword, hashPassword } from '../auth/password';
+import { createAuthRepository } from '../repositories/auth';
 import { seedData } from './data';
+
+/** Initial passwords by username, from `SEED_PASSWORD_<USERNAME>` (see `seedPasswordsFromEnv`). */
+export type SeedPasswords = Readonly<Record<string, string>>;
+
+/** The env variable with a user's initial password: `mlewand` → `SEED_PASSWORD_MLEWAND`. */
+export function seedPasswordVariable(username: string): string {
+  return `SEED_PASSWORD_${username.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+}
+
+/** The initial passwords set in `env` for the seed's users. */
+export function seedPasswordsFromEnv(
+  env: Record<string, string | undefined>,
+  data = seedData,
+): Record<string, string> {
+  const passwords: Record<string, string> = {};
+  for (const { user } of data.users) {
+    const password = env[seedPasswordVariable(user.username)];
+    if (password !== undefined && password !== '') passwords[user.username] = password;
+  }
+  return passwords;
+}
 
 /**
  * M4-5: loads the seed data. Idempotent: every row is upserted by its fixed id, so running it
- * again leaves the same state. Password hashes are never written here (M4-1 sets them later).
+ * again leaves the same state.
+ *
+ * M4-1: `passwords` are initial passwords. One is hashed and stored only for a user who has no
+ * password yet, so running the seed again keeps the hash, and a password reset survives deploys.
+ * Returns the users who still have no password (they can't log in).
  */
-export async function seed(db: Db, data = seedData): Promise<void> {
-  await db.transaction(async (tx) => {
+export async function seed(
+  db: Db,
+  data = seedData,
+  passwords: SeedPasswords = {},
+): Promise<{ withoutPassword: string[] }> {
+  for (const password of Object.values(passwords)) assertSettablePassword(password);
+  return db.transaction(async (tx) => {
     for (const { user, targets } of data.users) {
       const { username, timezone } = user;
       await tx
@@ -74,5 +106,18 @@ export async function seed(db: Db, data = seedData): Promise<void> {
           .onConflictDoUpdate({ target: recipeSteps.id, set: row });
       }
     }
+
+    const auth = createAuthRepository(tx);
+    const withoutPassword: string[] = [];
+    for (const { user } of data.users) {
+      const password = passwords[user.username];
+      if (password !== undefined) {
+        await auth.setInitialPasswordHash(user.username, await hashPassword(password));
+      }
+      if ((await auth.userByUsername(user.username))?.passwordHash == null) {
+        withoutPassword.push(user.username);
+      }
+    }
+    return { withoutPassword };
   });
 }
