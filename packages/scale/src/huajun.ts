@@ -89,9 +89,10 @@ export class HuajunDriver implements ScaleDriver {
       }
       throw error;
     }
-    this.#deviceId ??= deviceIdOf(transport);
     // A newer connect() replaced this one meanwhile: let that one report, and don't leak this one.
     if (this.#scale !== scale) return scale.disconnect();
+    // Only the connection that stays active names the device to reconnect to (M6-6).
+    this.#deviceId ??= deviceIdOf(transport);
     this.#setState('connected');
   }
 

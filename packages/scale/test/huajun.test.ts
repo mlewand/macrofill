@@ -76,10 +76,12 @@ class FakeTransport implements ScaleTransport {
   onData: ((data: Uint8Array) => void) | undefined;
   #onDisconnect: (() => void)[] = [];
   failConnect = false;
-  connect() {
-    if (this.failConnect) return Promise.reject(new Error('no device'));
+  /** Holds connect() until it settles, for overlapping attempts. */
+  gate: Promise<void> | undefined;
+  async connect() {
+    await this.gate;
+    if (this.failConnect) throw new Error('no device');
     this.deviceId = this.device;
-    return Promise.resolve();
   }
   disconnects = 0;
   disconnect() {
@@ -251,6 +253,27 @@ describe('HuajunDriver', () => {
     await driver.connect();
     expect(deviceIds).toEqual([undefined, 'dev-1']);
     expect(states).toEqual(['connected', 'disconnected', 'connected']);
+  });
+
+  it('M6-6: only the connection that stays active is remembered (regression: #36)', async () => {
+    let openA!: () => void;
+    let openB!: () => void;
+    const a = new FakeTransport('dev-A');
+    a.gate = new Promise((resolve) => (openA = resolve));
+    const b = new FakeTransport('dev-B');
+    b.gate = new Promise((resolve) => (openB = resolve));
+    const deviceIds: (string | undefined)[] = [];
+    const { driver } = driverWith([a, b, new FakeTransport('dev-B')], deviceIds);
+    const first = driver.connect();
+    const second = driver.connect();
+    // The replaced attempt finishes first.
+    openA();
+    await first;
+    openB();
+    await second;
+    b.drop();
+    await driver.connect();
+    expect(deviceIds).toEqual([undefined, undefined, 'dev-B']);
   });
 
   it('M6-6: a failed reconnect keeps the device for the next attempt', async () => {
