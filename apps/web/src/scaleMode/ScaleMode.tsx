@@ -19,6 +19,8 @@ import { isSummary, stepProblem } from '../directEntry/state';
 import { formatGrams } from '../format';
 import type { SaveResult } from '../outbox/Outbox';
 import { useCreateScaleDriver } from '../scale';
+import { useTrack } from '../events/track';
+import { sinceStart, useFlowEvents } from '../events/useFlowEvents';
 import { reconnect } from './reconnect';
 import { reconnectSettings, trackerSettings, type ReconnectSettings } from './settings';
 import { belongsTo, lastUser } from '../session';
@@ -55,8 +57,18 @@ export function ScaleMode({
   owner,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe>();
+  const track = useTrack();
   if (recipe === undefined) {
-    return <RecipePicker recipes={catalog.recipes} onPick={setRecipe} onCancel={onCancel} />;
+    return (
+      <RecipePicker
+        recipes={catalog.recipes}
+        onPick={(picked) => {
+          track('flow_started', { inputMethod: 'scale' });
+          setRecipe(picked);
+        }}
+        onCancel={onCancel}
+      />
+    );
   }
   return (
     <Session
@@ -110,6 +122,7 @@ function Session(props: {
         trackerConfig: state.tracker.config,
       }),
   );
+  const track = useTrack();
   // The state as last rendered: what the user saw when tapping.
   const shown = useRef(state);
   useEffect(() => {
@@ -120,14 +133,39 @@ function Session(props: {
    * back, or that go to the flow only (after finishing by hand), change nothing there.
    */
   const tap = (action: ScaleModeAction) => {
+    const before = shown.current;
+    const after = scaleMode(before, action);
     const event = trackerEvent(action);
-    if (event && scaleMode(shown.current, action).tracker !== shown.current.tracker) {
-      recorder.event(event, performance.now());
+    if (event && after.tracker !== before.tracker) recorder.event(event, performance.now());
+    // M7-8: Undo on the first step goes back to before Start; the meal's step doesn't change, so
+    // the flow's events miss it.
+    if (before.tracker.baseline !== undefined && after.tracker.baseline === undefined) {
+      track('step_undone', { inputMethod: 'scale', step: 0 });
     }
     dispatch(action);
   };
   const [connection, setConnection] = useState<Connection>('idle');
   const [reconnectConfig] = useState(props.reconnect);
+  const { startedAt } = state.flow;
+  // The first step is shown from Start: connecting and the bowl don't count (M7-8).
+  useFlowEvents(state.flow, state.tracker.baseline !== undefined);
+  /** Saved: leaving the page now abandons nothing. */
+  const finished = useRef(false);
+  // A Scale Mode meal isn't kept across a reload: leaving the page abandons it (M7-8).
+  useEffect(() => {
+    const leaving = (event: PageTransitionEvent) => {
+      // Kept in the back-forward cache, the page (and the meal) may come back.
+      if (event.persisted || finished.current) return;
+      finished.current = true;
+      track('flow_abandoned', { inputMethod: 'scale', durationMs: sinceStart(startedAt) });
+    };
+    // In the capture phase: before App's own pagehide listener sends the last batch, so this
+    // event is in it.
+    window.addEventListener('pagehide', leaving, { capture: true });
+    return () => window.removeEventListener('pagehide', leaving, { capture: true });
+  }, [track, startedAt]);
+  /** When the scale dropped, for how long reconnecting took (M7-8). */
+  const droppedAt = useRef<number | undefined>(undefined);
   // Who the meal belongs to, fixed when the session starts (see Summary).
   const [owner] = useState(props.owner);
   const everConnected = useRef(false);
@@ -156,6 +194,11 @@ function Session(props: {
         everConnected.current = true;
         // An attempt that was under way when the user chose typed grams: not needed any more.
         if (byHand.current) return void driver.disconnect().catch(() => undefined);
+        if (droppedAt.current !== undefined) {
+          const durationMs = Math.max(0, Math.round(performance.now() - droppedAt.current));
+          droppedAt.current = undefined;
+          track('scale_reconnected', { durationMs });
+        }
         reconnecting.current = undefined;
         // Start and Next stay off until the first reading from this connection (see `stale`).
         setConnection('connected');
@@ -163,6 +206,8 @@ function Session(props: {
         // M6-6: keep the session and reconnect to the same device, without the chooser.
         const controller = new AbortController();
         reconnecting.current = controller;
+        droppedAt.current = performance.now();
+        track('scale_disconnected', {});
         setConnection('reconnecting');
         dispatch({ type: 'dropped' });
         void reconnect(() => driver.connect(), reconnectConfig, controller.signal).then(
@@ -178,7 +223,7 @@ function Session(props: {
       reconnecting.current?.abort();
       reconnecting.current = undefined;
     };
-  }, [driver, reconnectConfig, finishByHand]);
+  }, [driver, reconnectConfig, finishByHand, track]);
 
   // Disconnect when the session ends (saved, cancelled or left). Safe before any connect.
   useEffect(() => () => void driver.disconnect().catch(() => undefined), [driver]);
@@ -213,7 +258,14 @@ function Session(props: {
           dispatch={(action) => {
             if (action.type === 'undo' || action.type === 'editGrams') tap(action);
           }}
-          onSaved={props.onSaved}
+          onSaved={(result) => {
+            finished.current = true;
+            track('flow_finished', {
+              inputMethod: 'scale',
+              durationMs: sinceStart(startedAt),
+            });
+            props.onSaved(result);
+          }}
           recording={() => recorder.recording()}
           owner={owner}
           // Sent only for a known owner who's still logged in (another tab may have changed it).

@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiContext, ApiError, guardApi, useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
+import { createUsageTracker, TrackContext } from './events/track';
 import { Login } from './Login';
 import { OutboxProvider, useSync, type SaveResult } from './outbox/Outbox';
 import { ScaleMode } from './scaleMode/ScaleMode';
 import { belongsToCurrentUser, lastUser, onUserChangedElsewhere, rememberUser } from './session';
 import { useDraftStore, type Draft } from './storage/drafts';
 import { TodayView } from './today/TodayView';
+import { APP_VERSION } from './version';
 
 /** How long the app waits to learn who's logged in before it shows anything. */
 const ME_WAIT_MS = 5000;
@@ -31,6 +33,34 @@ export function App() {
   const [needsLogin, setNeedsLogin] = useState(false);
   const [logins, setLogins] = useState(0);
   const baseApi = useApi();
+  // M7-8: one tracker per page load. Events go out in batches, and when the page is hidden; a
+  // failed send keeps them for the next one. Tracking never blocks or breaks the app.
+  const [tracker] = useState(() =>
+    createUsageTracker({
+      send: (events) => baseApi.sendEvents(events),
+      // Refused for good (invalid): dropped. No session, a timeout, too many requests, a server
+      // error or no connection: kept for the next send.
+      retryable: (error) =>
+        !(error instanceof ApiError) || ![400, 403, 404, 409, 413, 422].includes(error.status),
+      appVersion: APP_VERSION,
+      clientSessionId: crypto.randomUUID(),
+      newId: () => crypto.randomUUID(),
+    }),
+  );
+  useEffect(() => {
+    const hidden = () => {
+      if (document.visibilityState === 'hidden') void tracker.flush();
+    };
+    // Leaving the page: the last events go out at once (Scale Mode's flow abandoned, for one),
+    // also while the batch sent when the page was hidden is still on its way.
+    const leaving = () => tracker.leave();
+    document.addEventListener('visibilitychange', hidden);
+    window.addEventListener('pagehide', leaving);
+    return () => {
+      document.removeEventListener('visibilitychange', hidden);
+      window.removeEventListener('pagehide', leaving);
+    };
+  }, [tracker]);
   const api = useMemo(() => guardApi(baseApi, () => setNeedsLogin(true)), [baseApi]);
   const drafts = useDraftStore();
   const [user, setUser] = useState(lastUser);
@@ -236,93 +266,95 @@ export function App() {
   const noStart = user === undefined || resumeWaiting;
 
   return (
-    <ApiContext value={api}>
-      <OutboxProvider ready={confirmed} readyNow={confirmedNow} offline={unreachable}>
-        <SyncAfterLogin logins={logins} user={user} confirmed={confirmed} />
-        <main hidden={needsLogin}>
-          {screen === 'home' && (
-            // Keyed by logins, so what failed without a session loads again after one.
-            <section key={logins}>
-              <h1>{t('app.name')}</h1>
-              {/* A meal must belong to someone: none starts until the user is known (M5-8). */}
-              {user === undefined && (
-                <>
+    <TrackContext value={tracker.track}>
+      <ApiContext value={api}>
+        <OutboxProvider ready={confirmed} readyNow={confirmedNow} offline={unreachable}>
+          <SyncAfterLogin logins={logins} user={user} confirmed={confirmed} />
+          <main hidden={needsLogin}>
+            {screen === 'home' && (
+              // Keyed by logins, so what failed without a session loads again after one.
+              <section key={logins}>
+                <h1>{t('app.name')}</h1>
+                {/* A meal must belong to someone: none starts until the user is known (M5-8). */}
+                {user === undefined && (
+                  <>
+                    <p role="alert" className="problem">
+                      {t('home.userUnknown')}
+                    </p>
+                    <button type="button" className="secondary" onClick={recheckUser}>
+                      {t('app.retry')}
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={noStart}
+                  onClick={() => setScreen('scaleMode')}
+                >
+                  {t('home.weighMeal')}
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={noStart}
+                  onClick={() => setScreen('directEntry')}
+                >
+                  {t('home.logMeal')}
+                </button>
+                {user !== undefined && <TodayView recheckUser={recheckUser} />}
+              </section>
+            )}
+            {screen === 'scaleMode' && (
+              <WithCatalog>
+                {(catalog) => (
+                  <ScaleMode
+                    catalog={catalog}
+                    owner={user}
+                    onSaved={showSaved}
+                    onCancel={() => setScreen('home')}
+                  />
+                )}
+              </WithCatalog>
+            )}
+            {screen === 'directEntry' && (
+              <WithCatalog>
+                {(catalog) => (
+                  <DirectEntry
+                    catalog={catalog}
+                    owner={user}
+                    onSaved={(result) => {
+                      setResume(undefined);
+                      showSaved(result);
+                    }}
+                    onCancel={() => leaveDirectEntry('home')}
+                    {...(resume ? { resume } : {})}
+                  />
+                )}
+              </WithCatalog>
+            )}
+            {screen === 'saved' && (
+              <section>
+                <h1 role="status">
+                  {savedResult === 'refused' ? t('saved.refusedTitle') : t('saved.title')}
+                </h1>
+                {savedResult === 'refused' && (
                   <p role="alert" className="problem">
-                    {t('home.userUnknown')}
+                    {t('saved.refused')}
                   </p>
-                  <button type="button" className="secondary" onClick={recheckUser}>
-                    {t('app.retry')}
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                className="primary"
-                disabled={noStart}
-                onClick={() => setScreen('scaleMode')}
-              >
-                {t('home.weighMeal')}
-              </button>
-              <button
-                type="button"
-                className="primary"
-                disabled={noStart}
-                onClick={() => setScreen('directEntry')}
-              >
-                {t('home.logMeal')}
-              </button>
-              {user !== undefined && <TodayView recheckUser={recheckUser} />}
-            </section>
-          )}
-          {screen === 'scaleMode' && (
-            <WithCatalog>
-              {(catalog) => (
-                <ScaleMode
-                  catalog={catalog}
-                  owner={user}
-                  onSaved={showSaved}
-                  onCancel={() => setScreen('home')}
-                />
-              )}
-            </WithCatalog>
-          )}
-          {screen === 'directEntry' && (
-            <WithCatalog>
-              {(catalog) => (
-                <DirectEntry
-                  catalog={catalog}
-                  owner={user}
-                  onSaved={(result) => {
-                    setResume(undefined);
-                    showSaved(result);
-                  }}
-                  onCancel={() => leaveDirectEntry('home')}
-                  {...(resume ? { resume } : {})}
-                />
-              )}
-            </WithCatalog>
-          )}
-          {screen === 'saved' && (
-            <section>
-              <h1 role="status">
-                {savedResult === 'refused' ? t('saved.refusedTitle') : t('saved.title')}
-              </h1>
-              {savedResult === 'refused' && (
-                <p role="alert" className="problem">
-                  {t('saved.refused')}
-                </p>
-              )}
-              {/* M5-9: kept on the device until the server has it. */}
-              {savedResult === 'pending' && <p>{t('saved.pending')}</p>}
-              <button type="button" className="primary" onClick={() => setScreen('home')}>
-                {t('saved.done')}
-              </button>
-            </section>
-          )}
-        </main>
-        {needsLogin && <Login onLoggedIn={loggedIn} />}
-      </OutboxProvider>
-    </ApiContext>
+                )}
+                {/* M5-9: kept on the device until the server has it. */}
+                {savedResult === 'pending' && <p>{t('saved.pending')}</p>}
+                <button type="button" className="primary" onClick={() => setScreen('home')}>
+                  {t('saved.done')}
+                </button>
+              </section>
+            )}
+          </main>
+          {needsLogin && <Login onLoggedIn={loggedIn} />}
+        </OutboxProvider>
+      </ApiContext>
+    </TrackContext>
   );
 }
 

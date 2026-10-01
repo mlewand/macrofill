@@ -19,6 +19,9 @@ if [ ! -f .env ]; then
 fi
 
 step 'Building the image'
+# The web build's version, sent with usage events (M7-8).
+APP_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo dev)
+export APP_VERSION
 compose build
 
 step 'Applying migrations'

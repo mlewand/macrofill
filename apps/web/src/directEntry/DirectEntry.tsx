@@ -13,6 +13,8 @@ import { useTranslation } from 'react-i18next';
 import { NutritionTable } from '../NutritionTable';
 import { useSaveMeal, type SaveResult } from '../outbox/Outbox';
 import { belongsTo, lastUser } from '../session';
+import { sinceStart, useFlowEvents } from '../events/useFlowEvents';
+import { useTrack } from '../events/track';
 import { useDraftStore, type Draft } from '../storage/drafts';
 import {
   directEntry,
@@ -42,11 +44,13 @@ interface Props {
  */
 export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Props) {
   const drafts = useDraftStore();
+  const track = useTrack();
   // A session whose save was sent is resumed as it was: only resending that request is left.
   const [resumed] = useState(() =>
     resume?.sent ? resume.state : resume && resumable(resume.state, catalog),
   );
   const [state, setState] = useState<DirectEntryState | undefined>(resumed);
+  useFlowEvents(state);
   const [sent, setSent] = useState(resumed && resume?.sent);
   // The user this session belongs to, fixed when it starts: another tab may change who's logged in.
   const [owner] = useState(() => resume?.username ?? props.owner);
@@ -83,12 +87,18 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Pr
   // Saved: the kept session goes, tried twice. If it still came back after a reload, it's frozen on
   // the request just saved, and resending that is harmless (M4-6).
   const saved = async (result: SaveResult) => {
+    if (state) {
+      track('flow_finished', { inputMethod: 'direct', durationMs: sinceStart(state.startedAt) });
+    }
     if (!(await drafts.clear())) await drafts.clear();
     onSaved(result);
   };
   /** Discarded only once the kept session is gone; otherwise a reload would bring it back. */
   const discard = async (): Promise<boolean> => {
     if (!(await drafts.clear())) return false;
+    if (state) {
+      track('flow_abandoned', { inputMethod: 'direct', durationMs: sinceStart(state.startedAt) });
+    }
     onCancel();
     return true;
   };
@@ -97,7 +107,10 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Pr
     return (
       <RecipePicker
         recipes={catalog.recipes}
-        onPick={(recipe) => setState(start(recipe, catalog))}
+        onPick={(recipe) => {
+          track('flow_started', { inputMethod: 'direct' });
+          setState(start(recipe, catalog));
+        }}
         onCancel={onCancel}
       />
     );

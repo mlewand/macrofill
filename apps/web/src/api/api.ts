@@ -7,6 +7,7 @@ import {
   type SaveMealRequest,
   type SaveMealResponse,
   type Today,
+  type UsageEvent,
 } from '@macrofill/domain';
 import { createContext, useContext } from 'react';
 import { createApiClient, type ApiClient } from './client';
@@ -24,6 +25,8 @@ export interface Api {
   today: () => Promise<Today>;
   /** Deletes a consumption entry (M7-4). Resolves also when it's already gone. */
   deleteEntry: (id: string) => Promise<void>;
+  /** M7-8, M4-10: a batch of usage events. Resolves once the server has them. */
+  sendEvents: (events: UsageEvent[]) => Promise<void>;
 }
 
 /** How long a save request may take before it counts as unanswered. */
@@ -71,6 +74,15 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
       const res = await client['consumption-entries'][':id'].$delete({ param: { id } });
       if (res.status !== 204 && res.status !== 404) throw new ApiError(res.status);
     },
+    async sendEvents(events) {
+      // keepalive: it still goes out when the page is being left. And like a save, it fails after
+      // a while without an answer, so the tracker can send again.
+      const res = await client.events.$post(
+        { json: { events } },
+        { init: { keepalive: true, signal: AbortSignal.timeout(SAVE_TIMEOUT_MS) } },
+      );
+      if (res.status !== 204) throw new ApiError(res.status);
+    },
   };
 }
 
@@ -96,6 +108,8 @@ export function guardApi(api: Api, onUnauthorized: () => void): Api {
     saveMeal: guard(api.saveMeal),
     today: guard(api.today),
     deleteEntry: guard(api.deleteEntry),
+    // Not guarded: tracking never asks to log in. Events wait for a session (M7-8).
+    sendEvents: api.sendEvents,
   };
 }
 

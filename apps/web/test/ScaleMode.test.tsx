@@ -7,6 +7,7 @@ import { ApiContext, type Api } from '../src/api/api';
 import { App } from '../src/App';
 import en from '../src/i18n/en.json';
 import { ScaleContext } from '../src/scale';
+import { TrackContext, type Track } from '../src/events/track';
 import { ScaleMode } from '../src/scaleMode/ScaleMode';
 import { fakeApi } from './support/api';
 
@@ -73,18 +74,21 @@ async function session({ connect = true } = {}) {
   const driver = new MockScaleDriver();
   const api = fakeApi({ catalog: () => Promise.resolve(catalog) });
   const onSaved = vi.fn();
+  const track = vi.fn<Track>();
   const view = render(
     <ApiContext value={api}>
-      <ScaleContext value={() => driver}>
-        <ScaleMode
-          catalog={catalog}
-          onSaved={onSaved}
-          onCancel={vi.fn()}
-          owner="mlewand"
-          tracker={{ stableWaitMs: 60 }}
-          reconnect={{ firstDelayMs: 5, maxDelayMs: 10, giveUpAfterMs: 50 }}
-        />
-      </ScaleContext>
+      <TrackContext value={track}>
+        <ScaleContext value={() => driver}>
+          <ScaleMode
+            catalog={catalog}
+            onSaved={onSaved}
+            onCancel={vi.fn()}
+            owner="mlewand"
+            tracker={{ stableWaitMs: 60 }}
+            reconnect={{ firstDelayMs: 5, maxDelayMs: 10, giveUpAfterMs: 50 }}
+          />
+        </ScaleContext>
+      </TrackContext>
     </ApiContext>,
   );
   fireEvent.click(button('Curd bowl'));
@@ -94,7 +98,7 @@ async function session({ connect = true } = {}) {
   }
   const script = scaleScript({ intervalMs: 5 });
   const play = (s: typeof script) => act(() => driver.play(s.take()));
-  return { driver, api, onSaved, view, script, play };
+  return { driver, api, onSaved, view, script, play, track };
 }
 
 /** Bowl on, Start. */
@@ -282,6 +286,100 @@ describe('Scale Mode', () => {
     await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
     const request = vi.mocked(s.api.saveMeal).mock.calls[0]![0];
     expect(request.recording!.events.map((e) => e.type)).toEqual(['start', 'next']);
+  });
+
+  it('M7-8: Scale Mode tracks its flow, steps, a manual correction, and a scale disconnect and reconnect', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    act(() => s.driver.drop());
+    await screen.findByText(en.scale.status.connected);
+    await s.play(s.script.stable({ forMs: 0 }));
+    fireEvent.click(button(en.scale.enterManually));
+    fireEvent.change(screen.getByLabelText(en.step.grams), { target: { value: '20' } });
+    fireEvent.click(button(en.scale.useGrams));
+    fireEvent.click(button(en.summary.save));
+    await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
+    const tracked = s.track.mock.calls.map(([name, props]) => [name, props]);
+    expect(tracked.map(([name]) => name)).toEqual([
+      'flow_started',
+      'step_completed',
+      'scale_disconnected',
+      'scale_reconnected',
+      'step_completed',
+      'manual_correction',
+      'flow_finished',
+    ]);
+    expect(tracked[1]![1]).toMatchObject({ inputMethod: 'scale', step: 0, weightSource: 'scale' });
+    expect(tracked[3]![1]).toEqual({ durationMs: expect.any(Number) as number });
+    expect(tracked[4]![1]).toMatchObject({ step: 1, weightSource: 'manual' });
+  });
+
+  it('M7-8: the first scale step counts its time from Start, not from the recipe pick (regression: #52)', async () => {
+    // The real clock, moved ahead by hand where the test says time passes.
+    const real = performance.now.bind(performance);
+    let ahead = 0;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => real() + ahead);
+    try {
+      const s = await session();
+      // Connecting and putting the bowl on take a while.
+      ahead = 60_000;
+      await s.play(s.script.baseline(312, { forMs: 0 }));
+      fireEvent.click(button(en.scale.start));
+      ahead = 65_000;
+      await s.play(s.script.add(214).stable({ forMs: 0 }));
+      fireEvent.click(button(en.step.next));
+      const completed = s.track.mock.calls.find(([name]) => name === 'step_completed');
+      const durationMs = (completed?.[1] as { durationMs: number }).durationMs;
+      expect(durationMs).toBeGreaterThanOrEqual(5000);
+      expect(durationMs).toBeLessThan(10_000);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('M7-8: leaving the page in the middle of a Scale Mode meal tracks flow abandoned (regression: #52)', async () => {
+    const s = await started();
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(s.track).toHaveBeenLastCalledWith('flow_abandoned', {
+      inputMethod: 'scale',
+      durationMs: expect.any(Number) as number,
+    });
+  });
+
+  it('M7-8: a page kept in the back-forward cache has not abandoned its meal (regression: #52)', async () => {
+    const s = await started();
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+    });
+    expect(s.track).not.toHaveBeenCalledWith('flow_abandoned', expect.anything());
+    // Back from the cache, then really left.
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    });
+    expect(s.track).toHaveBeenLastCalledWith('flow_abandoned', expect.anything());
+  });
+
+  it('M7-8: Undo on the first step, back to before Start, tracks step undone (regression: #52)', async () => {
+    const s = await started();
+    fireEvent.click(button(en.step.undo));
+    expect(button(en.scale.start)).toBeInTheDocument();
+    expect(s.track).toHaveBeenLastCalledWith('step_undone', { inputMethod: 'scale', step: 0 });
+  });
+
+  it('M7-8: leaving the page after the meal is saved tracks nothing more', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    fireEvent.click(button(en.step.skip));
+    fireEvent.click(button(en.summary.save));
+    await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(s.track).toHaveBeenLastCalledWith('flow_finished', expect.anything());
   });
 
   it('M5-8: a Scale Mode meal with no known owner is not sent (regression: #37)', async () => {
@@ -516,5 +614,27 @@ describe('Home', () => {
     fireEvent.click(await screen.findByRole('button', { name: en.home.weighMeal }));
     const recipes = await screen.findByRole('heading', { name: en.recipes.title });
     expect(within(recipes.parentElement!).getByRole('button', { name: 'Curd bowl' })).toBeVisible();
+  });
+
+  it('M7-8: leaving the page mid Scale Mode meal sends flow abandoned with the last batch (regression: #52)', async () => {
+    const api: Api = fakeApi({ catalog: () => Promise.resolve(catalog) });
+    const driver = new MockScaleDriver();
+    render(
+      <ApiContext value={api}>
+        <ScaleContext value={() => driver}>
+          <App />
+        </ScaleContext>
+      </ApiContext>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: en.home.weighMeal }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    await vi.waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    expect(vi.mocked(api.sendEvents).mock.calls[0]![0].map((e) => e.name)).toEqual([
+      'flow_started',
+      'flow_abandoned',
+    ]);
   });
 });

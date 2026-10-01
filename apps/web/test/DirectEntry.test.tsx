@@ -121,6 +121,109 @@ async function openCurdBowl(api?: Api) {
   return used;
 }
 
+/** The page goes to the background: the app sends what it tracked (M7-8). */
+function hidePage() {
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  visibility.mockRestore();
+}
+
+describe('usage events (M7-8)', () => {
+  const sentEvents = (api: Api) =>
+    vi.mocked(api.sendEvents).mock.calls.flatMap(([events]) => events);
+
+  it('M7-8: a Direct Entry meal tracks flow started, each step and flow finished, sent in a batch to POST /events', async () => {
+    const api = await openCurdBowl();
+    typeGrams('200');
+    click(en.step.next);
+    typeGrams('50');
+    click(en.step.next);
+    click(en.summary.save);
+    await screen.findByText(en.saved.title);
+    hidePage();
+    await vi.waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    const events = sentEvents(api);
+    expect(events.map((e) => e.name)).toEqual([
+      'flow_started',
+      'step_completed',
+      'step_completed',
+      'flow_finished',
+    ]);
+    expect(events[1]!.props).toMatchObject({
+      inputMethod: 'direct',
+      step: 0,
+      weightSource: 'manual',
+    });
+    expect(events[3]!.props).toMatchObject({ inputMethod: 'direct' });
+    // One page load, one client session; each event its own id.
+    expect(new Set(events.map((e) => e.clientSessionId)).size).toBe(1);
+    expect(new Set(events.map((e) => e.id)).size).toBe(events.length);
+    expect(events.every((e) => e.appVersion.length > 0)).toBe(true);
+  });
+
+  it('M7-8: a batch the server refuses as invalid is dropped, not resent (regression: #52)', async () => {
+    const sendEvents = vi
+      .fn<Api['sendEvents']>()
+      .mockRejectedValueOnce(new ApiError(400))
+      .mockResolvedValue();
+    await openCurdBowl(fakeApi(undefined, { sendEvents }));
+    hidePage();
+    await vi.waitFor(() => expect(sendEvents).toHaveBeenCalledTimes(1));
+    typeGrams('200');
+    click(en.step.next);
+    hidePage();
+    await vi.waitFor(() => expect(sendEvents).toHaveBeenCalledTimes(2));
+    expect(sendEvents.mock.calls[1]![0].map((e) => e.name)).toEqual(['step_completed']);
+  });
+
+  it('M7-8: leaving the page sends what was tracked', async () => {
+    const api = await openCurdBowl();
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    await vi.waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    expect(sentEvents(api).map((e) => e.name)).toEqual(['flow_started']);
+  });
+
+  it('M7-8: discarding a meal tracks flow abandoned', async () => {
+    const api = await openCurdBowl();
+    typeGrams('200');
+    click(en.step.next);
+    click(en.step.discard);
+    click(en.step.confirmDiscard);
+    await screen.findByRole('button', { name: en.home.logMeal });
+    hidePage();
+    await vi.waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    expect(sentEvents(api).map((e) => e.name)).toEqual([
+      'flow_started',
+      'step_completed',
+      'flow_abandoned',
+    ]);
+  });
+
+  it('M7-8: tracking never breaks the app; events a failed send keeps go out with the next one', async () => {
+    const sendEvents = vi
+      .fn<Api['sendEvents']>()
+      .mockRejectedValueOnce(new TypeError('offline'))
+      .mockResolvedValue();
+    const api = await openCurdBowl(fakeApi(undefined, { sendEvents }));
+    hidePage();
+    await vi.waitFor(() => expect(sendEvents).toHaveBeenCalledTimes(1));
+    typeGrams('200');
+    click(en.step.next);
+    expect(screen.getByText('Step 2 of 2')).toBeInTheDocument();
+    hidePage();
+    await vi.waitFor(() => expect(sendEvents).toHaveBeenCalledTimes(2));
+    expect(sendEvents.mock.calls[1]![0].map((e) => e.name)).toEqual([
+      'flow_started',
+      'step_completed',
+    ]);
+    expect(api.sendEvents).toBe(sendEvents);
+  });
+});
+
 describe('Direct Entry', () => {
   it('M5-3: each step focuses the grams input, so no extra tap is needed', async () => {
     await openCurdBowl();
