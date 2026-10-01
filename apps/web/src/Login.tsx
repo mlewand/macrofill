@@ -1,11 +1,12 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from './api/api';
+import { rememberUser } from './session';
 
 type Problem = 'invalid' | 'failed';
 
 /** M4-1: the login form, shown over the app whenever the api asks for a session (M4-2). */
-export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
+export function Login({ onLoggedIn }: { onLoggedIn: (username: string) => void }) {
   const { t } = useTranslation();
   const api = useApi();
   const titleId = useId();
@@ -22,7 +23,8 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     setProblem(undefined);
     try {
       if ((await api.login(username, password)) === 'ok') {
-        onLoggedIn();
+        rememberUser(username);
+        onLoggedIn(username);
         return;
       }
       setProblem('invalid');
