@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import pg from 'pg';
-import { seed } from '../seed/seed';
+import { seed, type SeedPasswords } from '../seed/seed';
 import type { Database } from './client';
 
 /**
@@ -46,12 +46,16 @@ export async function createDatabaseIfMissing(admin: AdminClient, name: string):
 }
 
 /** Empties the database (both schemas), then migrates and seeds it. */
-export async function resetDatabase(database: Database, migrationsDir: string): Promise<void> {
+export async function resetDatabase(
+  database: Database,
+  migrationsDir: string,
+  passwords: SeedPasswords = {},
+): Promise<void> {
   await database.db.execute(sql`drop schema if exists drizzle cascade`);
   await database.db.execute(sql`drop schema if exists public cascade`);
   await database.db.execute(sql`create schema public`);
   await database.migrate(migrationsDir);
-  await seed(database.db);
+  await seed(database.db, undefined, passwords);
 }
 
 /**
@@ -63,6 +67,8 @@ export async function prepareE2eDatabase(options: {
   migrationsDir: string;
   connectAdmin: (adminUrl: string) => Promise<AdminClient>;
   connectDatabase: (databaseUrl: string) => Database;
+  /** Initial passwords for the seed, so e2e can log in. */
+  passwords?: SeedPasswords;
 }): Promise<{ name: string; created: boolean }> {
   const name = e2eDatabaseName(options.databaseUrl);
   const adminUrl = new URL(options.databaseUrl);
@@ -79,7 +85,7 @@ export async function prepareE2eDatabase(options: {
   }
   const database = options.connectDatabase(options.databaseUrl);
   try {
-    await resetDatabase(database, options.migrationsDir);
+    await resetDatabase(database, options.migrationsDir, options.passwords);
   } finally {
     await database.close();
   }

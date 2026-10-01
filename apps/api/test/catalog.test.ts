@@ -6,6 +6,7 @@ import type { Database } from '../src/db/client';
 import { seedData } from '../src/seed/data';
 import { seed } from '../src/seed/seed';
 import { createMigratedTestDatabase } from './support/db';
+import { signedIn, type TestApp } from './support/session';
 
 const otherUserId = '6c1f0e2a-3b4d-4e5f-8a9b-0c1d2e3f4a5b';
 const curd = seedData.products.find((p) => p.ingredientClassId === 'curd')!;
@@ -13,12 +14,12 @@ const milk = seedData.products.find((p) => p.ingredientClassId === 'milk')!;
 
 describe('GET /api/catalog (M5-1, M5-2)', () => {
   let database: Database;
-  let app: ReturnType<typeof createApp>;
+  let app: TestApp;
 
   beforeEach(async () => {
     database = await createMigratedTestDatabase();
     await seed(database.db);
-    app = createApp({ db: database.db });
+    app = await signedIn(createApp({ db: database.db }), database.db);
   });
 
   afterEach(async () => {

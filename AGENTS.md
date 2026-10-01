@@ -70,7 +70,8 @@ Root scripts; keep this list in sync with `package.json`. Rows marked *(pending)
 | `pnpm db:up` | Start the local Postgres 17 in Docker Compose |
 | `pnpm build` | Build web and api (`apps/*/dist`); the `Dockerfile` runs it |
 | `pnpm db:migrate` | Apply migrations to `DATABASE_URL`; the api refuses to start while any are pending |
-| `pnpm db:seed` | Load seed data from `apps/api/src/seed/data.ts` (idempotent) |
+| `pnpm db:seed` | Load seed data from `apps/api/src/seed/data.ts` (idempotent). Initial passwords come from `SEED_PASSWORD_<USERNAME>`, set only for users without one |
+| `pnpm db:password <username>` | Set a user's password, read from stdin (M4-1) |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | Checks that must pass before finishing. `lint` runs ESLint and `prettier --check` |
 | `pnpm test:coverage` | `pnpm test` with the per-package line coverage thresholds (M1-3), as CI runs it. Only a full run checks them: with `--project` or a file filter, the thresholds see no files and pass |
 | `pnpm format` | Format with Prettier |

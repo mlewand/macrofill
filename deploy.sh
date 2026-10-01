@@ -5,7 +5,8 @@
 #
 #   git pull && ./deploy.sh
 #
-# Needs the .env described in README.md (DATABASE_URL, POSTGRES_NETWORK, APP_PORT) next to it.
+# Needs the .env described in README.md (DATABASE_URL, POSTGRES_NETWORK, APP_PORT, SEED_PASSWORD_*)
+# next to it.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -24,7 +25,19 @@ step 'Applying migrations'
 compose run --rm app node migrate.mjs
 
 step 'Loading seed data'
-compose run --rm app node seed.mjs
+# Initial passwords (M4-1) go to the seed run only, never to the running app. The seed sets one
+# only for a user without a password, so a later reset (password.mjs) is kept. They're exported
+# and passed by name (`-e KEY`), so they never show in a process's command line.
+seed_env=()
+while IFS= read -r line; do
+  line=${line%$'\r'}
+  key=${line%%=*}
+  value=${line#*=}
+  if [[ $value =~ ^\"(.*)\"$ || $value =~ ^\'(.*)\'$ ]]; then value=${BASH_REMATCH[1]}; fi
+  export "$key=$value"
+  seed_env+=(-e "$key")
+done < <(grep -E '^SEED_PASSWORD_[A-Z0-9_]+=' .env || true)
+compose run --rm "${seed_env[@]}" app node seed.mjs
 
 step 'Starting'
 compose up -d

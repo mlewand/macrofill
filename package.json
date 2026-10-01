@@ -12,6 +12,7 @@
     "db:up": "docker compose up -d --wait db",
     "db:migrate": "pnpm --filter @macrofill/api db:migrate",
     "db:seed": "pnpm --filter @macrofill/api db:seed",
+    "db:password": "pnpm --filter @macrofill/api db:password",
     "lint": "eslint . && prettier --check .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r --parallel typecheck",
     "test": "vitest run",
