@@ -250,7 +250,7 @@ describe('Scale Mode', () => {
     expect(recording.events.map((e) => e.afterFrames)).toEqual([atStart, seen.length, seen.length]);
   });
 
-  it('M6-7, M3-11: the saved recording replays to the amounts the meal saved', async () => {
+  it('M6-7, M3-11: the saved recording replays to the step amounts the scale recorded', async () => {
     const s = await started();
     await s.play(s.script.add(214).stable({ forMs: 0 }));
     fireEvent.click(button(en.step.next));
@@ -259,6 +259,7 @@ describe('Scale Mode', () => {
     fireEvent.click(button(en.summary.save));
     await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
     const request = vi.mocked(s.api.saveMeal).mock.calls[0]![0];
+    // Without summary edits, which aren't recorded (#51), these are the meal's amounts.
     const replayed = replaySession(request.recording!).steps;
     expect(replayed.map((step) => (step.skipped ? '-' : step.grams))).toEqual(
       request.meal.items.map((item) => (item.skipped ? '-' : item.grams)),
