@@ -1,5 +1,5 @@
 import type { Catalog } from '@macrofill/domain';
-import { scaleScript } from '@macrofill/scale';
+import { replaySession, scaleScript } from '@macrofill/scale';
 import { MockScaleDriver } from '@macrofill/scale/mock';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -224,6 +224,63 @@ describe('Scale Mode', () => {
       [200, 'manual'],
       [50, 'manual'],
     ]);
+  });
+
+  it('M6-7: a Scale Mode meal is saved with its recording: every reading and every tap', async () => {
+    const s = await session();
+    const seen: number[] = [];
+    s.driver.onReading((reading) => seen.push(reading.timestamp));
+    await s.play(s.script.baseline(312, { forMs: 0 }));
+    const atStart = seen.length;
+    fireEvent.click(button(en.scale.start));
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    fireEvent.click(button(en.step.skip));
+    fireEvent.click(button(en.summary.save));
+    await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
+    const request = vi.mocked(s.api.saveMeal).mock.calls[0]![0];
+    const recording = request.recording!;
+    expect(recording.captureSessionId).toBe(request.meal.id);
+    expect(recording.driverId).toBe(s.driver.id);
+    expect(recording.trackerConfig.stableWaitMs).toBe(60);
+    expect(recording.frames.map((f) => f.timestamp)).toEqual(seen);
+    expect(recording.droppedFrames).toBe(0);
+    expect(recording.events.map((e) => e.type)).toEqual(['start', 'next', 'skip']);
+    // Each tap after the frames it saw.
+    expect(recording.events.map((e) => e.afterFrames)).toEqual([atStart, seen.length, seen.length]);
+  });
+
+  it('M6-7, M3-11: the saved recording replays to the amounts the meal saved', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    await s.play(s.script.add(18).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    fireEvent.click(button(en.summary.save));
+    await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
+    const request = vi.mocked(s.api.saveMeal).mock.calls[0]![0];
+    const replayed = replaySession(request.recording!).steps;
+    expect(replayed.map((step) => (step.skipped ? '-' : step.grams))).toEqual(
+      request.meal.items.map((item) => (item.skipped ? '-' : item.grams)),
+    );
+  });
+
+  it('M6-7: taps that never reach the tracker are not recorded: after finishing by hand', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    s.driver.available = false;
+    act(() => s.driver.drop());
+    fireEvent.click(button(en.scale.finishByHand));
+    // Typed grams and Next, then Undo and Next again: the flow's, not the scale's.
+    fireEvent.change(screen.getByLabelText(en.step.grams), { target: { value: '18' } });
+    fireEvent.click(button(en.step.next));
+    fireEvent.click(button(en.step.undo));
+    fireEvent.click(button(en.step.next));
+    fireEvent.click(button(en.summary.save));
+    await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
+    const request = vi.mocked(s.api.saveMeal).mock.calls[0]![0];
+    expect(request.recording!.events.map((e) => e.type)).toEqual(['start', 'next']);
   });
 
   it('M5-8: a Scale Mode meal with no known owner is not sent (regression: #37)', async () => {
