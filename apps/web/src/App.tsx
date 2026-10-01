@@ -158,7 +158,7 @@ export function App() {
 
   return (
     <ApiContext value={api}>
-      <OutboxProvider>
+      <OutboxProvider ready={meSettled}>
         <SyncAfterLogin logins={logins} user={user} />
         <main hidden={needsLogin}>
           {screen === 'home' && (

@@ -1210,6 +1210,46 @@ describe('saving through the outbox (M5-9)', () => {
     expect(await outbox.all()).toEqual([]);
   });
 
+  it("M5-9: a remembered user's waiting meals don't show before the server confirms them (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, new Date().toISOString()));
+      let answer!: (username: string) => void;
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: todayNow,
+          me: () => new Promise<string>((resolve) => (answer = resolve)),
+        }),
+        outbox,
+      );
+      await screen.findByRole('button', { name: en.home.logMeal });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+      // The session is someone else's: still not shown.
+      act(() => answer('other'));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: offline, the waiting meals show newest first (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1, '2026-01-15T07:00:00.000Z'));
+    await outbox.add(outboxItem(2, '2026-01-15T09:00:00.000Z'));
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new TypeError('offline')), {
+        today: () => Promise.reject(new TypeError('offline')),
+      }),
+      outbox,
+    );
+    await screen.findByText(en.today.pendingTitle);
+    const times = screen.getAllByRole('listitem').map((li) => li.querySelector('time')?.dateTime);
+    expect(times).toEqual(['2026-01-15T09:00:00.000Z', '2026-01-15T07:00:00.000Z']);
+  });
+
   it('M5-9: offline, Today still lists what waits on the device', async () => {
     const outbox = indexedDbOutbox(new IDBFactory());
     await outbox.add(outboxItem(1));

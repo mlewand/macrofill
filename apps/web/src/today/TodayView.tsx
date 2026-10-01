@@ -21,7 +21,11 @@ export function TodayView() {
   const api = useApi();
   const queued = usePending();
   // Waiting to be sent, and counted; refused ones are shown apart, and not counted.
-  const pending = queued.filter((item) => item.refused === undefined).map((item) => item.entry);
+  const pending = queued
+    .filter((item) => item.refused === undefined)
+    .map((item) => item.entry)
+    // Newest first, like the day's list (M7-1).
+    .sort((a, b) => Date.parse(b.eatenAt) - Date.parse(a.eatenAt));
   const refused = queued.filter((item) => item.refused !== undefined);
   const [today, setToday] = useState<Today>();
   const [failed, setFailed] = useState(false);

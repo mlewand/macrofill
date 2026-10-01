@@ -38,7 +38,17 @@ const OutboxContext = createContext<Outbox | undefined>(undefined);
  * M5-9: saves go through an outbox on the device, so a meal saved offline isn't lost. What's
  * waiting is sent when the app starts, when the browser is back online, and on `sync()`.
  */
-export function OutboxProvider({ children }: { children: React.ReactNode }) {
+export function OutboxProvider({
+  children,
+  ready = true,
+}: {
+  children: React.ReactNode;
+  /**
+   * Whether the user is settled (the server named them, or couldn't be asked): until then the
+   * remembered user may be stale, so no queued meal shows.
+   */
+  ready?: boolean;
+}) {
   const store = useContext(OutboxStoreContext);
   const api = useApi();
   const [pending, setPending] = useState<OutboxItem[]>([]);
@@ -117,7 +127,10 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
     [store],
   );
 
-  const value = useMemo(() => ({ pending, save, sync, remove }), [pending, save, sync, remove]);
+  const value = useMemo(
+    () => ({ pending: ready ? pending : [], save, sync, remove }),
+    [ready, pending, save, sync, remove],
+  );
   return <OutboxContext value={value}>{children}</OutboxContext>;
 }
 
