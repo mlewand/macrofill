@@ -1,5 +1,5 @@
 import type { Catalog } from '@macrofill/domain';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiContext, guardApi, useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
@@ -8,6 +8,9 @@ import { ScaleMode } from './scaleMode/ScaleMode';
 import { belongsToCurrentUser, lastUser, onUserChangedElsewhere, rememberUser } from './session';
 import { useDraftStore, type Draft } from './storage/drafts';
 import { TodayView } from './today/TodayView';
+
+/** How long the app waits to learn who's logged in before it shows anything. */
+const ME_WAIT_MS = 5000;
 
 type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
 
@@ -23,6 +26,10 @@ export function App() {
   const drafts = useDraftStore();
   const [user, setUser] = useState(lastUser);
   const [resume, setResume] = useState<Draft>();
+  // Bumped by every login, here or in another tab: an older answer about the user is stale.
+  const generation = useRef(0);
+  // Whether /api/me has answered (or given up): until the user is known, nothing starts.
+  const [meSettled, setMeSettled] = useState(false);
   /** Someone else now, or nobody was known: what was open may be another user's (M5-8). */
   const userIs = (username: string) => {
     if (username !== user) {
@@ -33,6 +40,7 @@ export function App() {
     setUser(username);
   };
   const loggedIn = (username: string) => {
+    generation.current++;
     setNeedsLogin(false);
     setLogins((n) => n + 1);
     userIs(username);
@@ -41,9 +49,17 @@ export function App() {
   // users has none on the device. Learning it for the first time isn't a change of user.
   useEffect(() => {
     let current = true;
-    baseApi.me().then(
+    const asked = generation.current;
+    const answer = Promise.race([
+      baseApi.me(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ME_WAIT_MS)),
+    ]);
+    answer.then(
       (username) => {
         if (!current) return;
+        setMeSettled(true);
+        // A login since makes this answer stale: the cookie is someone else's now.
+        if (asked !== generation.current) return;
         rememberUser(username);
         setUser((known) => {
           if (known !== undefined && known !== username) {
@@ -54,7 +70,7 @@ export function App() {
           return username;
         });
       },
-      () => undefined,
+      () => current && setMeSettled(true),
     );
     return () => {
       current = false;
@@ -65,6 +81,7 @@ export function App() {
   useEffect(
     () =>
       onUserChangedElsewhere((username) => {
+        generation.current++;
         if (username !== user) {
           void drafts.clear();
           setResume(undefined);
@@ -105,7 +122,8 @@ export function App() {
     document.title = t('app.name');
   }, [t]);
 
-  if (!draftLoaded) return null;
+  // Nothing starts before it's known whose it is: a meal must never belong to nobody (M5-8).
+  if (!draftLoaded || (user === undefined && !meSettled)) return null;
 
   return (
     <ApiContext value={api}>
@@ -128,6 +146,7 @@ export function App() {
             {(catalog) => (
               <ScaleMode
                 catalog={catalog}
+                owner={user}
                 onSaved={() => setScreen('saved')}
                 onCancel={() => setScreen('home')}
               />
@@ -139,6 +158,7 @@ export function App() {
             {(catalog) => (
               <DirectEntry
                 catalog={catalog}
+                owner={user}
                 onSaved={() => leaveDirectEntry('saved')}
                 onCancel={() => leaveDirectEntry('home')}
                 {...(resume ? { resume } : {})}

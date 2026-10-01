@@ -681,6 +681,59 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: an ownerless session never takes on a user who shows up later (regression: #37)', async () => {
+    localStorage.clear();
+    try {
+      const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+      // Another tab logs in as someone while the request is being kept.
+      const keep = vi.mocked(drafts.store.save).getMockImplementation()!;
+      vi.mocked(drafts.store.save).mockImplementation((draft) => {
+        localStorage.setItem('macrofill.user', 'other');
+        return keep(draft);
+      });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          saveMeal,
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+      );
+      fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+      expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
+      expect(saveMeal).not.toHaveBeenCalled();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: an answer about the user that a login made stale is ignored (regression: #37)', async () => {
+    localStorage.clear();
+    try {
+      let answer!: (username: string) => void;
+      const me = vi.fn(() => new Promise<string>((resolve) => (answer = resolve)));
+      renderWithDrafts(
+        memoryDrafts().store,
+        baseFakeApi({ catalog: () => Promise.resolve(catalog), me }),
+      );
+      await vi.waitFor(() => expect(me).toHaveBeenCalled());
+      // Another tab logs in as someone else before the answer arrives.
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      await screen.findByRole('button', { name: en.home.logMeal });
+      act(() => answer('mlewand'));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(localStorage.getItem('macrofill.user')).toBe('other');
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: a save whose user is unknown is not sent (regression: #37)', async () => {
     localStorage.clear();
     const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
