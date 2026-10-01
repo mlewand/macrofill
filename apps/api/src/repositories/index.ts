@@ -9,6 +9,8 @@ import type {
   PreparedMealItem,
   Recipe,
   SaveMealRequest,
+  ScaleRecording,
+  UsageEvent,
 } from '@macrofill/domain';
 import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
@@ -21,6 +23,8 @@ import {
   products,
   recipeSteps,
   recipes,
+  scaleRecordings,
+  usageEvents,
   users,
 } from '../db/schema';
 
@@ -249,6 +253,62 @@ export function createRepositories(db: Db, ownerId: string) {
           finishedAt: meal.finishedAt.toISOString(),
           items: items.map(toItem),
         };
+      },
+    },
+
+    scaleRecordings: {
+      /** Stores a meal's recording (M4-7), in the transaction that saves the meal. */
+      async insert(preparedMealId: string, recording: ScaleRecording): Promise<void> {
+        await db.insert(scaleRecordings).values({ preparedMealId, ownerId, recording });
+      },
+
+      async find(preparedMealId: string): Promise<ScaleRecording | undefined> {
+        const [row] = await db
+          .select({ recording: scaleRecordings.recording })
+          .from(scaleRecordings)
+          .where(
+            and(
+              eq(scaleRecordings.preparedMealId, preparedMealId),
+              eq(scaleRecordings.ownerId, ownerId),
+            ),
+          );
+        return row?.recording;
+      },
+    },
+
+    usageEvents: {
+      /**
+       * Stores the events as the user's. An id the user already has (a retry) is left as it is.
+       * Returns false if an id is someone else's (M4-3); the caller rolls back.
+       */
+      async insert(events: readonly UsageEvent[]): Promise<boolean> {
+        if (events.length === 0) return true;
+        const inserted = await db
+          .insert(usageEvents)
+          .values(
+            events.map((e) => ({
+              id: e.id,
+              ownerId,
+              clientSessionId: e.clientSessionId,
+              name: e.name,
+              props: e.props,
+              occurredAt: new Date(e.occurredAt),
+              appVersion: e.appVersion,
+            })),
+          )
+          .onConflictDoNothing({ target: usageEvents.id })
+          .returning({ id: usageEvents.id });
+        // UUIDs compare in lowercase, as Postgres returns them: an id may come in either case.
+        const insertedIds = new Set(inserted.map((row) => row.id.toLowerCase()));
+        const kept = [...new Set(events.map((e) => e.id.toLowerCase()))].filter(
+          (id) => !insertedIds.has(id),
+        );
+        if (kept.length === 0) return true;
+        const own = await db
+          .select({ id: usageEvents.id })
+          .from(usageEvents)
+          .where(and(inArray(usageEvents.id, kept), eq(usageEvents.ownerId, ownerId)));
+        return own.length === kept.length;
       },
     },
 

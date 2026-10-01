@@ -3,6 +3,7 @@ import {
   productSchema,
   weighedItemSchema,
   type LocalizedText,
+  type ScaleRecording,
 } from '@macrofill/domain';
 import { sql, type AnyColumn } from 'drizzle-orm';
 import {
@@ -179,4 +180,31 @@ export const consumptionEntries = pgTable('consumption_entries', {
   eatenAt: timestamp({ withTimezone: true }).notNull(),
   /** `{ type: 'whole' }` in MVP0; grams or a fraction later. */
   portion: jsonb().$type<{ type: 'whole' }>().notNull(),
+});
+
+/** M4-7: a meal's scale recording (M3-11), stored as sent; read back only for export. */
+export const scaleRecordings = pgTable('scale_recordings', {
+  preparedMealId: uuid()
+    .primaryKey()
+    .references(() => preparedMeals.id, { onDelete: 'cascade' }),
+  ownerId: uuid()
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  recording: jsonb().$type<ScaleRecording>().notNull(),
+});
+
+/**
+ * M7-8, M4-10: first-party usage events, per user. Ids come from the client, so retries store each
+ * once.
+ */
+export const usageEvents = pgTable('usage_events', {
+  id: uuid().primaryKey(),
+  ownerId: uuid()
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  clientSessionId: uuid().notNull(),
+  name: text().notNull(),
+  props: jsonb().$type<Record<string, unknown>>().notNull(),
+  occurredAt: timestamp({ withTimezone: true }).notNull(),
+  appVersion: text().notNull(),
 });
