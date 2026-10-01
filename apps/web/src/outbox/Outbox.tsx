@@ -22,6 +22,8 @@ interface Outbox {
   save: (request: SaveMealRequest, entry: TodayEntry) => Promise<SaveResult>;
   /** Sends what's waiting, e.g. after logging in. */
   sync: () => Promise<void>;
+  /** Removes a meal from the outbox: one the server refused, once the user has seen it. */
+  remove: (mealId: string) => Promise<void>;
 }
 
 /** Where the outbox keeps meals. The default keeps nothing, so saves go straight to the server. */
@@ -54,7 +56,7 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
         again.current = false;
         // Shown before they're sent, so Today sees them leave and loads the day again.
         setPending(await store.all());
-        const result = await syncOutbox(store, api, lastUser()).catch(() => undefined);
+        const result = await syncOutbox(store, api, lastUser).catch(() => undefined);
         for (const id of result?.synced ?? []) outcomes.current.set(id, 'synced');
         for (const id of result?.dropped ?? []) outcomes.current.set(id, 'dropped');
         setPending(await store.all());
@@ -95,13 +97,27 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
       // meal is safe in the outbox, and it's sent later.
       await settleWithin(sync(), SAVE_WAIT_MS, undefined);
       const outcome = outcomes.current.get(id);
-      if (outcome === 'dropped') throw new Error('The server refused the meal.');
+      if (outcome === 'dropped') {
+        // The caller reports the failure and keeps the meal in its draft: one copy is enough.
+        await store.remove(id).catch(() => undefined);
+        setPending(await store.all());
+        throw new Error('The server refused the meal.');
+      }
       return outcome === 'synced' ? 'synced' : 'pending';
     },
     [store, api, sync],
   );
 
-  const value = useMemo(() => ({ pending, save, sync }), [pending, save, sync]);
+  const remove = useCallback(
+    async (mealId: string) => {
+      if (!store) return;
+      await store.remove(mealId).catch(() => undefined);
+      setPending(await store.all());
+    },
+    [store],
+  );
+
+  const value = useMemo(() => ({ pending, save, sync, remove }), [pending, save, sync, remove]);
   return <OutboxContext value={value}>{children}</OutboxContext>;
 }
 
@@ -123,6 +139,13 @@ export function settleWithin<T, F>(promise: Promise<T>, ms: number, fallback: F)
   const timeout = new Promise<F>((resolve) => (timer = setTimeout(() => resolve(fallback), ms)));
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
+
+/** Removes a meal from the outbox; nothing outside an `OutboxProvider`. */
+export function useRemovePending(): (mealId: string) => Promise<void> {
+  return useContext(OutboxContext)?.remove ?? noRemove;
+}
+
+const noRemove = () => Promise.resolve();
 
 /** Sends the outbox; nothing outside an `OutboxProvider`. */
 export function useSync(): () => Promise<void> {

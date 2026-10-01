@@ -16,6 +16,8 @@ export interface OutboxItem {
   queuedAt: string;
   /** Who was logged in when it was saved (see `session.ts`): only they send it. */
   username?: string;
+  /** The status the server refused it with for good: kept, not sent again, until removed. */
+  refused?: number;
 }
 
 const itemSchema = z.object({
@@ -23,6 +25,7 @@ const itemSchema = z.object({
   entry: todayEntrySchema,
   queuedAt: z.iso.datetime(),
   username: z.string().optional(),
+  refused: z.number().int().optional(),
 });
 
 /** Where saved meals wait; kept by meal id, so saving the same meal twice keeps one. */

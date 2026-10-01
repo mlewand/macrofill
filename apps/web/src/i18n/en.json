@@ -112,6 +112,9 @@
     "keep": "Keep",
     "deleteFailed": "Couldn't delete the meal. Try again.",
     "pending": "Pending",
-    "pendingTitle": "Waiting to be sent"
+    "pendingTitle": "Waiting to be sent",
+    "refusedTitle": "Couldn't be saved",
+    "refusedHint": "The server refused these meals, so they're not in your day. Remove them, and log them again if you need to.",
+    "remove": "Remove"
   }
 }

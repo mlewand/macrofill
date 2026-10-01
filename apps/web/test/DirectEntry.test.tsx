@@ -903,6 +903,27 @@ describe('saving through the outbox (M5-9)', () => {
     }
   });
 
+  it('M5-9: a meal refused in the background stays on the device, shown as not saved, until removed (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1, new Date().toISOString()));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new ApiError(400)), { today: todayNow }),
+      outbox,
+    );
+    const section = await screen.findByRole('region', { name: en.today.refusedTitle });
+    expect(within(section).getByRole('alert')).toHaveTextContent(en.today.refusedHint);
+    expect(await outbox.all()).toHaveLength(1);
+    // Not counted: it isn't in the day.
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    fireEvent.click(within(section).getByRole('button', { name: en.today.remove }));
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('region', { name: en.today.refusedTitle })).not.toBeInTheDocument(),
+    );
+    expect(await outbox.all()).toEqual([]);
+    warn.mockRestore();
+  });
+
   it('M5-9: offline, Today still lists what waits on the device', async () => {
     const outbox = indexedDbOutbox(new IDBFactory());
     await outbox.add(outboxItem(1));

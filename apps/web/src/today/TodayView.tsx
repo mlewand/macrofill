@@ -9,7 +9,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { formatGrams, formatKcal, formatTime } from '../format';
-import { usePending } from '../outbox/Outbox';
+import { usePending, useRemovePending } from '../outbox/Outbox';
+import type { OutboxItem } from '../outbox/store';
 
 /**
  * Today (M7-1 to M7-4): totals against targets and the day's meals, newest first, with the meals
@@ -18,7 +19,10 @@ import { usePending } from '../outbox/Outbox';
 export function TodayView() {
   const { t } = useTranslation();
   const api = useApi();
-  const pending = usePending().map((item) => item.entry);
+  const queued = usePending();
+  // Waiting to be sent, and counted; refused ones are shown apart, and not counted.
+  const pending = queued.filter((item) => item.refused === undefined).map((item) => item.entry);
+  const refused = queued.filter((item) => item.refused !== undefined);
   const [today, setToday] = useState<Today>();
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -60,6 +64,7 @@ export function TodayView() {
         <button type="button" className="secondary" onClick={reload}>
           {t('app.retry')}
         </button>
+        <Refused items={refused} />
         {/* Offline, the day can't load, but what's waiting on this device can be shown. */}
         {pending.length > 0 && (
           <>
@@ -85,6 +90,7 @@ export function TodayView() {
   return (
     <section aria-labelledby="today-title">
       <h2 id="today-title">{t('today.title')}</h2>
+      <Refused items={refused} />
       <ProgressTable progress={targetProgress(totals, today.targets)} />
       <h3>{t('today.meals')}</h3>
       {entries.length === 0 ? (
@@ -137,6 +143,41 @@ function ProgressTable({ progress }: { progress: NutrientProgress[] }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/**
+ * M5-9: meals the server refused for good. They stay on the device until the user has seen them
+ * and removes them; nothing is lost silently.
+ */
+function Refused({ items }: { items: OutboxItem[] }) {
+  const { t } = useTranslation();
+  const remove = useRemovePending();
+  if (items.length === 0) return null;
+  return (
+    <section aria-labelledby="refused-title">
+      <h3 id="refused-title">{t('today.refusedTitle')}</h3>
+      <p role="alert" className="problem">
+        {t('today.refusedHint')}
+      </p>
+      <ul className="entries">
+        {items.map(({ entry }) => (
+          <li key={entry.id} className="entry">
+            <div className="entry-head">
+              <strong>{entry.recipeName?.en ?? t('today.meal')}</strong>
+              <time dateTime={entry.eatenAt}>{formatTime(entry.eatenAt, deviceTimeZone())}</time>
+            </div>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void remove(entry.preparedMealId)}
+            >
+              {t('today.remove')}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
