@@ -182,8 +182,9 @@ export function App() {
           return;
         }
         setResume(draft);
-        // A session nobody's stamped on, with nobody known yet: it waits for its owner.
-        if (draft.username === undefined && lastUser() === undefined) {
+        // With nobody known yet, it waits: whoever turns out to be logged in may not be its owner.
+        // Once known, a session stamped for someone else is dropped (see /api/me and userIs).
+        if (lastUser() === undefined) {
           setResumeWaiting(true);
           return;
         }
