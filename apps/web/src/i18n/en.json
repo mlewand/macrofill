@@ -5,6 +5,15 @@
     "loadFailed": "Couldn't load recipes and products.",
     "retry": "Try again"
   },
+  "login": {
+    "title": "Log in",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Log in",
+    "checking": "Logging in…",
+    "invalid": "Wrong username or password.",
+    "failed": "Couldn't log in. Check the connection and try again."
+  },
   "home": {
     "weighMeal": "Weigh a meal",
     "logMeal": "Type in a meal"

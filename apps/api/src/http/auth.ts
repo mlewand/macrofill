@@ -1,28 +1,41 @@
-import { eq } from 'drizzle-orm';
+import { loginRequestSchema } from '@macrofill/domain';
+import { Hono } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 import { createMiddleware } from 'hono/factory';
+import { SESSION_COOKIE } from '../auth/sessions';
 import type { Db } from '../db/client';
-import { users } from '../db/schema';
+import { createAuthService } from '../services/auth';
+import { jsonBody } from './validation';
 
 export interface AuthEnv {
   Variables: { userId: string };
 }
 
-/**
- * Phase A interim: every request acts as one seeded user (the app is reachable only on the LAN).
- * Phase C replaces only this middleware with session cookies (M4-1, M4-2).
- */
-export function stubAuth(db: Db, username: string) {
-  let userId: string | undefined;
+/** M4-2: resolves the session cookie to the current user; anything else gets 401. */
+export function sessionAuth(db: Db, now: () => Date) {
+  const auth = createAuthService(db, now);
   return createMiddleware<AuthEnv>(async (c, next) => {
-    if (userId === undefined) {
-      const [user] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.username, username));
-      if (user === undefined) return c.json({ error: 'unauthorized' }, 401);
-      userId = user.id;
-    }
+    const token = getCookie(c, SESSION_COOKIE);
+    const userId = token === undefined ? undefined : await auth.sessionUser(token);
+    if (userId === undefined) return c.json({ error: 'unauthorized' as const }, 401);
     c.set('userId', userId);
     await next();
+  });
+}
+
+/** M4-1: `POST /login`. Outside `sessionAuth`, like health. */
+export function loginRoutes(db: Db, now: () => Date) {
+  const auth = createAuthService(db, now);
+  return new Hono().post('/login', jsonBody(loginRequestSchema), async (c) => {
+    const result = await auth.logIn(c.req.valid('json'));
+    if (result.status === 'invalid') return c.json({ error: 'invalid_credentials' as const }, 401);
+    setCookie(c, SESSION_COOKIE, result.token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+      path: '/',
+      expires: result.expiresAt,
+    });
+    return c.body(null, 204);
   });
 }

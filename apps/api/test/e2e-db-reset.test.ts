@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
-import { queryRows, type Database } from '../src/db/client';
+import { queryRows } from '../src/db/client';
 import { createServer, type Socket } from 'node:net';
 import {
   connectAdminClient,
@@ -93,7 +93,7 @@ describe('e2e database reset', () => {
     });
 
     it('works on a brand-new, never migrated database', async () => {
-      const database = createTestDatabase();
+      const database = await createTestDatabase();
       try {
         await resetDatabase(database, migrationsDir);
         expect(await pendingMigrations(database.db, migrationsDir)).toBe(0);
@@ -123,20 +123,19 @@ describe('e2e database reset', () => {
 
     it('creates, resets and closes the database', async () => {
       const admin = fakeAdmin([]);
-      let database: Database | undefined;
+      const database = await createTestDatabase();
       const connectAdmin = vi.fn((adminUrl: string) => {
         expect(new URL(adminUrl).pathname).toBe('/postgres');
         return Promise.resolve(admin);
       });
       const connectDatabase = vi.fn(() => {
-        database = createTestDatabase();
         vi.spyOn(database, 'close');
         return database;
       });
       await expect(
         prepareE2eDatabase({ databaseUrl: url, migrationsDir, connectAdmin, connectDatabase }),
       ).resolves.toEqual({ name: 'macrofill_e2e', created: true });
-      expect(database!.close).toHaveBeenCalledOnce();
+      expect(database.close).toHaveBeenCalledOnce();
     });
 
     it('explains how to fix a database it cannot create, without connecting to it', async () => {
@@ -155,20 +154,19 @@ describe('e2e database reset', () => {
     });
 
     it('closes the database when the reset fails', async () => {
-      let database: Database | undefined;
+      const database = await createTestDatabase();
       await expect(
         prepareE2eDatabase({
           databaseUrl: url,
           migrationsDir: '/does/not/exist',
           connectAdmin: () => Promise.resolve(fakeAdmin(['macrofill_e2e'])),
           connectDatabase: () => {
-            database = createTestDatabase();
             vi.spyOn(database, 'close');
             return database;
           },
         }),
       ).rejects.toThrow();
-      expect(database!.close).toHaveBeenCalledOnce();
+      expect(database.close).toHaveBeenCalledOnce();
     });
   });
 

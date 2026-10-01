@@ -8,7 +8,8 @@ import { play, useMockScale } from './scale';
  * is at least 64 px tall, and nothing overflows sideways in portrait.
  */
 async function checkLayout(page: Page, screen: string) {
-  const buttons = page.locator('button.primary');
+  // Visible ones: under the login form, the app's buttons are hidden.
+  const buttons = page.locator('button.primary:visible');
   const count = await buttons.count();
   expect(count, `${screen}: primary buttons`).toBeGreaterThan(0);
   for (let i = 0; i < count; i++) {
@@ -53,6 +54,18 @@ test('M7-6: every screen works in portrait, with full-width primary buttons at l
   await page.getByRole('button', { name: en.summary.save }).click();
   await expect(page.getByRole('status')).toHaveText(en.saved.title);
   await checkLayout(page, 'saved');
+});
+
+test.describe('logged out', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('M7-6: the login screen works in portrait, with a full-width button at least 64 px tall', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.getByRole('dialog', { name: en.login.title })).toBeVisible();
+    await checkLayout(page, 'login');
+  });
 });
 
 test('M7-6: Scale Mode works in portrait, and the live weight is at least 48 px', async ({

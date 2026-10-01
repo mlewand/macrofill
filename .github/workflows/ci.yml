@@ -1,4 +1,5 @@
 # M1-2: lint, typecheck, unit, API integration and e2e tests on every push.
+# M1-6: the API tests also run against the host's Postgres version.
 name: CI
 
 on:
@@ -26,6 +27,40 @@ jobs:
       # Vitest projects: domain and scale unit tests, api integration tests, web component tests.
       # With coverage: below the per-package line thresholds, the run fails (M1-3).
       - run: pnpm test:coverage
+
+  # M1-6: the api tests again, against the host's Postgres version as a service container (the
+  # rest of CI runs them on PGlite). The host runs Postgres 17; the maintainer gave the major
+  # version as the one to pin (2026-10-01), so the image tag follows its latest minor release.
+  api-postgres:
+    name: API tests (Postgres 17, the host's version)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: macrofill
+          POSTGRES_PASSWORD: macrofill
+          POSTGRES_DB: macrofill
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U macrofill -d macrofill"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      # Each test creates its own database on this server and drops it afterwards.
+      API_TEST_DATABASE_URL: postgres://macrofill:macrofill@localhost:5432/macrofill
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --project api
 
   e2e:
     name: E2E (Playwright, phone viewport)
@@ -113,8 +148,21 @@ jobs:
           docker exec host-pg psql -U admin -d postgres \
             -c "CREATE ROLE macrofill LOGIN PASSWORD 'secret';" \
             -c "CREATE DATABASE macrofill OWNER macrofill;"
-      - run: printf 'DATABASE_URL=postgres://macrofill:secret@host-pg:5432/macrofill\nPOSTGRES_NETWORK=pg-net\nAPP_PORT=23874\n' > .env
+      - run: printf 'DATABASE_URL=postgres://macrofill:secret@host-pg:5432/macrofill\nPOSTGRES_NETWORK=pg-net\nAPP_PORT=23874\nSEED_PASSWORD_MLEWAND="first password"\n' > .env
       - run: ./deploy.sh
       - run: curl -sf http://localhost:23874/api/health
-      - run: ./deploy.sh
-      - run: curl -sf http://localhost:23874/api/health
+      # M4-1: the seed set the initial password from .env, and the password command resets it.
+      - name: Log in, reset the password, deploy again
+        run: |
+          login() {
+            curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+              -d "{\"username\":\"mlewand\",\"password\":\"$1\"}" http://localhost:23874/api/login
+          }
+          test "$(login 'first password')" = 204
+          printf 'second password\n' | docker compose -f compose.prod.yml run --rm -T app node password.mjs mlewand
+          test "$(login 'first password')" = 401
+          test "$(login 'second password')" = 204
+          ./deploy.sh
+          curl -sf http://localhost:23874/api/health
+          # The next deploy's seed keeps the reset password.
+          test "$(login 'second password')" = 204

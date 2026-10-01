@@ -3,25 +3,24 @@ import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { Db } from './db/client';
-import { stubAuth, type AuthEnv } from './http/auth';
+import { loginRoutes, sessionAuth, type AuthEnv } from './http/auth';
 import { catalogRoutes } from './routes/catalog';
 import { mealRoutes } from './routes/meals';
 import { todayRoutes } from './routes/today';
-import { seedData } from './seed/data';
 
 export interface AppOptions {
   db: Db;
-  /** Phase A stub auth acts as this seeded user. Defaults to the first seed user. */
-  stubUsername?: string;
   /** The clock; tests pin it. */
   now?: () => Date;
   /** Directory with the built `apps/web`. Production only; in development Vite serves the web app. */
   webDist?: string;
 }
 
-function createApiRoutes(db: Db, stubUsername: string, now: () => Date) {
+function createApiRoutes(db: Db, now: () => Date) {
+  // M4-2: login comes first and answers itself; everything after it needs a session.
   return new Hono<AuthEnv>()
-    .use(stubAuth(db, stubUsername))
+    .route('/', loginRoutes(db, now))
+    .use(sessionAuth(db, now))
     .route('/', catalogRoutes(db))
     .route('/', mealRoutes(db))
     .route('/', todayRoutes(db, now));
@@ -52,14 +51,7 @@ export function createApp(options: AppOptions) {
     }
   });
 
-  app.route(
-    '/api',
-    createApiRoutes(
-      options.db,
-      options.stubUsername ?? seedData.users[0]!.user.username,
-      options.now ?? (() => new Date()),
-    ),
-  );
+  app.route('/api', createApiRoutes(options.db, options.now ?? (() => new Date())));
   app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
 
   if (options.webDist !== undefined) {
