@@ -97,6 +97,8 @@ export function App() {
       (error: unknown) => {
         if (!current) return;
         setMeSettled(true);
+        // A login since makes this failure stale too.
+        if (asked !== generation.current) return;
         // No session: the login form settles who it is.
         if (error instanceof ApiError && error.status === 401) setNeedsLogin(true);
       },
@@ -149,6 +151,12 @@ export function App() {
   // An older version of the app in another tab blocks the database: the kept session waits.
   const [draftBlocked, setDraftBlocked] = useState(false);
   const [draftAttempt, setDraftAttempt] = useState(0);
+  // A kept session waiting for the user to be known before it opens (see the draft load).
+  const [resumeWaiting, setResumeWaiting] = useState(false);
+  if (resumeWaiting && user !== undefined) {
+    setResumeWaiting(false);
+    setScreen('directEntry');
+  }
   useEffect(() => {
     let current = true;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -163,6 +171,11 @@ export function App() {
           return;
         }
         setResume(draft);
+        // A session nobody's stamped on, with nobody known yet: it waits for its owner.
+        if (draft.username === undefined && lastUser() === undefined) {
+          setResumeWaiting(true);
+          return;
+        }
         setScreen('directEntry');
       },
       () => {
