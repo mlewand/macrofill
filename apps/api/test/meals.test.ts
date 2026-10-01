@@ -105,7 +105,7 @@ describe('POST /api/meals', () => {
       expect(await count('consumption_entries')).toBe(1);
     });
 
-    it('a meal id owned by another user is a conflict, never a success', async () => {
+    it('M4-3: a meal id owned by another user is not found, never a success (regression: #40)', async () => {
       await database.db.execute(
         sql`insert into users (id, username, timezone) values (${otherUserId}, 'other', 'UTC')`,
       );
@@ -114,7 +114,8 @@ describe('POST /api/meals', () => {
             values (${request().meal.id}, ${otherUserId}, 'direct', now(), now())`,
       );
       const res = await post(request());
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: 'not_found' });
       expect(await count('consumption_entries')).toBe(0);
       expect(await count('prepared_meal_items')).toBe(0);
     });
@@ -129,6 +130,29 @@ describe('POST /api/meals', () => {
     it('M4-1: a save made for the logged-in user goes through', async () => {
       const res = await post({ ...request(), username: owner.username });
       expect(res.status).toBe(201);
+    });
+
+    it('M4-3: a consumption entry id owned by another user is not found, and nothing is saved (regression: #40)', async () => {
+      const otherEntryId = 'f1c7a5e6-8b9d-4c0e-9f1a-1b0c9d8e7f6a';
+      const otherMealId = 'a2d8b6f7-9c0e-4d1f-8a2b-2c1d0e9f8a7b';
+      await database.db.execute(
+        sql`insert into users (id, username, timezone) values (${otherUserId}, 'other', 'UTC')`,
+      );
+      await database.db.execute(
+        sql`insert into prepared_meals (id, owner_id, input_method, started_at, finished_at)
+            values (${otherMealId}, ${otherUserId}, 'direct', now(), now())`,
+      );
+      await database.db.execute(
+        sql`insert into consumption_entries (id, owner_id, prepared_meal_id, eaten_at, portion)
+            values (${otherEntryId}, ${otherUserId}, ${otherMealId}, now(), '{"type":"whole"}')`,
+      );
+      const body = request();
+      const res = await post({
+        ...body,
+        consumptionEntry: { ...body.consumptionEntry, id: otherEntryId },
+      });
+      expect(res.status).toBe(404);
+      expect(await count('prepared_meals')).toBe(1);
     });
 
     it('a retry with a different consumption entry id is a conflict, not a replay (regression: #11)', async () => {

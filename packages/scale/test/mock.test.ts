@@ -35,6 +35,8 @@ describe('MockScaleDriver', () => {
       [450, 312, true],
     ]);
     expect(readings.every((r) => r.raw instanceof Uint8Array)).toBe(true);
+    // M3-11: the wall-clock receive time too.
+    expect(readings.map((r) => r.receivedAt - start)).toEqual([0, 225, 450]);
   });
 
   it('M3-12: plays the script it was created with on connect', async () => {
@@ -69,6 +71,18 @@ describe('MockScaleDriver', () => {
     await driver.connect();
     await driver.disconnect();
     expect(states).toEqual(['connected', 'disconnected', 'connected', 'disconnected']);
+  });
+
+  it('M6-6: while unavailable, connecting fails, as for a scale that is off; then it reconnects', async () => {
+    const { driver, states } = connected();
+    await driver.connect();
+    driver.available = false;
+    driver.drop();
+    await expect(driver.connect()).rejects.toThrow('unavailable');
+    expect(states).toEqual(['connected', 'disconnected']);
+    driver.available = true;
+    await driver.connect();
+    expect(states).toEqual(['connected', 'disconnected', 'connected']);
   });
 
   it('M3-12: refuses to play while disconnected', async () => {

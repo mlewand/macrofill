@@ -17,7 +17,21 @@ export async function play(page: Page, readings: TimedReading[]) {
   );
 }
 
-/** The scale goes away, e.g. auto-off. */
+/**
+ * The scale goes away, e.g. auto-off. It stays unavailable, so reconnecting (M6-6) fails, until
+ * `comeBack`.
+ */
 export async function drop(page: Page) {
-  await page.evaluate(() => (window as unknown as MockScaleWindow).macrofillScale!.drop());
+  await page.evaluate(() => {
+    const scale = (window as unknown as MockScaleWindow).macrofillScale!;
+    scale.available = false;
+    scale.drop();
+  });
+}
+
+/** The dropped scale is back (switched on again, in range): the next reconnect attempt works. */
+export async function comeBack(page: Page) {
+  await page.evaluate(() => {
+    (window as unknown as MockScaleWindow).macrofillScale!.available = true;
+  });
 }

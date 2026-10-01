@@ -81,6 +81,7 @@ async function session({ connect = true } = {}) {
           onSaved={onSaved}
           onCancel={vi.fn()}
           tracker={{ stableWaitMs: 60 }}
+          reconnect={{ firstDelayMs: 5, maxDelayMs: 10, giveUpAfterMs: 50 }}
         />
       </ScaleContext>
     </ApiContext>,
@@ -224,12 +225,89 @@ describe('Scale Mode', () => {
     ]);
   });
 
-  it('M6-5: after the scale drops, the remaining steps take typed grams', async () => {
+  it('M6-6: after a drop, it shows Reconnecting, keeps the session, and goes on once reconnected', async () => {
     const s = await started();
     await s.play(s.script.add(214).stable({ forMs: 0 }));
     fireEvent.click(button(en.step.next));
+    s.driver.available = false;
     act(() => s.driver.drop());
+    expect(screen.getByText(en.scale.status.reconnecting)).toBeVisible();
+    expect(screen.getByText(en.scale.reconnectingHint)).toBeVisible();
+    // Still at step 2, with the first step's weight; nothing reads the scale meanwhile.
+    expect(screen.getByText('Step 2 of 2')).toBeVisible();
+    expect(button(en.step.next)).toBeDisabled();
+    expect(button(en.scale.enterManually)).toBeDisabled();
+    const connect = vi.spyOn(s.driver, 'connect');
+    s.driver.available = true;
+    expect(await screen.findByText(en.scale.status.connected)).toBeVisible();
+    // Without the chooser: the driver reconnects by itself (see HuajunDriver).
+    expect(connect).toHaveBeenCalled();
+    await s.play(s.script.add(50).stable({ forMs: 0 }));
+    expect(screen.queryByText(en.scale.reconnectingHint)).not.toBeInTheDocument();
+    fireEvent.click(button(en.step.next));
+    expect(screen.getByRole('heading', { name: en.summary.title })).toBeVisible();
+    fireEvent.click(button(en.summary.save));
+    await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
+    const request = vi.mocked(s.api.saveMeal).mock.calls[0]![0];
+    expect(request.meal.items.map((i) => (i.skipped ? '-' : [i.grams, i.weightSource]))).toEqual([
+      [214, 'scale'],
+      [50, 'scale'],
+    ]);
+  });
+
+  it('M6-6: before Start, a drop also reconnects, and Start waits for it', async () => {
+    const s = await session();
+    await s.play(s.script.baseline(312, { forMs: 0 }));
+    s.driver.available = false;
+    act(() => s.driver.drop());
+    expect(screen.getByText(en.scale.status.reconnecting)).toBeVisible();
+    expect(button(en.scale.start)).toBeDisabled();
+    s.driver.available = true;
+    await screen.findByText(en.scale.status.connected);
+    await s.play(s.script.stable({ forMs: 0 }));
+    expect(button(en.scale.start)).toBeEnabled();
+  });
+
+  it('M6-6: reconnected but with no reading yet, the meal can still be finished by hand (regression: #36)', async () => {
+    const s = await started();
+    act(() => s.driver.drop());
+    // The mock reconnects at once but plays nothing: a stalled stream.
+    expect(await screen.findByText(en.scale.status.connected)).toBeVisible();
+    expect(button(en.step.next)).toBeDisabled();
+    expect(screen.getByText(en.scale.reconnectingHint)).toBeVisible();
+    fireEvent.click(button(en.scale.finishByHand));
+    expect(screen.getByRole('alert')).toHaveTextContent(en.scale.dropped);
+  });
+
+  it('M6-6: the first reading after reconnecting hides the notice', async () => {
+    const s = await started();
+    act(() => s.driver.drop());
+    await screen.findByText(en.scale.status.connected);
+    await s.play(s.script.stable({ forMs: 0 }));
+    expect(screen.queryByText(en.scale.reconnectingHint)).not.toBeInTheDocument();
+  });
+
+  it('M6-6: Finish by hand stops reconnecting and takes typed grams', async () => {
+    const s = await started();
+    s.driver.available = false;
+    act(() => s.driver.drop());
+    const connect = vi.spyOn(s.driver, 'connect');
+    fireEvent.click(button(en.scale.finishByHand));
+    expect(screen.getByRole('alert')).toHaveTextContent(en.scale.dropped);
+    const attempts = connect.mock.calls.length;
+    s.driver.available = true;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(connect).toHaveBeenCalledTimes(attempts);
     expect(screen.getByText(en.scale.status.dropped)).toBeVisible();
+  });
+
+  it('M6-5, M6-6: when reconnecting fails, the remaining steps take typed grams', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    s.driver.available = false;
+    act(() => s.driver.drop());
+    expect(await screen.findByText(en.scale.status.dropped)).toBeVisible();
     expect(screen.getByRole('alert')).toHaveTextContent(en.scale.dropped);
     fireEvent.change(screen.getByLabelText(en.step.grams), { target: { value: '50,5' } });
     fireEvent.click(button(en.step.next));
@@ -248,7 +326,9 @@ describe('Scale Mode', () => {
     const s = await started();
     await s.play(s.script.add(214).stable({ forMs: 0 }));
     fireEvent.click(button(en.step.next));
+    s.driver.available = false;
     act(() => s.driver.drop());
+    fireEvent.click(button(en.scale.finishByHand));
     fireEvent.click(button(en.step.undo));
     expect(screen.getByText('Step 1 of 2')).toBeVisible();
     expect(screen.getByLabelText(en.step.grams)).toHaveValue('214');
@@ -274,7 +354,9 @@ describe('Scale Mode', () => {
   it('M6-5: after the scale drops, each step focuses the grams input', async () => {
     const s = await started();
     await s.play(s.script.add(214).stable({ forMs: 0 }));
+    s.driver.available = false;
     act(() => s.driver.drop());
+    fireEvent.click(button(en.scale.finishByHand));
     expect(screen.getByLabelText(en.step.grams)).toHaveFocus();
     fireEvent.change(screen.getByLabelText(en.step.grams), { target: { value: '200' } });
     fireEvent.click(button(en.step.next));
