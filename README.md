@@ -17,18 +17,19 @@ Diet tracking PWA. It logs a multi-ingredient meal while you make it, using a Bl
 ```sh
 corepack enable
 pnpm install
-cp .env.example .env
+cp .env.example .env   # then set SEED_PASSWORD_MLEWAND in it
 pnpm db:up
 pnpm db:migrate
 pnpm db:seed
 pnpm dev
 ```
 
-Open http://localhost:5173.
+Open http://localhost:5173 and log in as `mlewand` with the password from `.env`.
 
 - `pnpm db:up` starts Postgres 17 in Docker Compose on `127.0.0.1:5432`, and `.env.example` already points `DATABASE_URL` at it. To use an existing Postgres server instead, give the app its own database and role there and change only `DATABASE_URL`.
 - `pnpm db:migrate` applies the Drizzle migrations in `apps/api/drizzle`. It's the only way migrations run: the api refuses to start while the schema is behind.
 - `pnpm db:seed` loads the recipes, ingredient classes, products and users from `apps/api/src/seed/data.ts`. Running it again is safe; it updates rows in place. Daily targets are set there too (unset means not tracked).
+- Logging in (M4-1): the seed hashes each user's initial password from `SEED_PASSWORD_<USERNAME>` (e.g. `SEED_PASSWORD_MLEWAND`) and stores only the argon2id hash. It sets a password only for a user who has none, so seeding again never changes it. To change a password, run `pnpm db:password <username>` and type the new one (or pipe it in: `printf '%s\n' "$new" | pnpm db:password mlewand`). A login lasts 90 days; there's no logout yet.
 - After changing `apps/api/src/db/schema.ts`, generate a migration with `pnpm -F @macrofill/api db:generate`, then run `pnpm db:migrate`.
 
 ## Daily development
@@ -91,6 +92,7 @@ The tracker's settings (stability tolerance and window, the wait for a stable re
 | `pnpm test:coverage` | The same with line coverage; fails below the per-package thresholds in `docs/ARCHITECTURE.md`, as in CI. Report in `coverage/` |
 | `pnpm test:e2e` | Playwright on phone and tablet viewports (portrait), against the production build served by the api. Scale Mode runs on the mock scale, switched on with the flag above |
 | `pnpm format` | Format with Prettier |
+| `pnpm db:password <username>` | Sets a user's password, read from stdin (M4-1) |
 
 Before the first `pnpm test:e2e`, install the browser once: `pnpm --filter @macrofill/web exec playwright install --with-deps chromium`. The e2e tests use **their own database**, never the dev one: `DATABASE_URL`'s database with `_e2e` added (`macrofill_e2e`), on the same server. Every run creates it if it's missing, wipes it, migrates and seeds it, so runs start from the same state and your dev data stays as it is. Only `pnpm db:up` is needed first. To use another database, set `E2E_DATABASE_URL` (see `.env.example`). The reset refuses any database whose name doesn't end in `_e2e`. On a Postgres where the app's role can't create databases, create the `_e2e` database once yourself, owned by that role. The Vitest API tests need no database; they use PGlite in-process. CI also runs them against Postgres 17, the host's version (M1-6). To do the same locally: `API_TEST_DATABASE_URL=postgres://macrofill:macrofill@localhost:5432/macrofill pnpm test --project api`. Each test creates its own database on that server and drops it afterwards, so the role needs CREATEDB (the Compose one has it).
 
@@ -106,7 +108,9 @@ CI (GitHub Actions) runs lint, typecheck, the Vitest tests with coverage, the AP
 
 One Docker image: the api serves the built web app, on one origin. It runs on the LAN server behind the Caddy HTTPS reverse proxy, next to the host's existing Postgres container.
 
-**LAN only for now:** there's no login yet; every request acts as the seeded user. Don't forward the port or publish the hostname outside your network.
+**LAN only for now:** the api needs a login (M4-1), but there's no rate limiting on it yet. Don't forward the port or publish the hostname outside your network.
+
+**Updating from a version without login:** add `SEED_PASSWORD_MLEWAND=<your password>` to the server's `.env` before the next `./deploy.sh`. Without it the deploy still works, but nobody can log in: the seed prints a warning, and you can set the password afterwards with the password command below.
 
 You need Docker with Compose v2 and git on the server, the Postgres container (CI tests against Postgres 17), and Caddy.
 
@@ -132,8 +136,11 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
    DATABASE_URL=postgres://macrofill:<password>@<pg-container>:5432/macrofill
    POSTGRES_NETWORK=<network from step 2>
    APP_PORT=3000
+   SEED_PASSWORD_MLEWAND=<your login password>
    ENV
    ```
+
+   `deploy.sh` reads `SEED_PASSWORD_*` lines itself: one `KEY=value` per line, optionally in single or double quotes, with no comment after the value.
 
 4. **Deploy:**
 
@@ -141,7 +148,7 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
    ./deploy.sh
    ```
 
-   It builds the image, applies migrations, loads the seed data (safe to repeat), starts the container and waits until its health check passes, then prints `Macrofill is up and healthy.` If something fails it stops there, with a non-zero exit code and the reason; if the container doesn't turn healthy it prints the recent logs.
+   It builds the image, applies migrations, loads the seed data (safe to repeat; it sets `SEED_PASSWORD_*` as the initial login passwords, only for users who have none), starts the container and waits until its health check passes, then prints `Macrofill is up and healthy.` If something fails it stops there, with a non-zero exit code and the reason; if the container doesn't turn healthy it prints the recent logs.
 
 5. **Point a Caddy site at the server:**
 
@@ -154,6 +161,14 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
 6. On the phone, open `https://<prod-hostname>` in Chrome, then ⋮ → **Install app**.
 
 **Updating:** `git pull && ./deploy.sh`.
+
+**Changing a password:** without showing it or keeping it in the shell history:
+
+```sh
+read -rs -p 'New password: ' pw && echo && printf '%s\n' "$pw" | docker compose -f compose.prod.yml run --rm -T app node password.mjs mlewand; unset pw
+```
+
+Deploys keep it: the seed's initial password applies only to a user without one.
 
 **Daily targets and the catalog come from the seed file:** every deploy resets them to `apps/api/src/seed/data.ts`. To change your targets or add a product, edit that file, commit it, and deploy. Edits made directly in the database are overwritten by the next deploy. Logged meals are never touched.
 

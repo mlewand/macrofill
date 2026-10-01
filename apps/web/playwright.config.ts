@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
+import { E2E_PASSWORD, STORAGE_STATE } from './e2e/auth';
 
 const port = 4173;
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -38,10 +39,19 @@ export default defineConfig({
     baseURL: `http://localhost:${port}`,
     trace: 'retain-on-failure',
   },
-  // M7-6: everything runs on a phone and a tablet, both in portrait.
+  // M7-6: everything runs on a phone and a tablet, both in portrait, logged in by `setup` (M4-1).
   projects: [
-    { name: 'phone', use: { ...devices['Pixel 7'] } },
-    { name: 'tablet', use: { ...devices['Galaxy Tab S4'] } },
+    { name: 'setup', testMatch: /auth\.setup\.ts/, use: { ...devices['Pixel 7'] } },
+    {
+      name: 'phone',
+      use: { ...devices['Pixel 7'], storageState: STORAGE_STATE },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'tablet',
+      use: { ...devices['Galaxy Tab S4'], storageState: STORAGE_STATE },
+      dependencies: ['setup'],
+    },
   ],
   webServer: {
     // Build, reset the e2e database (create if missing, migrate, seed), then serve.
@@ -55,6 +65,8 @@ export default defineConfig({
       // The reset loads the root .env and the server doesn't; pin the migrations so both use the
       // repo's, whatever .env or the shell says (e.g. the production image's /app/drizzle).
       MIGRATIONS_DIR: `${repoRoot}/apps/api/drizzle`,
+      // The seed user's initial password (M4-1), for logging in.
+      SEED_PASSWORD_MLEWAND: E2E_PASSWORD,
     },
     // Never reuse a running server: the reset above must run every time, and a stale server could
     // even be connected to the dev database. A busy port fails the run instead.

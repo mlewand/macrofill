@@ -6,6 +6,7 @@ import { queryRows, type Database } from '../src/db/client';
 import { seedData } from '../src/seed/data';
 import { seed } from '../src/seed/seed';
 import { createMigratedTestDatabase } from './support/db';
+import { signedIn, type TestApp } from './support/session';
 
 const curdRecipe = seedData.recipes.find((r) => r.name.en === 'Curd')!;
 const curd = seedData.products.find((p) => p.ingredientClassId === 'curd')!;
@@ -17,12 +18,12 @@ const NOW = new Date('2026-01-15T11:00:00.000Z');
 
 describe('Today (M7-1 to M7-4)', () => {
   let database: Database;
-  let app: ReturnType<typeof createApp>;
+  let app: TestApp;
 
   beforeEach(async () => {
     database = await createMigratedTestDatabase();
     await seed(database.db);
-    app = createApp({ db: database.db, now: () => NOW });
+    app = await signedIn(createApp({ db: database.db, now: () => NOW }), database.db);
   });
 
   afterEach(async () => {

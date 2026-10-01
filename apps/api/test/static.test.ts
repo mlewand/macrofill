@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
+import { signedIn } from './support/session';
 import type { Database } from '../src/db/client';
 import { seed } from '../src/seed/seed';
 import { createMigratedTestDatabase } from './support/db';
@@ -12,7 +13,7 @@ describe('M1-5: api serves the built web app', () => {
   let database: Database;
 
   beforeAll(async () => {
-    // Unknown /api paths pass the stub auth first, which needs the seeded user.
+    // Unknown /api paths pass the session check first, which needs a seeded user to log in.
     database = await createMigratedTestDatabase();
     await seed(database.db);
     webDist = mkdtempSync(join(tmpdir(), 'macrofill-web-'));
@@ -52,9 +53,13 @@ describe('M1-5: api serves the built web app', () => {
   it.each(['/api', '/api/', '/api/does-not-exist'])(
     'does not fall back to index.html for unknown API route %s',
     async (path) => {
-      const res = await app().request(path);
+      // Signed in, it's a JSON 404; without a session, a JSON 401 (M4-2). Never the web app.
+      const res = await (await signedIn(app(), database.db)).request(path);
       expect(res.status).toBe(404);
       expect(res.headers.get('content-type')).toMatch(/application\/json/);
+      const anonymous = await app().request(path);
+      expect(anonymous.status).toBe(401);
+      expect(anonymous.headers.get('content-type')).toMatch(/application\/json/);
     },
   );
 

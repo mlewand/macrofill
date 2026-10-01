@@ -5,6 +5,7 @@ import { loadConfig } from '../config';
 import { connect } from '../db/client';
 import { connectAdminClient, prepareE2eDatabase } from '../db/e2e';
 import { describeError } from '../errors';
+import { seedPasswordsFromEnv } from '../seed/seed';
 
 const config = loadConfig(process.env);
 
@@ -14,6 +15,7 @@ try {
     migrationsDir: config.migrationsDir,
     connectAdmin: (adminUrl) => connectAdminClient(adminUrl),
     connectDatabase: (databaseUrl) => connect(databaseUrl),
+    passwords: seedPasswordsFromEnv(process.env),
   });
   console.log(`${created ? 'Created' : 'Reset'} database ${name}: migrated and seeded.`);
 } catch (error) {
