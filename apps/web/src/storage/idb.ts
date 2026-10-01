@@ -29,6 +29,8 @@ export function idb(factory: IDBFactory): Run {
         }
       };
       request.onsuccess = () => resolve(request.result);
+      // Another tab holds an older version open: fail rather than wait for it to close.
+      request.onblocked = () => reject(new Error('IndexedDB is blocked by another tab'));
       request.onerror = () => reject(request.error ?? new Error('IndexedDB failed to open'));
     }));
 

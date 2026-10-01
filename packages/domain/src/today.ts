@@ -66,7 +66,7 @@ export type TodayListEntry = TodayEntry & { pending: boolean };
 
 /**
  * M5-9: the day with the meals still waiting in the outbox: those of the same day in the user's
- * timezone are listed (newest first) and counted in the totals. One the server already lists
+ * timezone are listed (newest first) and counted in the totals. A meal the server already lists
  * (synced since) counts once.
  */
 export function withPending(

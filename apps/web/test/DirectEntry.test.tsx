@@ -808,6 +808,65 @@ describe('saving through the outbox (M5-9)', () => {
     expect(saveMeal).toHaveBeenCalledTimes(2);
   });
 
+  it('M5-9: a meal the server refuses for good is a failed save, not a saved one (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const drafts = renderWithOutbox(
+      fakeApi(() => Promise.reject(new ApiError(409)), { today: todayNow }),
+      outbox,
+      atSummary,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
+    expect(screen.queryByText(en.saved.title)).not.toBeInTheDocument();
+    // The meal is still on the device, in the draft.
+    expect(drafts.kept()).toBeDefined();
+    warn.mockRestore();
+  });
+
+  it('M5-9: meals sent at startup show in Today once the server has them (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1, new Date().toISOString()));
+    let accept!: () => void;
+    const saveMeal = vi.fn<Api['saveMeal']>(
+      (r) => new Promise((resolve) => (accept = () => resolve(stored(r)))),
+    );
+    const today = vi.fn(todayNow);
+    renderWithOutbox(fakeApi(saveMeal, { today }), outbox);
+    // Pending while it's being sent...
+    expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalled());
+    const loads = today.mock.calls.length;
+    accept();
+    // ...then Today loads again, from the server that has it now.
+    await vi.waitFor(() => expect(today.mock.calls.length).toBeGreaterThan(loads));
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+  });
+
+  it("M5-9: another user's waiting meals never show, also right after a switch (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1), username: 'mlewand' });
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-9: offline, Today still lists what waits on the device', async () => {
     const outbox = indexedDbOutbox(new IDBFactory());
     await outbox.add(outboxItem(1));

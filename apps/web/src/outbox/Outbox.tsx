@@ -39,6 +39,8 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<OutboxItem[]>([]);
   const running = useRef<Promise<void> | undefined>(undefined);
   const again = useRef(false);
+  /** What became of each meal sent this session: saved, or refused for good. */
+  const outcomes = useRef(new Map<string, 'synced' | 'dropped'>());
 
   const sync = useCallback(async () => {
     if (!store) return;
@@ -50,9 +52,12 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
     running.current = (async () => {
       do {
         again.current = false;
-        await syncOutbox(store, api, lastUser()).catch(() => undefined);
-        // Only the current user's meals are theirs to see.
-        setPending((await store.all()).filter((item) => belongsToCurrentUser(item.username)));
+        // Shown before they're sent, so Today sees them leave and loads the day again.
+        setPending(await store.all());
+        const result = await syncOutbox(store, api, lastUser()).catch(() => undefined);
+        for (const id of result?.synced ?? []) outcomes.current.set(id, 'synced');
+        for (const id of result?.dropped ?? []) outcomes.current.set(id, 'dropped');
+        setPending(await store.all());
       } while (again.current);
     })();
     try {
@@ -86,8 +91,12 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
         await api.saveMeal(request);
         return 'synced';
       }
-      await sync();
-      return (await store.all()).some((item) => item.request.meal.id === id) ? 'pending' : 'synced';
+      // A network that never answers (e.g. one that blocks the LAN) mustn't hold the screen: the
+      // meal is safe in the outbox, and it's sent later.
+      await settleWithin(sync(), SAVE_WAIT_MS, undefined);
+      const outcome = outcomes.current.get(id);
+      if (outcome === 'dropped') throw new Error('The server refused the meal.');
+      return outcome === 'synced' ? 'synced' : 'pending';
     },
     [store, api, sync],
   );
@@ -96,9 +105,23 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
   return <OutboxContext value={value}>{children}</OutboxContext>;
 }
 
-/** The meals waiting to be sent; none outside an `OutboxProvider`. */
+/**
+ * The current user's meals waiting to be sent; none outside an `OutboxProvider`. Filtered on
+ * every read, so another user's never show, not even right after a switch.
+ */
 export function usePending(): OutboxItem[] {
-  return useContext(OutboxContext)?.pending ?? [];
+  const pending = useContext(OutboxContext)?.pending ?? [];
+  return pending.filter((item) => belongsToCurrentUser(item.username));
+}
+
+/** How long a save waits for the server before it reports the meal as pending. */
+export const SAVE_WAIT_MS = 8000;
+
+/** `promise`'s value, or `fallback` if it takes longer than `ms`. */
+export function settleWithin<T, F>(promise: Promise<T>, ms: number, fallback: F): Promise<T | F> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<F>((resolve) => (timer = setTimeout(() => resolve(fallback), ms)));
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 /** Sends the outbox; nothing outside an `OutboxProvider`. */
