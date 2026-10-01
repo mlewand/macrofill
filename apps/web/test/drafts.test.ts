@@ -22,7 +22,7 @@ const state = {
   current: 1,
 };
 state.steps[0]!.grams = '200';
-const draft = { state };
+const draft = { state, username: 'mlewand' };
 
 describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
   it('M5-8: keeps a draft until it is cleared', async () => {
@@ -43,7 +43,7 @@ describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
   it('M5-8: a newer save replaces the draft', async () => {
     const store = indexedDbDraftStore(new IDBFactory());
     await store.save(draft);
-    await store.save({ state: { ...state, current: 2 } });
+    await store.save({ state: { ...state, current: 2 }, username: 'mlewand' });
     expect(await store.load()).toMatchObject({ state: { current: 2 } });
   });
 
@@ -51,12 +51,19 @@ describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
     expect(parseDraft(draft)).toEqual(draft);
     expect(parseDraft(undefined)).toBeUndefined();
     expect(parseDraft(state)).toBeUndefined();
-    const bad = (change: object) => parseDraft({ state: { ...state, ...change } });
+    const bad = (change: object) =>
+      parseDraft({ state: { ...state, ...change }, username: 'mlewand' });
     expect(bad({ current: -1 })).toBeUndefined();
     expect(bad({ current: 3 })).toBeUndefined();
     expect(bad({ steps: state.steps.slice(1) })).toBeUndefined();
     expect(bad({ inputMethod: 'scale' })).toBeUndefined();
     expect(bad({ mealId: 'x' })).toBeUndefined();
+  });
+
+  it('M5-8: a kept session without its owner loads as none, so nobody else takes it on (regression: #37)', () => {
+    expect(parseDraft({ state })).toBeUndefined();
+    expect(parseDraft({ state, username: '' })).toBeUndefined();
+    expect(parseDraft({ state, username: 'mlewand' })).toEqual({ state, username: 'mlewand' });
   });
 
   it('M5-8: keeps the first save request sent, which must be for this meal', () => {
@@ -70,12 +77,16 @@ describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
       })),
     };
     const request = saveRequest(complete, '2026-01-15T07:05:00.000Z')!;
-    expect(parseDraft({ state, sent: request })).toEqual({ state, sent: request });
+    expect(parseDraft({ state, sent: request, username: 'mlewand' })).toEqual({
+      state,
+      sent: request,
+      username: 'mlewand',
+    });
     const other = {
       ...request,
       meal: { ...request.meal, id: 'f1e2d3c4-b5a6-4978-8a9b-0c1d2e3f4a5b' },
     };
-    expect(parseDraft({ state, sent: other })).toBeUndefined();
+    expect(parseDraft({ state, sent: other, username: 'mlewand' })).toBeUndefined();
   });
 
   it('M5-8: without IndexedDB (e.g. blocked), nothing is kept and nothing breaks', async () => {

@@ -28,8 +28,12 @@ export interface Draft {
    * reload the summary stays frozen and a retry resends exactly this (M4-6).
    */
   sent?: SaveMealRequest;
-  /** Who was logged in when it was kept (see `session.ts`). */
-  username?: string;
+  /**
+   * Who was logged in when it was kept (see `session.ts`). A stored draft without it isn't valid:
+   * a meal never starts without a known user, and one nobody owns must not be taken on by whoever
+   * logs in next, e.g. after its deletion failed.
+   */
+  username: string;
 }
 
 const stepDraftSchema = z.object({
@@ -56,7 +60,7 @@ const storedSchema = z
   .object({
     state: draftSchema,
     sent: saveMealRequestSchema.optional(),
-    username: z.string().optional(),
+    username: z.string().min(1),
   })
   .refine(
     ({ state, sent }) =>
@@ -71,7 +75,7 @@ export function parseDraft(value: unknown): Draft | undefined {
   return {
     state: parseState(state),
     ...(sent ? { sent } : {}),
-    ...(username === undefined ? {} : { username }),
+    username,
   };
 }
 

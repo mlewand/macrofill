@@ -144,7 +144,8 @@ export function App() {
       if (!current) return;
       setDraftLoaded(true);
       if (!draft) return;
-      if (!belongsToCurrentUser(draft.username)) {
+      // Unstamped (not valid in IndexedDB, see parseDraft) or another user's: not resumed.
+      if (draft.username === undefined || !belongsToCurrentUser(draft.username)) {
         void drafts.clear();
         return;
       }

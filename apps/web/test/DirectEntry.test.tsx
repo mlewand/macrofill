@@ -313,9 +313,16 @@ describe('Direct Entry', () => {
   });
 });
 
-/** An in-memory draft store, as IndexedDB would keep it across a reload. */
+/**
+ * An in-memory draft store, as IndexedDB would keep it across a reload. A kept session is stamped
+ * for the test user, as the app stamps it.
+ */
 function memoryDrafts(initial?: DirectEntryState, sent?: SaveMealRequest) {
-  let kept: Draft | undefined = initial && { state: initial, ...(sent ? { sent } : {}) };
+  let kept: Draft | undefined = initial && {
+    state: initial,
+    ...(sent ? { sent } : {}),
+    username: 'mlewand',
+  };
   const store: DraftStore = {
     load: vi.fn(() => Promise.resolve(kept)),
     save: vi.fn((draft: Draft) => {
@@ -689,6 +696,10 @@ describe('Direct Entry across a reload (M5-8)', () => {
     localStorage.clear();
     try {
       const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+      // A session with no owner stamp, as a damaged or older store could return it: dropped.
+      vi.mocked(drafts.store.load).mockResolvedValueOnce({
+        state: { ...draftAtMilk, current: 2 },
+      } as unknown as Draft);
       // Another tab logs in as someone while the request is being kept.
       const keep = vi.mocked(drafts.store.save).getMockImplementation()!;
       vi.mocked(drafts.store.save).mockImplementation((draft) => {
@@ -708,6 +719,7 @@ describe('Direct Entry across a reload (M5-8)', () => {
       expect(await screen.findByText(en.home.userUnknown)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: en.summary.save })).not.toBeInTheDocument();
       expect(saveMeal).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(drafts.store.clear).toHaveBeenCalled());
     } finally {
       localStorage.clear();
     }
@@ -776,7 +788,24 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
-  it('M5-8: an unstamped kept session waits until the user is known, then resumes (regression: #37)', async () => {
+  it('M5-8: a kept session without an owner is never resumed, even once someone is known (regression: #37)', async () => {
+    // E.g. its deletion failed at a change of user: whoever logs in next must not take it on.
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      vi.mocked(drafts.store.load).mockResolvedValue({ state: draftAtMilk } as unknown as Draft);
+      renderWithDrafts(drafts.store, baseFakeApi({ catalog: () => Promise.resolve(catalog) }));
+      await vi.waitFor(() =>
+        expect(screen.getByRole('button', { name: en.home.logMeal })).toBeEnabled(),
+      );
+      expect(screen.queryByText('Step 2 of 2')).not.toBeInTheDocument();
+      expect(drafts.store.clear).toHaveBeenCalled();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: a kept session waits until the user is known, then resumes (regression: #37)', async () => {
     localStorage.clear();
     try {
       const drafts = memoryDrafts(draftAtMilk);
@@ -883,7 +912,7 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
-  it('M5-8: a waiting unstamped session dropped by a login leaves Home, not a new meal (regression: #37)', async () => {
+  it('M5-8: a waiting kept session dropped by a login leaves Home, not a new meal (regression: #37)', async () => {
     localStorage.clear();
     try {
       const drafts = memoryDrafts(draftAtMilk);
@@ -1085,7 +1114,7 @@ describe('Direct Entry across a reload (M5-8)', () => {
     renderWithDrafts(store);
     expect(screen.queryByRole('button', { name: en.home.logMeal })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: en.home.weighMeal })).not.toBeInTheDocument();
-    loaded({ state: draftAtMilk });
+    loaded({ state: draftAtMilk, username: 'mlewand' });
     expect(await screen.findByText('Step 2 of 2')).toBeInTheDocument();
   });
 
