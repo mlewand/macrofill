@@ -148,6 +148,7 @@ interface ScaleReading {
   grams?: number;       // absent while the scale shows another unit (M3-14)
   stable?: boolean;     // only when the scale reports it
   timestamp: number;    // ms, monotonic
+  receivedAt: number;   // ms since the epoch, for the recording (M3-11)
   raw: Uint8Array;      // original payload, kept for recording/replay
 }
 

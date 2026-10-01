@@ -1,6 +1,15 @@
-import { Scale, type Reading, type ScaleTransport } from '@mlewand/huajun-ble-scale';
+import { Scale, type ScaleTransport } from '@mlewand/huajun-ble-scale';
 import { CapacitorTransport } from '@mlewand/huajun-ble-scale/capacitor';
-import type { ConnectionState, ScaleCapabilities, ScaleDriver, ScaleReading } from './driver.js';
+import type {
+  ConnectionState,
+  RejectedFrame,
+  ScaleCapabilities,
+  ScaleDriver,
+  ScaleReading,
+} from './driver.js';
+import { toScaleReading } from './reading.js';
+
+export { toScaleReading };
 
 export interface HuajunDriverOptions {
   /**
@@ -10,17 +19,6 @@ export interface HuajunDriverOptions {
   transport?: (deviceId: string | undefined) => ScaleTransport;
   /** Monotonic clock for reading timestamps. Default: the library's, `performance.now()`. */
   monotonicNow?: () => number;
-}
-
-/**
- * M3-13: maps the library's reading to a driver reading. The library decodes the bytes; a reading
- * in another unit has no grams (M3-14).
- */
-export function toScaleReading(reading: Reading): ScaleReading {
-  const mapped: ScaleReading = { timestamp: reading.receivedAtMonotonic, raw: reading.raw };
-  if (reading.grams !== undefined) mapped.grams = reading.grams;
-  if (reading.stable !== undefined) mapped.stable = reading.stable;
-  return mapped;
 }
 
 /** The driver for Huajun kitchen scales, an adapter over `@mlewand/huajun-ble-scale`. */
@@ -39,6 +37,7 @@ export class HuajunDriver implements ScaleDriver {
   #scale: Scale | undefined;
   #state: ConnectionState = 'disconnected';
   readonly #readingListeners = new Set<(r: ScaleReading) => void>();
+  readonly #rejectedListeners = new Set<(frame: RejectedFrame) => void>();
   readonly #connectionListeners = new Set<(state: ConnectionState) => void>();
 
   constructor(options: HuajunDriverOptions = {}) {
@@ -58,10 +57,16 @@ export class HuajunDriver implements ScaleDriver {
   async connect(): Promise<void> {
     // One `Scale` per connection, as the library requires.
     const transport = this.#transport(this.#deviceId);
-    const scale = new Scale(
-      transport,
-      this.#monotonicNow ? { monotonicNow: this.#monotonicNow } : {},
-    );
+    const monotonicNow = this.#monotonicNow ?? (() => performance.now());
+    const scale: Scale = new Scale(transport, {
+      ...(this.#monotonicNow ? { monotonicNow: this.#monotonicNow } : {}),
+      // M3-11: kept for the recording, stamped like the library stamps a reading.
+      onRejected: (raw) => {
+        if (this.#scale !== scale) return;
+        const frame = { raw, timestamp: monotonicNow(), receivedAt: Date.now() };
+        for (const cb of this.#rejectedListeners) cb(frame);
+      },
+    });
     // Close the connection this one replaces, if any. Not awaited: the chooser needs the gesture.
     const replaced = this.#scale;
     this.#scale = scale;
@@ -107,6 +112,11 @@ export class HuajunDriver implements ScaleDriver {
   onReading(cb: (r: ScaleReading) => void): () => void {
     this.#readingListeners.add(cb);
     return () => this.#readingListeners.delete(cb);
+  }
+
+  onRejectedFrame(cb: (frame: RejectedFrame) => void): () => void {
+    this.#rejectedListeners.add(cb);
+    return () => this.#rejectedListeners.delete(cb);
   }
 
   onConnectionChange(cb: (state: ConnectionState) => void): () => void {
