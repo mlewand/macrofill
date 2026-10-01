@@ -6,7 +6,7 @@ import { App } from '../src/App';
 import type { DirectEntryState } from '../src/directEntry/state';
 import { DraftContext, type Draft, type DraftStore } from '../src/storage/drafts';
 import en from '../src/i18n/en.json';
-import { fakeApi as baseFakeApi, stored } from './support/api';
+import { emptyToday, fakeApi as baseFakeApi, stored } from './support/api';
 
 const nutrition = (protein: number, fibre: number | null = null) => ({
   kcal: 100,
@@ -703,6 +703,29 @@ describe('Direct Entry across a reload (M5-8)', () => {
       fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
       expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
       expect(saveMeal).not.toHaveBeenCalled();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: a login in another tab as someone else reloads Today for them (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const today = vi.fn(() => Promise.resolve(emptyToday));
+      renderWithDrafts(
+        memoryDrafts().store,
+        baseFakeApi({ catalog: () => Promise.resolve(catalog), today }),
+      );
+      await screen.findByRole('button', { name: en.home.logMeal });
+      await vi.waitFor(() => expect(today).toHaveBeenCalled());
+      const loads = today.mock.calls.length;
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      await vi.waitFor(() => expect(today.mock.calls.length).toBeGreaterThan(loads));
     } finally {
       localStorage.clear();
     }
