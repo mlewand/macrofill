@@ -8,13 +8,14 @@ import {
 import { createContext, useContext } from 'react';
 import { z } from 'zod';
 import type { DirectEntryState } from '../directEntry/state';
-import { IndexedDbUnavailable, idb } from './idb';
+import { IndexedDbBlocked, IndexedDbUnavailable, idb } from './idb';
 
 /**
  * M5-8: the in-progress Direct Entry session, kept on the device so a page reload resumes it.
  * Loading never fails: no draft, a broken one or no IndexedDB all load as none.
  */
 export interface DraftStore {
+  /** Undefined when there's none. Rejects only with `IndexedDbBlocked`: then try again later. */
   load: () => Promise<Draft | undefined>;
   /** Resolves whether the draft is kept: it never rejects, but a caller may need to know. */
   save: (draft: Draft) => Promise<boolean>;
@@ -110,7 +111,9 @@ export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore
         return parseDraft(
           await run('drafts', 'readonly', (store): IDBRequest<unknown> => store.get(KEY)),
         );
-      } catch {
+      } catch (error) {
+        // Blocked: a kept session may well be there; the caller waits and tries again.
+        if (error instanceof IndexedDbBlocked) throw error;
         return undefined;
       }
     },

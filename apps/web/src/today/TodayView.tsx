@@ -19,14 +19,10 @@ import type { OutboxItem } from '../outbox/store';
 export function TodayView() {
   const { t } = useTranslation();
   const api = useApi();
-  const queued = usePending();
-  // Waiting to be sent, and counted; refused ones are shown apart, and not counted.
-  const pending = queued
-    .filter((item) => item.refused === undefined)
-    .map((item) => item.entry)
-    // Newest first, like the day's list (M7-1).
-    .sort((a, b) => Date.parse(b.eatenAt) - Date.parse(a.eatenAt));
-  const refused = queued.filter((item) => item.refused !== undefined);
+  // Next to the server's day only once the server has confirmed the user (M5-9); offline, when the
+  // day can't load, the remembered user's are shown on their own.
+  const { pending, refused } = split(usePending());
+  const offline = split(usePending({ unconfirmed: true }));
   const [today, setToday] = useState<Today>();
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -68,13 +64,13 @@ export function TodayView() {
         <button type="button" className="secondary" onClick={reload}>
           {t('app.retry')}
         </button>
-        <Refused items={refused} timezone={deviceTimeZone()} />
+        <Refused items={offline.refused} timezone={deviceTimeZone()} />
         {/* Offline, the day can't load, but what's waiting on this device can be shown. */}
-        {pending.length > 0 && (
+        {offline.pending.length > 0 && (
           <>
             <h3>{t('today.pendingTitle')}</h3>
             <ul className="entries">
-              {pending.map((entry) => (
+              {offline.pending.map((entry) => (
                 <Entry
                   key={entry.id}
                   entry={{ ...entry, pending: true }}
@@ -184,6 +180,20 @@ function Refused({ items, timezone }: { items: OutboxItem[]; timezone: string })
       </ul>
     </section>
   );
+}
+
+/**
+ * Waiting to be sent, newest first like the day's list (M7-1), and counted; refused ones are
+ * shown apart, and not counted.
+ */
+function split(items: OutboxItem[]) {
+  return {
+    pending: items
+      .filter((item) => item.refused === undefined)
+      .map((item) => item.entry)
+      .sort((a, b) => Date.parse(b.eatenAt) - Date.parse(a.eatenAt)),
+    refused: items.filter((item) => item.refused !== undefined),
+  };
 }
 
 function deviceTimeZone(): string {

@@ -3,7 +3,8 @@
     "name": "Macrofill",
     "loading": "Loading…",
     "loadFailed": "Couldn't load recipes and products.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "blocked": "Macrofill is open in another tab with an older version. Close that tab to go on."
   },
   "login": {
     "title": "Log in",

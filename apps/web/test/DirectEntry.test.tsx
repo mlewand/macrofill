@@ -7,7 +7,12 @@ import { OutboxProvider, OutboxStoreContext, useSaveMeal } from '../src/outbox/O
 import { indexedDbOutbox, type OutboxStore } from '../src/outbox/store';
 import { App } from '../src/App';
 import type { DirectEntryState } from '../src/directEntry/state';
-import { DraftContext, type Draft, type DraftStore } from '../src/storage/drafts';
+import {
+  DraftContext,
+  indexedDbDraftStore,
+  type Draft,
+  type DraftStore,
+} from '../src/storage/drafts';
 import en from '../src/i18n/en.json';
 import { emptyToday, fakeApi as baseFakeApi, stored } from './support/api';
 import { outboxItem } from './support/outbox';
@@ -535,7 +540,14 @@ describe('Direct Entry across a reload (M5-8)', () => {
     try {
       const drafts = memoryDrafts();
       await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
-      renderWithDrafts(drafts.store);
+      // The server names whoever logged in last, as the shared cookie does.
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          me: () => Promise.resolve(localStorage.getItem('macrofill.user') ?? 'mlewand'),
+        }),
+      );
       await screen.findByText('Step 2 of 2');
       localStorage.setItem('macrofill.user', 'other');
       act(() => {
@@ -780,7 +792,11 @@ describe('Direct Entry across a reload (M5-8)', () => {
     localStorage.clear();
     try {
       let answer!: (username: string) => void;
-      const me = vi.fn(() => new Promise<string>((resolve) => (answer = resolve)));
+      // The first answer is held back; asked again after the login elsewhere, it's the new user.
+      const me = vi
+        .fn<Api['me']>()
+        .mockImplementationOnce(() => new Promise<string>((resolve) => (answer = resolve)))
+        .mockResolvedValue('other');
       renderWithDrafts(
         memoryDrafts().store,
         baseFakeApi({ catalog: () => Promise.resolve(catalog), me }),
@@ -1130,7 +1146,13 @@ describe('saving through the outbox (M5-9)', () => {
       const outbox = indexedDbOutbox(new IDBFactory());
       await outbox.add({ ...outboxItem(1), username: 'other' });
       const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
-      renderWithOutbox(fakeApi(saveMeal, { today: todayNow }), outbox);
+      renderWithOutbox(
+        fakeApi(saveMeal, {
+          today: todayNow,
+          me: () => Promise.resolve(localStorage.getItem('macrofill.user') ?? 'mlewand'),
+        }),
+        outbox,
+      );
       await screen.findByRole('button', { name: en.home.logMeal });
       expect(saveMeal).not.toHaveBeenCalled();
       localStorage.setItem('macrofill.user', 'other');
@@ -1268,6 +1290,101 @@ describe('saving through the outbox (M5-9)', () => {
     await screen.findByText(en.today.pendingTitle);
     const times = screen.getAllByRole('listitem').map((li) => li.querySelector('time')?.dateTime);
     expect(times).toEqual(['2026-01-15T09:00:00.000Z', '2026-01-15T07:00:00.000Z']);
+  });
+
+  it("M5-9: if the server can't confirm the remembered user, their meals stay out of the server's day (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, new Date().toISOString()));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: todayNow,
+          me: () => Promise.reject(new TypeError('timeout')),
+        }),
+        outbox,
+      );
+      await screen.findByRole('heading', { name: en.today.title });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: offline, with the user remembered, what waits on the device still shows', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.pendingTitle)).toBeInTheDocument();
+      expect(screen.getByText(en.today.pending)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: waiting meals are sent only once the server has confirmed the user (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1));
+      let answer!: (username: string) => void;
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(
+        fakeApi(saveMeal, {
+          today: todayNow,
+          me: () => new Promise<string>((resolve) => (answer = resolve)),
+        }),
+        outbox,
+      );
+      await screen.findByRole('button', { name: en.home.logMeal });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(saveMeal).not.toHaveBeenCalled();
+      act(() => answer('mlewand'));
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: a session kept while another tab blocks the database resumes once it lets go (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const factory = new IDBFactory();
+      // An older version of the app, open in another tab, that kept a session.
+      const old = await new Promise<IDBDatabase>((resolve) => {
+        const open = factory.open('macrofill', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('drafts');
+        open.onsuccess = () => resolve(open.result);
+      });
+      await new Promise<void>((resolve) => {
+        const put = old
+          .transaction('drafts', 'readwrite')
+          .objectStore('drafts')
+          .put({ state: draftAtMilk, username: 'mlewand' }, 'directEntry');
+        put.onsuccess = () => resolve();
+      });
+      render(
+        <ApiContext value={fakeApi()}>
+          <DraftContext value={indexedDbDraftStore(factory)}>
+            <App />
+          </DraftContext>
+        </ApiContext>,
+      );
+      expect(await screen.findByText(en.app.blocked)).toBeInTheDocument();
+      old.close();
+      expect(await screen.findByText('Step 2 of 2', {}, { timeout: 4000 })).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
   });
 
   it('M5-9: offline, Today still lists what waits on the device', async () => {

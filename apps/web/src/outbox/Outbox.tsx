@@ -22,6 +22,8 @@ export type SaveResult = 'synced' | 'pending' | 'refused';
 interface Outbox {
   /** Meals waiting to be sent, oldest first. */
   pending: OutboxItem[];
+  /** Whether the server has confirmed who's logged in. */
+  ready: boolean;
   save: (request: SaveMealRequest, entry: TodayEntry) => Promise<SaveResult>;
   /** Sends what's waiting, e.g. after logging in. */
   sync: () => Promise<void>;
@@ -44,8 +46,8 @@ export function OutboxProvider({
 }: {
   children: React.ReactNode;
   /**
-   * Whether the user is settled (the server named them, or couldn't be asked): until then the
-   * remembered user may be stale, so no queued meal shows.
+   * Whether the server has confirmed who's logged in. Until then the remembered user may be stale:
+   * no queued meal shows next to the server's day, and the startup sync waits.
    */
   ready?: boolean;
 }) {
@@ -56,6 +58,16 @@ export function OutboxProvider({
   const again = useRef(false);
   /** What became of each meal sent this session: saved, or refused for good. */
   const outcomes = useRef(new Map<string, 'synced' | 'dropped'>());
+
+  /** The latest list; on a failed read, the last known one stays. */
+  const refresh = useCallback(async () => {
+    if (!store) return;
+    try {
+      setPending(await store.all());
+    } catch {
+      // Kept as it was: a read that fails doesn't mean nothing waits.
+    }
+  }, [store]);
 
   const sync = useCallback(async () => {
     if (!store) return;
@@ -68,11 +80,12 @@ export function OutboxProvider({
       do {
         again.current = false;
         // Shown before they're sent, so Today sees them leave and loads the day again.
-        setPending(await store.all());
+        await refresh();
+        // A failed read stops the sync, and nothing waiting is taken for gone.
         const result = await syncOutbox(store, api, lastUser).catch(() => undefined);
         for (const id of result?.synced ?? []) outcomes.current.set(id, 'synced');
         for (const id of result?.dropped ?? []) outcomes.current.set(id, 'dropped');
-        setPending(await store.all());
+        await refresh();
       } while (again.current);
     })();
     try {
@@ -80,14 +93,27 @@ export function OutboxProvider({
     } finally {
       running.current = undefined;
     }
-  }, [store, api]);
+  }, [store, api, refresh]);
 
+  // What waits is listed from the start; it's sent once the server has confirmed the user.
   useEffect(() => {
+    if (!store) return;
+    let current = true;
+    store.all().then(
+      (items) => current && setPending(items),
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [store]);
+  useEffect(() => {
+    if (!ready) return;
     void sync();
     const online = () => void sync();
     window.addEventListener('online', online);
     return () => window.removeEventListener('online', online);
-  }, [sync]);
+  }, [sync, ready]);
 
   const save = useCallback(
     async (request: SaveMealRequest, entry: TodayEntry): Promise<SaveResult> => {
@@ -122,26 +148,36 @@ export function OutboxProvider({
     async (mealId: string) => {
       if (!store) return;
       await store.remove(mealId).catch(() => undefined);
-      setPending(await store.all());
+      await refresh();
     },
-    [store],
+    [store, refresh],
   );
 
   const value = useMemo(
-    () => ({ pending: ready ? pending : [], save, sync, remove }),
-    [ready, pending, save, sync, remove],
+    () => ({ pending, ready, save, sync, remove }),
+    [pending, ready, save, sync, remove],
   );
   return <OutboxContext value={value}>{children}</OutboxContext>;
 }
 
 /**
- * The current user's meals waiting to be sent; none outside an `OutboxProvider`. Filtered on
- * every read, so another user's never show, not even right after a switch.
+ * The current user's meals waiting to be sent; none outside an `OutboxProvider`, and none until
+ * the server has confirmed the user. Filtered on every read, so another user's never show, not
+ * even right after a switch.
  */
-export function usePending(): OutboxItem[] {
-  const pending = useContext(OutboxContext)?.pending ?? [];
+export function usePending(
+  options: {
+    /**
+     * Also while the server hasn't confirmed the user: only where no server data is shown with
+     * them (offline, when the day couldn't load), so the remembered user's meals can't mix in.
+     */
+    unconfirmed?: boolean;
+  } = {},
+): OutboxItem[] {
+  const outbox = useContext(OutboxContext);
+  if (!outbox || (!outbox.ready && !options.unconfirmed)) return [];
   const user = lastUser();
-  return pending.filter((item) => isOwnedBy(item.username, user));
+  return outbox.pending.filter((item) => isOwnedBy(item.username, user));
 }
 
 /** How long a save waits for the server before it reports the meal as pending. */

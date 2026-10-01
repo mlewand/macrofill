@@ -22,6 +22,9 @@ export type Run = <T>(
  */
 export class IndexedDbUnavailable extends Error {}
 
+/** Another tab holds an older version of the database open, so it can't be upgraded yet. */
+export class IndexedDbBlocked extends Error {}
+
 export function idb(factory: IDBFactory): Run {
   let db: Promise<IDBDatabase> | undefined;
   const open = () =>
@@ -42,7 +45,7 @@ export function idb(factory: IDBFactory): Run {
       };
       request.onsuccess = () => resolve(request.result);
       // Another tab holds an older version open: fail rather than wait for it to close.
-      request.onblocked = () => reject(new Error('IndexedDB is blocked by another tab'));
+      request.onblocked = () => reject(new IndexedDbBlocked('IndexedDB is blocked by another tab'));
       request.onerror = () => reject(request.error ?? new Error('IndexedDB failed to open'));
     }));
 

@@ -32,7 +32,10 @@ const itemSchema = z.object({
 export interface OutboxStore {
   /** Rejects if the meal couldn't be kept (e.g. no IndexedDB): then it must be sent directly. */
   add: (item: OutboxItem) => Promise<void>;
-  /** Oldest first. Items that don't parse (e.g. from another version) are left out. */
+  /**
+   * Oldest first. Items that don't parse (e.g. from another version) are left out. Rejects if the
+   * outbox can't be read.
+   */
   all: () => Promise<OutboxItem[]>;
   remove: (mealId: string) => Promise<void>;
 }
@@ -44,12 +47,8 @@ export function indexedDbOutbox(factory: IDBFactory = indexedDB): OutboxStore {
       await run('outbox', 'readwrite', (store) => store.put(item, item.request.meal.id));
     },
     all: async () => {
-      let values: unknown[];
-      try {
-        values = await run('outbox', 'readonly', (store) => store.getAll());
-      } catch {
-        return [];
-      }
+      // A failed read rejects: an outbox that can't be read isn't an empty one.
+      const values: unknown[] = await run('outbox', 'readonly', (store) => store.getAll());
       return values
         .flatMap((value) => {
           const result = itemSchema.safeParse(value);

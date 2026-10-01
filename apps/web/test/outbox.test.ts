@@ -65,7 +65,8 @@ describe('outbox store (M5-9)', () => {
     } as unknown as IDBFactory;
     const store = indexedDbOutbox(broken);
     await expect(store.add(outboxItem(1))).rejects.toThrow('unavailable');
-    await expect(store.all()).resolves.toEqual([]);
+    // Not "empty": a read that fails says so, so nothing waiting is taken for gone.
+    await expect(store.all()).rejects.toThrow('unavailable');
   });
 });
 

@@ -13,6 +13,9 @@ import { TodayView } from './today/TodayView';
 /** How long the app waits to learn who's logged in before it shows anything. */
 const ME_WAIT_MS = 5000;
 
+/** How often a kept session blocked by another tab is tried again. */
+const DRAFT_RETRY_MS = 1000;
+
 type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
 
 export function App() {
@@ -38,6 +41,9 @@ export function App() {
   const [meSettled, setMeSettled] = useState(false);
   // Asking again (Try again, or back online) while the user is still unknown.
   const [meAttempt, setMeAttempt] = useState(0);
+  // Whether the server has confirmed who's logged in (/api/me, or a login here). Until then the
+  // remembered user may be stale: their queued meals wait (M5-9).
+  const [confirmed, setConfirmed] = useState(false);
   /** Someone else now, or nobody was known: what was open may be another user's (M5-8). */
   const userIs = (username: string) => {
     if (username !== user) {
@@ -49,6 +55,7 @@ export function App() {
   };
   const loggedIn = (username: string) => {
     generation.current++;
+    setConfirmed(true);
     setNeedsLogin(false);
     setLogins((n) => n + 1);
     userIs(username);
@@ -68,6 +75,7 @@ export function App() {
         setMeSettled(true);
         // A login since makes this answer stale: the cookie is someone else's now.
         if (asked !== generation.current) return;
+        setConfirmed(true);
         rememberUser(username);
         setUser((known) => {
           if (known !== undefined && known !== username) {
@@ -107,17 +115,20 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', visible);
   }, []);
   useEffect(() => {
-    if (user !== undefined) return;
+    if (user !== undefined && confirmed) return;
     const online = () => setMeAttempt((n) => n + 1);
     window.addEventListener('online', online);
     return () => window.removeEventListener('online', online);
-  }, [user]);
+  }, [user, confirmed]);
 
   // A login in another tab shares this tab's cookie: the same applies.
   useEffect(
     () =>
       onUserChangedElsewhere((username) => {
         generation.current++;
+        // Changed in another tab: the server confirms it again.
+        setConfirmed(false);
+        setMeAttempt((n) => n + 1);
         if (username !== user) {
           void drafts.clear();
           setResume(undefined);
@@ -135,23 +146,36 @@ export function App() {
   // Nothing is shown until it's known whether there's a kept session: a meal started meanwhile
   // would overwrite it. IndexedDB answers in milliseconds.
   const [draftLoaded, setDraftLoaded] = useState(false);
+  // An older version of the app in another tab blocks the database: the kept session waits.
+  const [draftBlocked, setDraftBlocked] = useState(false);
+  const [draftAttempt, setDraftAttempt] = useState(0);
   useEffect(() => {
     let current = true;
-    void drafts.load().then((draft) => {
-      if (!current) return;
-      setDraftLoaded(true);
-      if (!draft) return;
-      if (!belongsToCurrentUser(draft.username)) {
-        void drafts.clear();
-        return;
-      }
-      setResume(draft);
-      setScreen('directEntry');
-    });
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    void drafts.load().then(
+      (draft) => {
+        if (!current) return;
+        setDraftBlocked(false);
+        setDraftLoaded(true);
+        if (!draft) return;
+        if (!belongsToCurrentUser(draft.username)) {
+          void drafts.clear();
+          return;
+        }
+        setResume(draft);
+        setScreen('directEntry');
+      },
+      () => {
+        if (!current) return;
+        setDraftBlocked(true);
+        retry = setTimeout(() => setDraftAttempt((n) => n + 1), DRAFT_RETRY_MS);
+      },
+    );
     return () => {
       current = false;
+      clearTimeout(retry);
     };
-  }, [drafts]);
+  }, [drafts, draftAttempt]);
   const leaveDirectEntry = (next: Screen) => {
     setResume(undefined);
     setScreen(next);
@@ -163,11 +187,20 @@ export function App() {
   }, [t]);
 
   // Nothing starts before it's known whose it is: a meal must never belong to nobody (M5-8).
+  if (draftBlocked && !draftLoaded) {
+    return (
+      <main>
+        <p role="alert" className="problem">
+          {t('app.blocked')}
+        </p>
+      </main>
+    );
+  }
   if (!draftLoaded || (user === undefined && !meSettled)) return null;
 
   return (
     <ApiContext value={api}>
-      <OutboxProvider ready={meSettled}>
+      <OutboxProvider ready={confirmed}>
         <SyncAfterLogin logins={logins} user={user} />
         <main hidden={needsLogin}>
           {screen === 'home' && (
