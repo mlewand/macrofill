@@ -78,6 +78,13 @@ export function App() {
           }
           return username;
         });
+        // A kept session stamped for someone else isn't this user's (M5-8).
+        setResume((kept) => {
+          if (kept?.username === undefined || kept.username === username) return kept;
+          void drafts.clear();
+          setScreen('home');
+          return undefined;
+        });
       },
       (error: unknown) => {
         if (!current) return;
