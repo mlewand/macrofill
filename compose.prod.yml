@@ -3,7 +3,11 @@
 # Needs DATABASE_URL and POSTGRES_NETWORK in the environment or a .env file next to this one.
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # The git commit, set by deploy.sh; usage events carry it (M7-8).
+        APP_VERSION: ${APP_VERSION:-dev}
     image: macrofill:latest
     restart: unless-stopped
     environment:

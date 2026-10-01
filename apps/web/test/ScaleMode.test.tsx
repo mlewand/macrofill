@@ -7,6 +7,7 @@ import { ApiContext, type Api } from '../src/api/api';
 import { App } from '../src/App';
 import en from '../src/i18n/en.json';
 import { ScaleContext } from '../src/scale';
+import { TrackContext, type Track } from '../src/events/track';
 import { ScaleMode } from '../src/scaleMode/ScaleMode';
 import { fakeApi } from './support/api';
 
@@ -73,18 +74,21 @@ async function session({ connect = true } = {}) {
   const driver = new MockScaleDriver();
   const api = fakeApi({ catalog: () => Promise.resolve(catalog) });
   const onSaved = vi.fn();
+  const track = vi.fn<Track>();
   const view = render(
     <ApiContext value={api}>
-      <ScaleContext value={() => driver}>
-        <ScaleMode
-          catalog={catalog}
-          onSaved={onSaved}
-          onCancel={vi.fn()}
-          owner="mlewand"
-          tracker={{ stableWaitMs: 60 }}
-          reconnect={{ firstDelayMs: 5, maxDelayMs: 10, giveUpAfterMs: 50 }}
-        />
-      </ScaleContext>
+      <TrackContext value={track}>
+        <ScaleContext value={() => driver}>
+          <ScaleMode
+            catalog={catalog}
+            onSaved={onSaved}
+            onCancel={vi.fn()}
+            owner="mlewand"
+            tracker={{ stableWaitMs: 60 }}
+            reconnect={{ firstDelayMs: 5, maxDelayMs: 10, giveUpAfterMs: 50 }}
+          />
+        </ScaleContext>
+      </TrackContext>
     </ApiContext>,
   );
   fireEvent.click(button('Curd bowl'));
@@ -94,7 +98,7 @@ async function session({ connect = true } = {}) {
   }
   const script = scaleScript({ intervalMs: 5 });
   const play = (s: typeof script) => act(() => driver.play(s.take()));
-  return { driver, api, onSaved, view, script, play };
+  return { driver, api, onSaved, view, script, play, track };
 }
 
 /** Bowl on, Start. */
@@ -282,6 +286,33 @@ describe('Scale Mode', () => {
     await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
     const request = vi.mocked(s.api.saveMeal).mock.calls[0]![0];
     expect(request.recording!.events.map((e) => e.type)).toEqual(['start', 'next']);
+  });
+
+  it('M7-8: Scale Mode tracks its flow, steps, a manual correction, and a scale disconnect and reconnect', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    act(() => s.driver.drop());
+    await screen.findByText(en.scale.status.connected);
+    await s.play(s.script.stable({ forMs: 0 }));
+    fireEvent.click(button(en.scale.enterManually));
+    fireEvent.change(screen.getByLabelText(en.step.grams), { target: { value: '20' } });
+    fireEvent.click(button(en.scale.useGrams));
+    fireEvent.click(button(en.summary.save));
+    await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
+    const tracked = s.track.mock.calls.map(([name, props]) => [name, props]);
+    expect(tracked.map(([name]) => name)).toEqual([
+      'flow_started',
+      'step_completed',
+      'scale_disconnected',
+      'scale_reconnected',
+      'step_completed',
+      'manual_correction',
+      'flow_finished',
+    ]);
+    expect(tracked[1]![1]).toMatchObject({ inputMethod: 'scale', step: 0, weightSource: 'scale' });
+    expect(tracked[3]![1]).toEqual({ durationMs: expect.any(Number) as number });
+    expect(tracked[4]![1]).toMatchObject({ step: 1, weightSource: 'manual' });
   });
 
   it('M5-8: a Scale Mode meal with no known owner is not sent (regression: #37)', async () => {

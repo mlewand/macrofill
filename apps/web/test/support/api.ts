@@ -26,5 +26,6 @@ export function fakeApi(overrides: Partial<Api> = {}): Api {
     saveMeal: vi.fn(overrides.saveMeal ?? ((request) => Promise.resolve(stored(request)))),
     today: vi.fn(overrides.today ?? (() => Promise.resolve(emptyToday))),
     deleteEntry: vi.fn(overrides.deleteEntry ?? (() => Promise.resolve())),
+    sendEvents: vi.fn(overrides.sendEvents ?? (() => Promise.resolve())),
   };
 }

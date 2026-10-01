@@ -19,6 +19,8 @@ import { isSummary, stepProblem } from '../directEntry/state';
 import { formatGrams } from '../format';
 import type { SaveResult } from '../outbox/Outbox';
 import { useCreateScaleDriver } from '../scale';
+import { useTrack } from '../events/track';
+import { sinceStart, useFlowEvents } from '../events/useFlowEvents';
 import { reconnect } from './reconnect';
 import { reconnectSettings, trackerSettings, type ReconnectSettings } from './settings';
 import { belongsTo, lastUser } from '../session';
@@ -55,8 +57,18 @@ export function ScaleMode({
   owner,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe>();
+  const track = useTrack();
   if (recipe === undefined) {
-    return <RecipePicker recipes={catalog.recipes} onPick={setRecipe} onCancel={onCancel} />;
+    return (
+      <RecipePicker
+        recipes={catalog.recipes}
+        onPick={(picked) => {
+          track('flow_started', { inputMethod: 'scale' });
+          setRecipe(picked);
+        }}
+        onCancel={onCancel}
+      />
+    );
   }
   return (
     <Session
@@ -128,6 +140,10 @@ function Session(props: {
   };
   const [connection, setConnection] = useState<Connection>('idle');
   const [reconnectConfig] = useState(props.reconnect);
+  const track = useTrack();
+  useFlowEvents(state.flow);
+  /** When the scale dropped, for how long reconnecting took (M7-8). */
+  const droppedAt = useRef<number | undefined>(undefined);
   // Who the meal belongs to, fixed when the session starts (see Summary).
   const [owner] = useState(props.owner);
   const everConnected = useRef(false);
@@ -156,6 +172,11 @@ function Session(props: {
         everConnected.current = true;
         // An attempt that was under way when the user chose typed grams: not needed any more.
         if (byHand.current) return void driver.disconnect().catch(() => undefined);
+        if (droppedAt.current !== undefined) {
+          const durationMs = Math.max(0, Math.round(performance.now() - droppedAt.current));
+          droppedAt.current = undefined;
+          track('scale_reconnected', { durationMs });
+        }
         reconnecting.current = undefined;
         // Start and Next stay off until the first reading from this connection (see `stale`).
         setConnection('connected');
@@ -163,6 +184,8 @@ function Session(props: {
         // M6-6: keep the session and reconnect to the same device, without the chooser.
         const controller = new AbortController();
         reconnecting.current = controller;
+        droppedAt.current = performance.now();
+        track('scale_disconnected', {});
         setConnection('reconnecting');
         dispatch({ type: 'dropped' });
         void reconnect(() => driver.connect(), reconnectConfig, controller.signal).then(
@@ -178,7 +201,7 @@ function Session(props: {
       reconnecting.current?.abort();
       reconnecting.current = undefined;
     };
-  }, [driver, reconnectConfig, finishByHand]);
+  }, [driver, reconnectConfig, finishByHand, track]);
 
   // Disconnect when the session ends (saved, cancelled or left). Safe before any connect.
   useEffect(() => () => void driver.disconnect().catch(() => undefined), [driver]);
@@ -213,7 +236,13 @@ function Session(props: {
           dispatch={(action) => {
             if (action.type === 'undo' || action.type === 'editGrams') tap(action);
           }}
-          onSaved={props.onSaved}
+          onSaved={(result) => {
+            track('flow_finished', {
+              inputMethod: 'scale',
+              durationMs: sinceStart(state.flow.startedAt),
+            });
+            props.onSaved(result);
+          }}
           recording={() => recorder.recording()}
           owner={owner}
           // Sent only for a known owner who's still logged in (another tab may have changed it).

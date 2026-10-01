@@ -9,6 +9,9 @@ COPY packages/domain/package.json packages/domain/
 COPY packages/scale/package.json packages/scale/
 RUN pnpm install --frozen-lockfile
 COPY . .
+# M7-8: the web build sends it with every usage event (deploy.sh passes the git commit).
+ARG APP_VERSION=dev
+ENV VITE_APP_VERSION=$APP_VERSION
 RUN pnpm build
 
 FROM node:24-slim
