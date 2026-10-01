@@ -69,7 +69,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 
 # Data model
 
-- Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent, user-added Product) has `ownerId`. Curated content (IngredientClass, Recipe, seed Products) is global. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it.
+- Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent, user-added Product) has `ownerId`. Curated content (IngredientClass, Recipe, seed Products) is global. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it, except authentication, which finds the user by username or session before there is one.
 - User: id, username, password hash (argon2id), timezone (IANA name, e.g. `Europe/Warsaw`; used by M2-5, M7-1).
 - NutritionValues (per 100 g): energy kcal, fat, saturates, carbs, sugars, protein, salt (full EU label set), fibre (EU labels don't always have it). UI shows only protein/fat/carbs/fibre/kcal for now.
   - Any value missing from a product's label or source (most often fibre, but e.g. saturates, sugars or salt too) is stored as unknown, never as 0. A meal or day total of a nutrient that includes an unknown value is shown as "unknown"; the other nutrients' totals are unaffected.
@@ -165,6 +165,7 @@ interface ScaleDriver {
   disconnect(): Promise<void>;
   onReading(cb: (r: ScaleReading) => void): () => void;
   onConnectionChange(cb: (state: 'connected' | 'disconnected') => void): () => void;
+  onRejectedFrame?(cb: (f: { raw: Uint8Array; timestamp: number; receivedAt: number }) => void): () => void;  // payloads the parser rejects, for the recording (M3-11)
   tare?(): Promise<void>;
 }
 ```
@@ -177,8 +178,9 @@ interface ScaleDriver {
 - Recording
   - Every capture session is recorded, also during normal use: raw payloads, parsed readings, user events.
   - Stored with the prepared meal on the backend; can be dumped/exported for investigation.
-  - Raw payloads are kept so parser bugs can be reproduced, not only weight-tracking bugs.
-  - Full rate: the whole stream of every capture session. Sampling would drop the transients (tare, lift, auto-off) worth investigating, and the volume is small (roughly 100 KB per session).
+  - Raw payloads are kept so parser bugs can be reproduced, not only weight-tracking bugs. That includes the payloads the parser rejects, which a parser bug affects most.
+  - A recording holds at most 20 000 frames (about 75 minutes at the Huajun scale's 225 ms) and counts the frames past that it leaves out.
+  - Full rate: the whole stream of every capture session, up to the cap above. Sampling would drop the transients (tare, lift, auto-off) worth investigating, and the volume is small (roughly 100 KB per session).
 
 # Macro tracking
 
@@ -300,7 +302,7 @@ IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferr
 - **M3-5:** The tracker uses the driver's stable flag when there is one. Otherwise a reading counts as stable when readings stay within ±1 g for 1000 ms. Both values are configurable.
 - **M3-6:** If a step amount would be below 0, the tracker doesn't record it. It emits a "needs correction" state, and the user enters the weight manually (M6-5), taps Next to read the scale again, or undoes. In MVP0 this is also what happens after a mid-meal tare. An amount below 0 by no more than a configurable tolerance (default 0.3 g, the scale's flicker while stable) counts as 0.
 - **M3-10:** Property test: with no manual corrections and non-decreasing stable readings, the sum of step amounts equals the last Next reading minus the baseline.
-- **M3-11:** Every raw frame (bytes and receive time) and every user event is recorded. `ReplayScaleDriver` re-parses the stored bytes with the library's current parser, so replaying a recording gives the same step amounts, and a parser fix can be checked against old recordings. If the library doesn't expose the mapping from a parsed frame to a `Reading`, it gets added to the library rather than duplicated in the app.
+- **M3-11:** Every raw frame (bytes and receive time) and every user event is recorded, up to 20 000 frames per session; frames past that are counted in the recording, so a replay of it is known to be incomplete. `ReplayScaleDriver` re-parses the stored bytes with the library's current parser, so replaying a complete recording (no frames counted as dropped) with unchanged parser and tracker behaviour gives the same step amounts. A parser or tracker fix can be checked against old recordings, and may change what they replay to. If the library doesn't expose the mapping from a parsed frame to a `Reading`, it gets added to the library rather than duplicated in the app.
 - **M3-12:** Tests describe scale behavior with a fluent builder, e.g. `scaleScript().baseline(312).add(214, { overMs: 3000 }).stable().add(18)`. It compiles to plain data (timed readings), which unit tests feed to the tracker and e2e tests pass into the page for `MockScaleDriver`.
 - **M3-13:** `packages/scale` uses `@mlewand/huajun-ble-scale` and never decodes bytes itself. Its tests cover only the mapping from the library's `Reading` to domain readings; parser tests live in the library.
 - **M3-14:** A reading without `grams` (the scale shows another unit) puts the driver in a "wrong unit" state. The tracker ignores such readings.

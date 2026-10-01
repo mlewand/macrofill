@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { idSchema, timestampSchema } from './common.js';
+import { scaleRecordingSchema } from './recording.js';
 
 export const skippedItemSchema = z.object({
   stepId: idSchema.optional(),
@@ -58,6 +59,8 @@ export const saveMealRequestSchema = z.object({
    * so a meal never lands in the wrong account when the login changes meanwhile (another tab).
    */
   username: z.string().min(1).optional(),
+  /** M6-7: a meal weighed with the scale comes with its recording (M3-11), stored with it (M4-7). */
+  recording: scaleRecordingSchema.optional(),
 });
 
 export type SaveMealRequest = z.infer<typeof saveMealRequestSchema>;
