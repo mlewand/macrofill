@@ -39,6 +39,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
   - well tested: automated tests at every layer from day one (see Testing strategy)
 - Accepted shortcuts
   - users provisioned from configuration/seed, no sign-up UI; login with username + password. Data model and auth are multi-user from day 0 (see Data model, Backend & sync)
+  - one user per device: each phone or tablet is used by one person. The server keeps users apart (M4-1 to M4-3), and refuses a save that names another user than the session's. On the device, what's kept for a reload or offline (the Direct Entry draft, the save outbox) is tied to the user who saved it, as a best-effort guard. Switching users on one device, also across tabs or with browser storage blocked, isn't an MVP0 scenario: gaps found there are tracked as issues, not treated as blockers
   - daily targets defined in configuration, no GUI
   - recipes, ingredient classes and products come from seed files in the repo, no GUI to edit them
   - Android Chrome only
