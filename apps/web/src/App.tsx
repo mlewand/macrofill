@@ -59,7 +59,9 @@ export function App() {
   }, []);
   /** Someone else now, or nobody was known: what was open may be another user's (M5-8). */
   const userIs = (username: string) => {
-    if (username !== user) {
+    // A kept session of this very user stays, e.g. when their session expired with nobody
+    // remembered on the device: it's theirs (M5-8).
+    if (username !== user && resume?.username !== username) {
       void drafts.clear();
       setResume(undefined);
       setScreen('home');
