@@ -46,7 +46,6 @@ export async function seed(
   data = seedData,
   passwords: SeedPasswords = {},
 ): Promise<{ withoutPassword: string[] }> {
-  for (const password of Object.values(passwords)) assertSettablePassword(password);
   return db.transaction(async (tx) => {
     for (const { user, targets } of data.users) {
       const { username, timezone } = user;
@@ -117,6 +116,8 @@ export async function seed(
         withoutPassword.push(user.username);
         continue;
       }
+      // Checked only when it's set; throwing rolls the whole seed back.
+      assertSettablePassword(password);
       await auth.setInitialPasswordHash(user.username, await hashPassword(password));
     }
     return { withoutPassword };
