@@ -141,7 +141,21 @@ function Session(props: {
   const [connection, setConnection] = useState<Connection>('idle');
   const [reconnectConfig] = useState(props.reconnect);
   const track = useTrack();
-  useFlowEvents(state.flow);
+  const { startedAt } = state.flow;
+  // The first step is shown from Start: connecting and the bowl don't count (M7-8).
+  useFlowEvents(state.flow, state.tracker.baseline !== undefined);
+  /** Saved: leaving the page now abandons nothing. */
+  const finished = useRef(false);
+  // A Scale Mode meal isn't kept across a reload: leaving the page abandons it (M7-8).
+  useEffect(() => {
+    const leaving = () => {
+      if (finished.current) return;
+      finished.current = true;
+      track('flow_abandoned', { inputMethod: 'scale', durationMs: sinceStart(startedAt) });
+    };
+    window.addEventListener('pagehide', leaving);
+    return () => window.removeEventListener('pagehide', leaving);
+  }, [track, startedAt]);
   /** When the scale dropped, for how long reconnecting took (M7-8). */
   const droppedAt = useRef<number | undefined>(undefined);
   // Who the meal belongs to, fixed when the session starts (see Summary).
@@ -237,9 +251,10 @@ function Session(props: {
             if (action.type === 'undo' || action.type === 'editGrams') tap(action);
           }}
           onSaved={(result) => {
+            finished.current = true;
             track('flow_finished', {
               inputMethod: 'scale',
-              durationMs: sinceStart(state.flow.startedAt),
+              durationMs: sinceStart(startedAt),
             });
             props.onSaved(result);
           }}

@@ -163,6 +163,30 @@ describe('usage events (M7-8)', () => {
     expect(events.every((e) => e.appVersion.length > 0)).toBe(true);
   });
 
+  it('M7-8: a batch the server refuses as invalid is dropped, not resent (regression: #52)', async () => {
+    const sendEvents = vi
+      .fn<Api['sendEvents']>()
+      .mockRejectedValueOnce(new ApiError(400))
+      .mockResolvedValue();
+    await openCurdBowl(fakeApi(undefined, { sendEvents }));
+    hidePage();
+    await vi.waitFor(() => expect(sendEvents).toHaveBeenCalledTimes(1));
+    typeGrams('200');
+    click(en.step.next);
+    hidePage();
+    await vi.waitFor(() => expect(sendEvents).toHaveBeenCalledTimes(2));
+    expect(sendEvents.mock.calls[1]![0].map((e) => e.name)).toEqual(['step_completed']);
+  });
+
+  it('M7-8: leaving the page sends what was tracked', async () => {
+    const api = await openCurdBowl();
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    await vi.waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    expect(sentEvents(api).map((e) => e.name)).toEqual(['flow_started']);
+  });
+
   it('M7-8: discarding a meal tracks flow abandoned', async () => {
     const api = await openCurdBowl();
     typeGrams('200');

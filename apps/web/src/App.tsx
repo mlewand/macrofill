@@ -38,6 +38,10 @@ export function App() {
   const [tracker] = useState(() =>
     createUsageTracker({
       send: (events) => baseApi.sendEvents(events),
+      // Refused for good (invalid): dropped. No session, a timeout, too many requests, a server
+      // error or no connection: kept for the next send.
+      retryable: (error) =>
+        !(error instanceof ApiError) || ![400, 403, 404, 409, 413, 422].includes(error.status),
       appVersion: APP_VERSION,
       clientSessionId: crypto.randomUUID(),
       newId: () => crypto.randomUUID(),
@@ -47,8 +51,14 @@ export function App() {
     const hidden = () => {
       if (document.visibilityState === 'hidden') void tracker.flush();
     };
+    // Leaving the page: the last events go out too (Scale Mode's flow abandoned, for one).
+    const leaving = () => void tracker.flush();
     document.addEventListener('visibilitychange', hidden);
-    return () => document.removeEventListener('visibilitychange', hidden);
+    window.addEventListener('pagehide', leaving);
+    return () => {
+      document.removeEventListener('visibilitychange', hidden);
+      window.removeEventListener('pagehide', leaving);
+    };
   }, [tracker]);
   const api = useMemo(() => guardApi(baseApi, () => setNeedsLogin(true)), [baseApi]);
   const drafts = useDraftStore();

@@ -75,7 +75,8 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
       if (res.status !== 204 && res.status !== 404) throw new ApiError(res.status);
     },
     async sendEvents(events) {
-      const res = await client.events.$post({ json: { events } });
+      // keepalive: it still goes out when the page is being left.
+      const res = await client.events.$post({ json: { events } }, { init: { keepalive: true } });
       if (res.status !== 204) throw new ApiError(res.status);
     },
   };

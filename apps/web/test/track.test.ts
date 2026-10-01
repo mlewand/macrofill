@@ -109,4 +109,42 @@ describe('usage tracking (M7-8)', () => {
       [2, 3, 4, 5].map((step) => ({ inputMethod: 'direct', step })),
     );
   });
+
+  it('M7-8: flushes waiting on a failed send go out once, not each with the same batch (regression: #52)', async () => {
+    let fail!: () => void;
+    const send = vi
+      .fn<(events: UsageEvent[]) => Promise<void>>()
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (fail = () => reject(new Error('offline')))),
+      )
+      .mockResolvedValue(undefined);
+    const { tracker } = setup(send);
+    tracker.track('flow_started', { inputMethod: 'direct' });
+    const first = tracker.flush();
+    const second = tracker.flush();
+    const third = tracker.flush();
+    fail();
+    await Promise.all([first, second, third]);
+    // The failed one, then a single retry by the flushes that waited.
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('M7-8: a batch the server refuses for good is dropped, not retried (regression: #52)', async () => {
+    const send = vi
+      .fn<(events: UsageEvent[]) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('invalid'))
+      .mockResolvedValue(undefined);
+    const tracker = createUsageTracker({
+      send,
+      appVersion: 'abc1234',
+      clientSessionId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+      newId: () => `f1e2d3c4-b5a6-4978-8a9b-0c1d2e3f4a${String(++ids).padStart(2, '0')}`,
+      retryable: (error) => !(error instanceof Error && error.message === 'invalid'),
+    });
+    tracker.track('flow_started', { inputMethod: 'direct' });
+    await tracker.flush();
+    tracker.track('step_skipped', { inputMethod: 'direct', step: 0 });
+    await tracker.flush();
+    expect(send.mock.calls[1]![0].map((e) => e.name)).toEqual(['step_skipped']);
+  });
 });

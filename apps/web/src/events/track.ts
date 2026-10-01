@@ -23,11 +23,14 @@ export function createUsageTracker(options: {
   flushAfterMs?: number;
   batchSize?: number;
   maxQueued?: number;
+  /** Whether a failed send may succeed later; if not, its batch is dropped. Default: always. */
+  retryable?: (error: unknown) => boolean;
 }): UsageTracker {
   const { send, appVersion, clientSessionId, newId } = options;
   const flushAfterMs = options.flushAfterMs ?? 5000;
   const batchSize = options.batchSize ?? 20;
   const maxQueued = options.maxQueued ?? 500;
+  const retryable = options.retryable ?? (() => true);
   let queue: UsageEvent[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   let sending: Promise<void> | undefined;
@@ -35,19 +38,22 @@ export function createUsageTracker(options: {
   const flush = async (): Promise<void> => {
     clearTimeout(timer);
     timer = undefined;
-    if (sending) await sending;
+    // One send at a time: a flush meanwhile waits, then sends what's still left.
+    while (sending) await sending;
     if (queue.length === 0) return;
     const batch = queue.slice(0, 100);
-    sending = (async () => {
+    const current = (async () => {
       try {
         await send(batch);
         queue = queue.filter((e) => !batch.includes(e));
-      } catch {
-        // Kept for the next send.
+      } catch (error) {
+        // Kept for the next send, unless retrying can't help.
+        if (!retryable(error)) queue = queue.filter((e) => !batch.includes(e));
       }
     })();
-    await sending;
-    sending = undefined;
+    sending = current;
+    await current;
+    if (sending === current) sending = undefined;
     // More than a batch, or a failed send: try again later.
     if (queue.length > 0) timer ??= setTimeout(() => void flush(), flushAfterMs);
   };

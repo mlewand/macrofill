@@ -315,6 +315,53 @@ describe('Scale Mode', () => {
     expect(tracked[4]![1]).toMatchObject({ step: 1, weightSource: 'manual' });
   });
 
+  it('M7-8: the first scale step counts its time from Start, not from the recipe pick (regression: #52)', async () => {
+    // The real clock, moved ahead by hand where the test says time passes.
+    const real = performance.now.bind(performance);
+    let ahead = 0;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => real() + ahead);
+    try {
+      const s = await session();
+      // Connecting and putting the bowl on take a while.
+      ahead = 60_000;
+      await s.play(s.script.baseline(312, { forMs: 0 }));
+      fireEvent.click(button(en.scale.start));
+      ahead = 65_000;
+      await s.play(s.script.add(214).stable({ forMs: 0 }));
+      fireEvent.click(button(en.step.next));
+      const completed = s.track.mock.calls.find(([name]) => name === 'step_completed');
+      const durationMs = (completed?.[1] as { durationMs: number }).durationMs;
+      expect(durationMs).toBeGreaterThanOrEqual(5000);
+      expect(durationMs).toBeLessThan(10_000);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('M7-8: leaving the page in the middle of a Scale Mode meal tracks flow abandoned (regression: #52)', async () => {
+    const s = await started();
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(s.track).toHaveBeenLastCalledWith('flow_abandoned', {
+      inputMethod: 'scale',
+      durationMs: expect.any(Number) as number,
+    });
+  });
+
+  it('M7-8: leaving the page after the meal is saved tracks nothing more', async () => {
+    const s = await started();
+    await s.play(s.script.add(214).stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    fireEvent.click(button(en.step.skip));
+    fireEvent.click(button(en.summary.save));
+    await vi.waitFor(() => expect(s.onSaved).toHaveBeenCalled());
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(s.track).toHaveBeenLastCalledWith('flow_finished', expect.anything());
+  });
+
   it('M5-8: a Scale Mode meal with no known owner is not sent (regression: #37)', async () => {
     const driver = new MockScaleDriver();
     const api = fakeApi({ catalog: () => Promise.resolve(catalog) });
