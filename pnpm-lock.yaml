@@ -329,8 +329,8 @@ importers:
         specifier: workspace:*
         version: link:../domain
       '@mlewand/huajun-ble-scale':
-        specifier: https://github.com/mlewand/huajun-bluetooth-kitchen-scale-api/releases/download/v0.0.4/mlewand-huajun-ble-scale-0.0.4.tgz
-        version: https://github.com/mlewand/huajun-bluetooth-kitchen-scale-api/releases/download/v0.0.4/mlewand-huajun-ble-scale-0.0.4.tgz(@capacitor-community/bluetooth-le@8.3.0(@capacitor/core@8.5.2))
+        specifier: ^0.0.4
+        version: 0.0.4(@capacitor-community/bluetooth-le@8.3.0(@capacitor/core@8.5.2))
 
 packages:
 
@@ -1474,9 +1474,8 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@mlewand/huajun-ble-scale@https://github.com/mlewand/huajun-bluetooth-kitchen-scale-api/releases/download/v0.0.4/mlewand-huajun-ble-scale-0.0.4.tgz':
-    resolution: {integrity: sha512-YCjoYoi9S/LmyxNsXuCdfkOd1tGvVhGAx9Xkp3Osl1SIfSIMcBC1EnRwK6eK5Ie0nePLaqG3e6kNkf4tND6uTQ==, tarball: https://github.com/mlewand/huajun-bluetooth-kitchen-scale-api/releases/download/v0.0.4/mlewand-huajun-ble-scale-0.0.4.tgz}
-    version: 0.0.4
+  '@mlewand/huajun-ble-scale@0.0.4':
+    resolution: {integrity: sha512-YCjoYoi9S/LmyxNsXuCdfkOd1tGvVhGAx9Xkp3Osl1SIfSIMcBC1EnRwK6eK5Ie0nePLaqG3e6kNkf4tND6uTQ==}
     engines: {node: '>=22'}
     peerDependencies:
       '@capacitor-community/bluetooth-le': ^8.3.0
@@ -4757,7 +4756,7 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@mlewand/huajun-ble-scale@https://github.com/mlewand/huajun-bluetooth-kitchen-scale-api/releases/download/v0.0.4/mlewand-huajun-ble-scale-0.0.4.tgz(@capacitor-community/bluetooth-le@8.3.0(@capacitor/core@8.5.2))':
+  '@mlewand/huajun-ble-scale@0.0.4(@capacitor-community/bluetooth-le@8.3.0(@capacitor/core@8.5.2))':
     optionalDependencies:
       '@capacitor-community/bluetooth-le': 8.3.0(@capacitor/core@8.5.2)
 
