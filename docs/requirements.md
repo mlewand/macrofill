@@ -161,7 +161,7 @@ interface ScaleCapabilities {
 interface ScaleDriver {
   readonly id: string;
   readonly capabilities: ScaleCapabilities;
-  connect(): Promise<void>;   // must be called from a user gesture
+  connect(): Promise<void>;   // first call from a user gesture; after a drop, reconnects to the same device without the chooser
   disconnect(): Promise<void>;
   onReading(cb: (r: ScaleReading) => void): () => void;
   onConnectionChange(cb: (state: 'connected' | 'disconnected') => void): () => void;

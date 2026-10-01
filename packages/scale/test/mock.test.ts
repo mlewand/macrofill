@@ -73,6 +73,18 @@ describe('MockScaleDriver', () => {
     expect(states).toEqual(['connected', 'disconnected', 'connected', 'disconnected']);
   });
 
+  it('M6-6: while unavailable, connecting fails, as for a scale that is off; then it reconnects', async () => {
+    const { driver, states } = connected();
+    await driver.connect();
+    driver.available = false;
+    driver.drop();
+    await expect(driver.connect()).rejects.toThrow('unavailable');
+    expect(states).toEqual(['connected', 'disconnected']);
+    driver.available = true;
+    await driver.connect();
+    expect(states).toEqual(['connected', 'disconnected', 'connected']);
+  });
+
   it('M3-12: refuses to play while disconnected', async () => {
     const { driver } = connected();
     await expect(driver.play(scaleScript().baseline(312).build())).rejects.toThrow();
