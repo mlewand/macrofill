@@ -69,7 +69,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 
 # Data model
 
-- Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent, user-added Product) has `ownerId`. Curated content (IngredientClass, Recipe, seed Products) is global. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it.
+- Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent, user-added Product) has `ownerId`. Curated content (IngredientClass, Recipe, seed Products) is global. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it, except authentication, which finds the user by username or session before there is one.
 - User: id, username, password hash (argon2id), timezone (IANA name, e.g. `Europe/Warsaw`; used by M2-5, M7-1).
 - NutritionValues (per 100 g): energy kcal, fat, saturates, carbs, sugars, protein, salt (full EU label set), fibre (EU labels don't always have it). UI shows only protein/fat/carbs/fibre/kcal for now.
   - Any value missing from a product's label or source (most often fibre, but e.g. saturates, sugars or salt too) is stored as unknown, never as 0. A meal or day total of a nutrient that includes an unknown value is shown as "unknown"; the other nutrients' totals are unaffected.
