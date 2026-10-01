@@ -83,6 +83,8 @@ export function App() {
       (error: unknown) => {
         if (!current) return;
         setMeSettled(true);
+        // A login since makes this failure stale too.
+        if (asked !== generation.current) return;
         // No session: the login form settles who it is.
         if (error instanceof ApiError && error.status === 401) setNeedsLogin(true);
       },
@@ -127,6 +129,12 @@ export function App() {
   // Nothing is shown until it's known whether there's a kept session: a meal started meanwhile
   // would overwrite it. IndexedDB answers in milliseconds.
   const [draftLoaded, setDraftLoaded] = useState(false);
+  // A kept session waiting for the user to be known before it opens (see the draft load).
+  const [resumeWaiting, setResumeWaiting] = useState(false);
+  if (resumeWaiting && user !== undefined) {
+    setResumeWaiting(false);
+    setScreen('directEntry');
+  }
   useEffect(() => {
     let current = true;
     void drafts.load().then((draft) => {
@@ -138,6 +146,11 @@ export function App() {
         return;
       }
       setResume(draft);
+      // A session nobody's stamped on, with nobody known yet: it waits for its owner.
+      if (draft.username === undefined && lastUser() === undefined) {
+        setResumeWaiting(true);
+        return;
+      }
       setScreen('directEntry');
     });
     return () => {

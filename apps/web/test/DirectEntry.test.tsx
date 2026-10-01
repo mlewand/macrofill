@@ -700,8 +700,9 @@ describe('Direct Entry across a reload (M5-8)', () => {
           me: () => Promise.reject(new TypeError('offline')),
         }),
       );
-      fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
-      expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
+      // With nobody known, the session doesn't even open: nothing can be sent for nobody.
+      expect(await screen.findByText(en.home.userUnknown)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: en.summary.save })).not.toBeInTheDocument();
       expect(saveMeal).not.toHaveBeenCalled();
     } finally {
       localStorage.clear();
@@ -771,6 +772,72 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: an unstamped kept session waits until the user is known, then resumes (regression: #37)', async () => {
+    localStorage.clear();
+    try {
+      const drafts = memoryDrafts(draftAtMilk);
+      const me = vi
+        .fn<Api['me']>()
+        .mockRejectedValueOnce(new TypeError('offline'))
+        .mockResolvedValue('mlewand');
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({ catalog: () => Promise.resolve(catalog), me, saveMeal }),
+      );
+      expect(await screen.findByText(en.home.userUnknown)).toBeInTheDocument();
+      expect(screen.queryByText('Step 2 of 2')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: en.app.retry }));
+      expect(await screen.findByText('Step 2 of 2')).toBeInTheDocument();
+      click(en.step.next);
+      fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+      await screen.findByText(en.saved.title);
+      expect(saveMeal.mock.calls[0]![0].username).toBe('mlewand');
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: a 401 for a question asked before a login does not ask to log in again (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      let refuse!: () => void;
+      const me = vi
+        .fn<Api['me']>()
+        .mockImplementationOnce(
+          () => new Promise<string>((_, reject) => (refuse = () => reject(new ApiError(401)))),
+        )
+        .mockResolvedValue('mlewand');
+      const today = vi
+        .fn<Api['today']>()
+        .mockRejectedValueOnce(new ApiError(401))
+        .mockResolvedValue(emptyToday);
+      renderWithDrafts(
+        memoryDrafts().store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          me,
+          today,
+          login: () => Promise.resolve('ok'),
+        }),
+      );
+      const dialog = await screen.findByRole('dialog', { name: en.login.title });
+      fireEvent.change(within(dialog).getByLabelText(en.login.username), {
+        target: { value: 'mlewand' },
+      });
+      fireEvent.change(within(dialog).getByLabelText(en.login.password), {
+        target: { value: 'pw' },
+      });
+      fireEvent.click(within(dialog).getByRole('button', { name: en.login.submit }));
+      await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      act(() => refuse());
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: an answer about the user that a login made stale is ignored (regression: #37)', async () => {
     localStorage.clear();
     try {
@@ -833,8 +900,9 @@ describe('Direct Entry across a reload (M5-8)', () => {
         me: () => Promise.reject(new TypeError('offline')),
       }),
     );
-    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
-    expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
+    // With nobody known, the session doesn't even open: nothing can be sent for nobody.
+    expect(await screen.findByText(en.home.userUnknown)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: en.summary.save })).not.toBeInTheDocument();
     expect(saveMeal).not.toHaveBeenCalled();
   });
 
