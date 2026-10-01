@@ -57,6 +57,26 @@ describe('outbox store (M5-9)', () => {
     await expect(indexedDbOutbox(factory).add(outboxItem(1))).rejects.toThrow(/blocked/);
   });
 
+  it('M5-9: once the other tab lets go, a blocked open keeps no connection (regression: #41)', async () => {
+    const factory = new IDBFactory();
+    const old = await new Promise<IDBDatabase>((resolve) => {
+      const open = factory.open('macrofill', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('drafts');
+      open.onsuccess = () => resolve(open.result);
+    });
+    await expect(indexedDbOutbox(factory).add(outboxItem(1))).rejects.toThrow(/blocked/);
+    old.close();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // A newer version (the next deploy) isn't blocked by a connection left behind.
+    await expect(openVersion(factory, 3)).resolves.toBe('opened');
+  });
+
+  it("M5-9: the app's connection gives way to a newer version in another tab (regression: #41)", async () => {
+    const factory = new IDBFactory();
+    await indexedDbOutbox(factory).add(outboxItem(1));
+    await expect(openVersion(factory, 3)).resolves.toBe('opened');
+  });
+
   it('M5-9: adding fails loudly without IndexedDB, so the meal is sent directly', async () => {
     const broken = {
       open: () => {
@@ -238,3 +258,15 @@ describe('settleWithin (M5-9)', () => {
     }
   });
 });
+
+/** Opens the app's database at `version`, as a newer app would: whether it opened or was blocked. */
+function openVersion(factory: IDBFactory, version: number): Promise<'opened' | 'blocked'> {
+  return new Promise((resolve) => {
+    const open = factory.open('macrofill', version);
+    open.onblocked = () => resolve('blocked');
+    open.onsuccess = () => {
+      open.result.close();
+      resolve('opened');
+    };
+  });
+}

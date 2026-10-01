@@ -163,9 +163,10 @@ export function App() {
   const [draftAttempt, setDraftAttempt] = useState(0);
   // A kept session waiting for the user to be known before it opens (see the draft load).
   const [resumeWaiting, setResumeWaiting] = useState(false);
-  // Once /api/me has answered (it drops a session stamped for someone else) or can't be reached
-  // (offline, the remembered user's stamp decides), and someone is known.
-  if (resumeWaiting && meSettled && user !== undefined) {
+  // Once the server has confirmed the user in the current check (it drops a session stamped for
+  // someone else) or couldn't be reached (offline, the remembered user's stamp decides), and
+  // someone is known. Every re-check clears both, so a session loading meanwhile waits for it.
+  if (resumeWaiting && (confirmed || unreachable) && user !== undefined) {
     setResumeWaiting(false);
     // Unless a login as someone else dropped it meanwhile.
     if (resume) setScreen('directEntry');
@@ -221,6 +222,10 @@ export function App() {
   }
   if (!draftLoaded || (user === undefined && !meSettled)) return null;
 
+  // A meal must belong to someone (M5-8), and a kept one waiting for the server's answer must not
+  // be opened by hand meanwhile: it might be someone else's.
+  const noStart = user === undefined || resumeWaiting;
+
   return (
     <ApiContext value={api}>
       <OutboxProvider ready={confirmed} offline={unreachable}>
@@ -244,7 +249,7 @@ export function App() {
               <button
                 type="button"
                 className="primary"
-                disabled={user === undefined}
+                disabled={noStart}
                 onClick={() => setScreen('scaleMode')}
               >
                 {t('home.weighMeal')}
@@ -252,7 +257,7 @@ export function App() {
               <button
                 type="button"
                 className="primary"
-                disabled={user === undefined}
+                disabled={noStart}
                 onClick={() => setScreen('directEntry')}
               >
                 {t('home.logMeal')}

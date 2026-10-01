@@ -43,9 +43,27 @@ export function idb(factory: IDBFactory): Run {
           }
         }
       };
-      request.onsuccess = () => resolve(request.result);
+      let blocked = false;
+      request.onsuccess = () => {
+        const database = request.result;
+        // Opened after all, once the other tab let go: this attempt has failed already, so it
+        // keeps nothing open. The next call opens it again.
+        if (blocked) {
+          database.close();
+          return;
+        }
+        // A newer version in another tab (the next deploy) can't upgrade while this is open.
+        database.onversionchange = () => {
+          database.close();
+          db = undefined;
+        };
+        resolve(database);
+      };
       // Another tab holds an older version open: fail rather than wait for it to close.
-      request.onblocked = () => reject(new IndexedDbBlocked('IndexedDB is blocked by another tab'));
+      request.onblocked = () => {
+        blocked = true;
+        reject(new IndexedDbBlocked('IndexedDB is blocked by another tab'));
+      };
       request.onerror = () => reject(request.error ?? new Error('IndexedDB failed to open'));
     }));
 
