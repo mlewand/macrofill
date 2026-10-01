@@ -58,12 +58,9 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Pr
   }, [resume, resumed, drafts]);
 
   useEffect(() => {
-    if (state) {
-      void drafts.save({
-        state,
-        ...(sent ? { sent } : {}),
-        ...(owner === undefined ? {} : { username: owner }),
-      });
+    // Kept only for a known owner: one nobody owns couldn't be resumed (M5-8).
+    if (state && owner !== undefined) {
+      void drafts.save({ state, ...(sent ? { sent } : {}), username: owner });
     }
   }, [state, sent, owner, drafts]);
 
@@ -74,12 +71,8 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Pr
    */
   const keepSent = async (request: SaveMealRequest): Promise<boolean> => {
     setSent(request);
-    if (state) {
-      const kept = await drafts.save({
-        state,
-        sent: request,
-        ...(owner === undefined ? {} : { username: owner }),
-      });
+    if (state && owner !== undefined) {
+      const kept = await drafts.save({ state, sent: request, username: owner });
       if (!kept && !(await drafts.clear())) return false;
     }
     // Sent only for a known owner, and only while that's still who's logged in. An unknown owner
