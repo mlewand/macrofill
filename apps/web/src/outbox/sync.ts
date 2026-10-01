@@ -46,6 +46,8 @@ export async function syncOutbox(
         result.stopped = 'unauthorized';
         return result;
       }
+      // 403: the meal names another user than the session's (M4-1). It waits for its owner.
+      if (error instanceof ApiError && error.status === 403) continue;
       if (error instanceof ApiError && REFUSED.has(error.status)) {
         console.warn(`Meal ${id} was refused (${error.status}); it's kept, marked refused.`);
         result.dropped.push(id);
@@ -56,6 +58,8 @@ export async function syncOutbox(
         result.stopped = 'unreachable';
         return result;
       }
+      // Saved before (its entry deleted since): as good as synced for whoever saved it.
+      result.synced.push(id);
     }
     await store.remove(id);
   }

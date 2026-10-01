@@ -84,7 +84,9 @@
   "saved": {
     "title": "Meal saved",
     "done": "Done",
-    "pending": "It's kept on this device and sent to your account as soon as there's a connection."
+    "pending": "It's kept on this device and sent to your account as soon as there's a connection.",
+    "refusedTitle": "Meal not saved",
+    "refused": "The server refused this meal. It's kept on this device and listed in Today under \"Couldn't be saved\"."
   },
   "nutrient": {
     "protein": "Protein",

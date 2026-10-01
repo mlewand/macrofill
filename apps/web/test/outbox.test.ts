@@ -151,15 +151,30 @@ describe('syncOutbox (M5-9)', () => {
     },
   );
 
-  it('M5-9: a meal deleted meanwhile (410) is saved already, so it leaves the outbox', async () => {
+  it('M5-9: a meal deleted meanwhile (410) was saved already: it counts as synced and leaves the outbox (regression: #41)', async () => {
     const store = indexedDbOutbox(new IDBFactory());
     await store.add(outboxItem(1));
-    await syncOutbox(
+    const result = await syncOutbox(
       store,
       api(() => Promise.reject(new ApiError(410))),
       () => undefined,
     );
+    expect(result).toEqual({ synced: [outboxItem(1).request.meal.id], dropped: [] });
     expect(await store.all()).toEqual([]);
+  });
+
+  it('M5-9: a meal refused for another user (403) waits for them, and the rest go on (regression: #41)', async () => {
+    const store = indexedDbOutbox(new IDBFactory());
+    await store.add(outboxItem(1));
+    await store.add(outboxItem(2));
+    const server = api((r) =>
+      r.meal.id === outboxItem(1).request.meal.id
+        ? Promise.reject(new ApiError(403))
+        : Promise.resolve(stored(r)),
+    );
+    const result = await syncOutbox(store, server, () => undefined);
+    expect(result).toEqual({ synced: [outboxItem(2).request.meal.id], dropped: [] });
+    expect(await store.all()).toEqual([outboxItem(1)]);
   });
 
   it('M5-9: when another user logs in mid-sync, the rest of the backlog waits (regression: #41)', async () => {

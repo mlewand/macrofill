@@ -879,7 +879,7 @@ describe('saving through the outbox (M5-9)', () => {
     expect(saveMeal).toHaveBeenCalledTimes(2);
   });
 
-  it('M5-9: a meal the server refuses for good is a failed save, not a saved one (regression: #41)', async () => {
+  it('M5-9: a meal the server refuses while Save waits is reported as not saved, and kept in Today (regression: #41)', async () => {
     const outbox = indexedDbOutbox(new IDBFactory());
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const drafts = renderWithOutbox(
@@ -888,10 +888,14 @@ describe('saving through the outbox (M5-9)', () => {
       atSummary,
     );
     fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
-    expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
-    expect(screen.queryByText(en.saved.title)).not.toBeInTheDocument();
-    // The meal is still on the device, in the draft.
-    expect(drafts.kept()).toBeDefined();
+    // Not "Meal saved", and not stuck on a frozen summary either.
+    expect(await screen.findByRole('status')).toHaveTextContent(en.saved.refusedTitle);
+    expect(screen.getByText(en.saved.refused)).toBeInTheDocument();
+    expect(drafts.kept()).toBeUndefined();
+    // The meal is kept on the device, listed as not saved, until removed.
+    expect(await outbox.all()).toEqual([expect.objectContaining({ refused: 409 })]);
+    click(en.saved.done);
+    expect(await screen.findByRole('region', { name: en.today.refusedTitle })).toBeInTheDocument();
     warn.mockRestore();
   });
 
@@ -957,6 +961,27 @@ describe('saving through the outbox (M5-9)', () => {
     );
     expect(await outbox.all()).toEqual([]);
     warn.mockRestore();
+  });
+
+  it("M5-9: a login in another tab sends that user's waiting meals (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1), username: 'other' });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(fakeApi(saveMeal, { today: todayNow }), outbox);
+      await screen.findByRole('button', { name: en.home.logMeal });
+      expect(saveMeal).not.toHaveBeenCalled();
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    } finally {
+      localStorage.clear();
+    }
   });
 
   it('M5-9: offline, Today still lists what waits on the device', async () => {

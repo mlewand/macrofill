@@ -77,6 +77,8 @@ export function App() {
           setScreen('home');
         }
         setUser(username);
+        // Logged in elsewhere: what waits for this user is sent now (M5-9).
+        setLogins((n) => n + 1);
       }),
     [user, drafts],
   );
@@ -159,7 +161,14 @@ export function App() {
           )}
           {screen === 'saved' && (
             <section>
-              <h1 role="status">{t('saved.title')}</h1>
+              <h1 role="status">
+                {savedResult === 'refused' ? t('saved.refusedTitle') : t('saved.title')}
+              </h1>
+              {savedResult === 'refused' && (
+                <p role="alert" className="problem">
+                  {t('saved.refused')}
+                </p>
+              )}
               {/* M5-9: kept on the device until the server has it. */}
               {savedResult === 'pending' && <p>{t('saved.pending')}</p>}
               <button type="button" className="primary" onClick={() => setScreen('home')}>

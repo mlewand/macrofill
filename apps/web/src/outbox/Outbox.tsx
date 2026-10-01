@@ -13,8 +13,11 @@ import { belongsToCurrentUser, lastUser } from '../session';
 import type { OutboxItem, OutboxStore } from './store';
 import { syncOutbox } from './sync';
 
-/** `synced`: the server has the meal. `pending`: it's kept on the device and sent later (M5-9). */
-export type SaveResult = 'synced' | 'pending';
+/**
+ * `synced`: the server has the meal. `pending`: it's kept on the device and sent later (M5-9).
+ * `refused`: the server refused it for good; it's kept on the device and listed as not saved.
+ */
+export type SaveResult = 'synced' | 'pending' | 'refused';
 
 interface Outbox {
   /** Meals waiting to be sent, oldest first. */
@@ -81,7 +84,10 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
       const id = request.meal.id;
       try {
         if (!store) throw new Error('no outbox');
-        const username = lastUser();
+        // A new attempt: what became of an earlier one doesn't apply to it.
+        outcomes.current.delete(id);
+        // The meal's own owner, named in the request; who's logged in may have changed meanwhile.
+        const username = request.username ?? lastUser();
         await store.add({
           request,
           entry,
@@ -97,12 +103,9 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
       // meal is safe in the outbox, and it's sent later.
       await settleWithin(sync(), SAVE_WAIT_MS, undefined);
       const outcome = outcomes.current.get(id);
-      if (outcome === 'dropped') {
-        // The caller reports the failure and keeps the meal in its draft: one copy is enough.
-        await store.remove(id).catch(() => undefined);
-        setPending(await store.all());
-        throw new Error('The server refused the meal.');
-      }
+      // Refused: kept in the outbox, marked, and listed in Today as not saved, like a refusal that
+      // comes later; the summary can't fix it, so the flow ends and says so.
+      if (outcome === 'dropped') return 'refused';
       return outcome === 'synced' ? 'synced' : 'pending';
     },
     [store, api, sync],
