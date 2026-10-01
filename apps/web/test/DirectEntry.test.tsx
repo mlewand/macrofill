@@ -1,10 +1,10 @@
-import type { Catalog } from '@macrofill/domain';
+import type { Catalog, SaveMealRequest } from '@macrofill/domain';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiContext, type Api } from '../src/api/api';
 import { App } from '../src/App';
 import type { DirectEntryState } from '../src/directEntry/state';
-import { DraftContext, type DraftStore } from '../src/storage/drafts';
+import { DraftContext, type Draft, type DraftStore } from '../src/storage/drafts';
 import en from '../src/i18n/en.json';
 import { fakeApi as baseFakeApi, stored } from './support/api';
 
@@ -310,12 +310,12 @@ describe('Direct Entry', () => {
 });
 
 /** An in-memory draft store, as IndexedDB would keep it across a reload. */
-function memoryDrafts(initial?: DirectEntryState) {
-  let kept = initial;
+function memoryDrafts(initial?: DirectEntryState, sent?: SaveMealRequest) {
+  let kept: Draft | undefined = initial && { state: initial, ...(sent ? { sent } : {}) };
   const store: DraftStore = {
     load: vi.fn(() => Promise.resolve(kept)),
-    save: vi.fn((state: DirectEntryState) => {
-      kept = state;
+    save: vi.fn((draft: Draft) => {
+      kept = draft;
       return Promise.resolve();
     }),
     clear: vi.fn(() => {
@@ -323,7 +323,7 @@ function memoryDrafts(initial?: DirectEntryState) {
       return Promise.resolve();
     }),
   };
-  return { store, kept: () => kept };
+  return { store, kept: () => kept?.state, keptSent: () => kept?.sent };
 }
 
 function renderWithDrafts(drafts: DraftStore, api = fakeApi()) {
@@ -387,6 +387,28 @@ describe('Direct Entry across a reload (M5-8)', () => {
     });
   });
 
+  it('M5-8: after a reload, a meal whose save was sent stays frozen and resends that request (regression: #37)', async () => {
+    const saveMeal = vi.fn<Api['saveMeal']>().mockRejectedValueOnce(new Error('offline'));
+    const first = memoryDrafts({ ...draftAtMilk, current: 2 });
+    const { view } = renderWithDrafts(first.store, fakeApi(saveMeal));
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.summary.saveFailed);
+    await vi.waitFor(() => expect(first.keptSent()).toBeDefined());
+    const request = saveMeal.mock.calls[0]![0];
+    view.unmount();
+
+    // Reloaded: the summary is still frozen, and Save sends the very same request.
+    const again = memoryDrafts(first.kept(), first.keptSent());
+    const retry = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+    renderWithDrafts(again.store, fakeApi(retry));
+    await screen.findByRole('heading', { name: en.summary.title });
+    expect(screen.getByRole('textbox', { name: /Almette Curd/ })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: en.step.discard })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(retry).toHaveBeenCalledWith(request);
+  });
+
   it('M5-8: Discard meal, once confirmed, clears the kept session and goes home', async () => {
     const drafts = memoryDrafts(draftAtMilk);
     renderWithDrafts(drafts.store);
@@ -425,7 +447,7 @@ describe('Direct Entry across a reload (M5-8)', () => {
   });
 
   it('M5-8: nothing can be started before the kept session has loaded (regression: #37)', async () => {
-    let loaded!: (draft: DirectEntryState) => void;
+    let loaded!: (draft: Draft) => void;
     const store: DraftStore = {
       load: () => new Promise((resolve) => (loaded = resolve)),
       save: vi.fn(() => Promise.resolve()),
@@ -434,7 +456,7 @@ describe('Direct Entry across a reload (M5-8)', () => {
     renderWithDrafts(store);
     expect(screen.queryByRole('button', { name: en.home.logMeal })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: en.home.weighMeal })).not.toBeInTheDocument();
-    loaded(draftAtMilk);
+    loaded({ state: draftAtMilk });
     expect(await screen.findByText('Step 2 of 2')).toBeInTheDocument();
   });
 

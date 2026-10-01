@@ -1,6 +1,6 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
-import { startDirectEntry } from '../src/directEntry/state';
+import { saveRequest, startDirectEntry } from '../src/directEntry/state';
 import { indexedDbDraftStore, parseDraft } from '../src/storage/drafts';
 
 const recipe = {
@@ -11,7 +11,7 @@ const recipe = {
     { id: 'b48924bb-4fa3-4843-b727-6928f03636d0', ingredientClassId: 'milk' },
   ],
 };
-const draft = {
+const state = {
   ...startDirectEntry({
     recipe,
     preselected: ['033ee3fe-72a7-409c-8dc3-76626baa14db', undefined],
@@ -21,7 +21,8 @@ const draft = {
   }),
   current: 1,
 };
-draft.steps[0]!.grams = '200';
+state.steps[0]!.grams = '200';
+const draft = { state };
 
 describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
   it('M5-8: keeps a draft until it is cleared', async () => {
@@ -42,18 +43,39 @@ describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
   it('M5-8: a newer save replaces the draft', async () => {
     const store = indexedDbDraftStore(new IDBFactory());
     await store.save(draft);
-    await store.save({ ...draft, current: 2 });
-    expect(await store.load()).toMatchObject({ current: 2 });
+    await store.save({ state: { ...state, current: 2 } });
+    expect(await store.load()).toMatchObject({ state: { current: 2 } });
   });
 
   it('M5-8: a stored value that is not a valid draft loads as none', () => {
     expect(parseDraft(draft)).toEqual(draft);
     expect(parseDraft(undefined)).toBeUndefined();
-    expect(parseDraft({ ...draft, current: -1 })).toBeUndefined();
-    expect(parseDraft({ ...draft, current: 3 })).toBeUndefined();
-    expect(parseDraft({ ...draft, steps: draft.steps.slice(1) })).toBeUndefined();
-    expect(parseDraft({ ...draft, inputMethod: 'scale' })).toBeUndefined();
-    expect(parseDraft({ ...draft, mealId: 'x' })).toBeUndefined();
+    expect(parseDraft(state)).toBeUndefined();
+    const bad = (change: object) => parseDraft({ state: { ...state, ...change } });
+    expect(bad({ current: -1 })).toBeUndefined();
+    expect(bad({ current: 3 })).toBeUndefined();
+    expect(bad({ steps: state.steps.slice(1) })).toBeUndefined();
+    expect(bad({ inputMethod: 'scale' })).toBeUndefined();
+    expect(bad({ mealId: 'x' })).toBeUndefined();
+  });
+
+  it('M5-8: keeps the first save request sent, which must be for this meal', () => {
+    const complete = {
+      ...state,
+      current: 2,
+      steps: state.steps.map((s) => ({
+        ...s,
+        productId: '033ee3fe-72a7-409c-8dc3-76626baa14db',
+        grams: '1',
+      })),
+    };
+    const request = saveRequest(complete, '2026-01-15T07:05:00.000Z')!;
+    expect(parseDraft({ state, sent: request })).toEqual({ state, sent: request });
+    const other = {
+      ...request,
+      meal: { ...request.meal, id: 'f1e2d3c4-b5a6-4978-8a9b-0c1d2e3f4a5b' },
+    };
+    expect(parseDraft({ state, sent: other })).toBeUndefined();
   });
 
   it('M5-8: without IndexedDB (e.g. blocked), nothing is kept and nothing breaks', async () => {

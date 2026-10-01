@@ -11,7 +11,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { NutritionTable } from '../NutritionTable';
-import { useDraftStore } from '../storage/drafts';
+import { useDraftStore, type Draft } from '../storage/drafts';
 import {
   directEntry,
   isSummary,
@@ -29,7 +29,7 @@ interface Props {
   /** Leaving: from the recipe list, or discarding the meal. */
   onCancel: () => void;
   /** A session kept from before a reload (M5-8). */
-  resume?: DirectEntryState;
+  resume?: Draft;
 }
 
 /**
@@ -38,8 +38,9 @@ interface Props {
  */
 export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
   const drafts = useDraftStore();
-  const [resumed] = useState(() => resume && resumable(resume, catalog));
+  const [resumed] = useState(() => resume && resumable(resume.state, catalog));
   const [state, setState] = useState<DirectEntryState | undefined>(resumed);
+  const [sent, setSent] = useState(resumed && resume?.sent);
   const dispatch = (action: DirectEntryAction) =>
     setState((current) => (current ? directEntry(current, action) : current));
 
@@ -49,8 +50,8 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
   }, [resume, resumed, drafts]);
 
   useEffect(() => {
-    if (state) void drafts.save(state);
-  }, [state, drafts]);
+    if (state) void drafts.save({ state, ...(sent ? { sent } : {}) });
+  }, [state, sent, drafts]);
 
   const saved = () => void drafts.clear().then(onSaved);
   const discard = () => void drafts.clear().then(onCancel);
@@ -71,6 +72,8 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
       dispatch={dispatch}
       onSaved={saved}
       onDiscard={discard}
+      sent={sent}
+      onSend={setSent}
     />
   ) : (
     <StepScreen
@@ -309,6 +312,9 @@ export function Summary(props: {
   onSaved: () => void;
   /** Direct Entry only (M5-8). */
   onDiscard?: () => void;
+  /** Direct Entry keeps the first request sent across a reload (M5-8); else the summary does. */
+  sent?: SaveMealRequest | undefined;
+  onSend?: (request: SaveMealRequest) => void;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -317,7 +323,12 @@ export function Summary(props: {
   const [failed, setFailed] = useState(false);
   // The first request sent. It may have reached the server even if the response didn't come
   // back, so from then on the summary is frozen and every retry resends exactly this (M4-6).
-  const [sent, setSent] = useState<SaveMealRequest>();
+  const [ownSent, setOwnSent] = useState<SaveMealRequest>();
+  const sent = props.sent ?? ownSent;
+  const setSent = (request: SaveMealRequest) => {
+    setOwnSent(request);
+    props.onSend?.(request);
+  };
   const frozen = sent !== undefined;
   const products = useMemo(() => new Map(catalog.products.map((p) => [p.id, p])), [catalog]);
 

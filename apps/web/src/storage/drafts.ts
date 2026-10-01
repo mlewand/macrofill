@@ -1,4 +1,10 @@
-import { idSchema, recipeSchema, timestampSchema } from '@macrofill/domain';
+import {
+  idSchema,
+  recipeSchema,
+  saveMealRequestSchema,
+  timestampSchema,
+  type SaveMealRequest,
+} from '@macrofill/domain';
 import { createContext, useContext } from 'react';
 import { z } from 'zod';
 import type { DirectEntryState } from '../directEntry/state';
@@ -8,9 +14,18 @@ import type { DirectEntryState } from '../directEntry/state';
  * Loading never fails: no draft, a broken one or no IndexedDB all load as none.
  */
 export interface DraftStore {
-  load: () => Promise<DirectEntryState | undefined>;
-  save: (state: DirectEntryState) => Promise<void>;
+  load: () => Promise<Draft | undefined>;
+  save: (draft: Draft) => Promise<void>;
   clear: () => Promise<void>;
+}
+
+export interface Draft {
+  state: DirectEntryState;
+  /**
+   * The first save request sent, once there's one. It may have reached the server, so after a
+   * reload the summary stays frozen and a retry resends exactly this (M4-6).
+   */
+  sent?: SaveMealRequest;
 }
 
 const stepDraftSchema = z.object({
@@ -33,14 +48,26 @@ const draftSchema = z
   })
   .refine((d) => d.steps.length === d.recipe.steps.length && d.current <= d.steps.length);
 
+const storedSchema = z
+  .object({ state: draftSchema, sent: saveMealRequestSchema.optional() })
+  .refine(
+    ({ state, sent }) =>
+      !sent || (sent.meal.id === state.mealId && sent.consumptionEntry.id === state.entryId),
+  );
+
 /** A stored value as a draft, or undefined if it isn't a valid one (e.g. from an older version). */
-export function parseDraft(value: unknown): DirectEntryState | undefined {
-  const result = draftSchema.safeParse(value);
+export function parseDraft(value: unknown): Draft | undefined {
+  const result = storedSchema.safeParse(value);
   if (!result.success) return undefined;
+  const { state, sent } = result.data;
+  return { state: parseState(state), ...(sent ? { sent } : {}) };
+}
+
+function parseState(state: z.infer<typeof draftSchema>): DirectEntryState {
   // The state keeps `productId` as an explicit key, and `fromScale` only when set.
   return {
-    ...result.data,
-    steps: result.data.steps.map(({ productId, grams, skipped, fromScale }) => ({
+    ...state,
+    steps: state.steps.map(({ productId, grams, skipped, fromScale }) => ({
       productId,
       grams,
       skipped,
@@ -86,8 +113,8 @@ export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore
 
   return {
     load: async () => parseDraft(await run('readonly', (store) => store.get(KEY))),
-    save: async (state) => {
-      await run('readwrite', (store) => store.put(state, KEY));
+    save: async (draft) => {
+      await run('readwrite', (store) => store.put(draft, KEY));
     },
     clear: async () => {
       await run('readwrite', (store) => store.delete(KEY));

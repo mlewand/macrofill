@@ -3,9 +3,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
-import type { DirectEntryState } from './directEntry/state';
 import { ScaleMode } from './scaleMode/ScaleMode';
-import { useDraftStore } from './storage/drafts';
+import { useDraftStore, type Draft } from './storage/drafts';
 import { TodayView } from './today/TodayView';
 
 type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
@@ -15,7 +14,7 @@ export function App() {
   const [screen, setScreen] = useState<Screen>('home');
   // M5-8: a Direct Entry session kept from before a reload opens again.
   const drafts = useDraftStore();
-  const [resume, setResume] = useState<DirectEntryState>();
+  const [resume, setResume] = useState<Draft>();
   // Nothing is shown until it's known whether there's a kept session: a meal started meanwhile
   // would overwrite it. IndexedDB answers in milliseconds.
   const [draftLoaded, setDraftLoaded] = useState(false);
