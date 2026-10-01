@@ -1,11 +1,16 @@
 import type { Catalog } from '@macrofill/domain';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiContext, guardApi, useApi } from './api/api';
+import { ApiContext, ApiError, guardApi, useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
 import { Login } from './Login';
 import { ScaleMode } from './scaleMode/ScaleMode';
+import { belongsToCurrentUser, lastUser, onUserChangedElsewhere, rememberUser } from './session';
+import { useDraftStore, type Draft } from './storage/drafts';
 import { TodayView } from './today/TodayView';
+
+/** How long the app waits to learn who's logged in before it shows anything. */
+const ME_WAIT_MS = 5000;
 
 type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
 
@@ -18,15 +23,159 @@ export function App() {
   const [logins, setLogins] = useState(0);
   const baseApi = useApi();
   const api = useMemo(() => guardApi(baseApi, () => setNeedsLogin(true)), [baseApi]);
-  const loggedIn = () => {
+  const drafts = useDraftStore();
+  const [user, setUser] = useState(lastUser);
+  const [resume, setResume] = useState<Draft>();
+  // Bumped by every login, here or in another tab: an older answer about the user is stale.
+  const generation = useRef(0);
+  // Whether /api/me has answered (or given up): until the user is known, nothing starts.
+  const [meSettled, setMeSettled] = useState(false);
+  // Asking again (Try again, or back online) while the user is still unknown.
+  const [meAttempt, setMeAttempt] = useState(0);
+  /** Someone else now, or nobody was known: what was open may be another user's (M5-8). */
+  const userIs = (username: string) => {
+    // A kept session of this very user stays, e.g. when their session expired with nobody
+    // remembered on the device: it's theirs (M5-8).
+    if (username !== user && resume?.username !== username) {
+      void drafts.clear();
+      setResume(undefined);
+      setScreen('home');
+    }
+    setUser(username);
+  };
+  const loggedIn = (username: string) => {
+    generation.current++;
     setNeedsLogin(false);
     setLogins((n) => n + 1);
+    userIs(username);
+  };
+  // Who the session belongs to, from the server (M4-1): a cookie from before the app remembered
+  // users has none on the device. Learning it for the first time isn't a change of user.
+  useEffect(() => {
+    let current = true;
+    const asked = generation.current;
+    const answer = Promise.race([
+      baseApi.me(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ME_WAIT_MS)),
+    ]);
+    answer.then(
+      (username) => {
+        if (!current) return;
+        setMeSettled(true);
+        // A login since makes this answer stale: the cookie is someone else's now.
+        if (asked !== generation.current) return;
+        rememberUser(username);
+        setUser((known) => {
+          if (known !== undefined && known !== username) {
+            void drafts.clear();
+            setResume(undefined);
+            setScreen('home');
+            setLogins((n) => n + 1);
+          }
+          return username;
+        });
+        // A kept session stamped for someone else isn't this user's (M5-8).
+        setResume((kept) => {
+          if (kept?.username === undefined || kept.username === username) return kept;
+          void drafts.clear();
+          setScreen('home');
+          return undefined;
+        });
+      },
+      (error: unknown) => {
+        if (!current) return;
+        setMeSettled(true);
+        // A login since makes this failure stale too.
+        if (asked !== generation.current) return;
+        // No session: the login form settles who it is.
+        if (error instanceof ApiError && error.status === 401) setNeedsLogin(true);
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [baseApi, drafts, meAttempt]);
+  // Back on this tab: who's logged in may have changed meanwhile, also where no storage event
+  // says so (local storage blocked), so ask again.
+  useEffect(() => {
+    const visible = () => {
+      if (document.visibilityState === 'visible') setMeAttempt((n) => n + 1);
+    };
+    document.addEventListener('visibilitychange', visible);
+    return () => document.removeEventListener('visibilitychange', visible);
+  }, []);
+  useEffect(() => {
+    if (user !== undefined) return;
+    const online = () => setMeAttempt((n) => n + 1);
+    window.addEventListener('online', online);
+    return () => window.removeEventListener('online', online);
+  }, [user]);
+
+  // A login in another tab shares this tab's cookie: the same applies.
+  useEffect(
+    () =>
+      onUserChangedElsewhere((username) => {
+        generation.current++;
+        if (username !== user) {
+          void drafts.clear();
+          setResume(undefined);
+          setScreen('home');
+          // The home screen loads again, for the new user.
+          setLogins((n) => n + 1);
+        }
+        setUser(username);
+      }),
+    [user, drafts],
+  );
+  // M5-8: a Direct Entry session kept from before a reload opens again.
+  // Nothing is shown until it's known whether there's a kept session: a meal started meanwhile
+  // would overwrite it. IndexedDB answers in milliseconds.
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  // A kept session waiting for the user to be known before it opens (see the draft load).
+  const [resumeWaiting, setResumeWaiting] = useState(false);
+  // Once /api/me has answered (it drops a session stamped for someone else) or can't be reached
+  // (offline, the remembered user's stamp decides), and someone is known.
+  if (resumeWaiting && meSettled && user !== undefined) {
+    setResumeWaiting(false);
+    // Unless a login as someone else dropped it meanwhile.
+    if (resume) setScreen('directEntry');
+  }
+  useEffect(() => {
+    let current = true;
+    void drafts.load().then((draft) => {
+      if (!current) return;
+      setDraftLoaded(true);
+      if (!draft) return;
+      // Unstamped (not valid in IndexedDB, see parseDraft) or another user's: not resumed.
+      if (draft.username === undefined || !belongsToCurrentUser(draft.username)) {
+        void drafts.clear();
+        return;
+      }
+      setResume(draft);
+      // It waits for the server to say who's logged in: the remembered user may be stale (another
+      // tab may have logged in without saving it). See the check above.
+      setResumeWaiting(true);
+    });
+    return () => {
+      current = false;
+    };
+  }, [drafts]);
+  const leaveDirectEntry = (next: Screen) => {
+    setResume(undefined);
+    setScreen(next);
   };
 
   useEffect(() => {
     // index.html has a static title only for the first paint.
     document.title = t('app.name');
   }, [t]);
+
+  // Nothing starts before it's known whose it is: a meal must never belong to nobody (M5-8).
+  if (!draftLoaded || (user === undefined && !meSettled)) return null;
+
+  // A meal must belong to someone (M5-8), and a kept one waiting for the server's answer must not
+  // be opened by hand meanwhile: it might be someone else's.
+  const noStart = user === undefined || resumeWaiting;
 
   return (
     <ApiContext value={api}>
@@ -35,10 +184,35 @@ export function App() {
           // Keyed by logins, so what failed without a session loads again after one.
           <section key={logins}>
             <h1>{t('app.name')}</h1>
-            <button type="button" className="primary" onClick={() => setScreen('scaleMode')}>
+            {/* A meal must belong to someone: none starts until the user is known (M5-8). */}
+            {user === undefined && (
+              <>
+                <p role="alert" className="problem">
+                  {t('home.userUnknown')}
+                </p>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setMeAttempt((n) => n + 1)}
+                >
+                  {t('app.retry')}
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className="primary"
+              disabled={noStart}
+              onClick={() => setScreen('scaleMode')}
+            >
               {t('home.weighMeal')}
             </button>
-            <button type="button" className="primary" onClick={() => setScreen('directEntry')}>
+            <button
+              type="button"
+              className="primary"
+              disabled={noStart}
+              onClick={() => setScreen('directEntry')}
+            >
               {t('home.logMeal')}
             </button>
             <TodayView />
@@ -49,6 +223,7 @@ export function App() {
             {(catalog) => (
               <ScaleMode
                 catalog={catalog}
+                owner={user}
                 onSaved={() => setScreen('saved')}
                 onCancel={() => setScreen('home')}
               />
@@ -60,8 +235,10 @@ export function App() {
             {(catalog) => (
               <DirectEntry
                 catalog={catalog}
-                onSaved={() => setScreen('saved')}
-                onCancel={() => setScreen('home')}
+                owner={user}
+                onSaved={() => leaveDirectEntry('saved')}
+                onCancel={() => leaveDirectEntry('home')}
+                {...(resume ? { resume } : {})}
               />
             )}
           </WithCatalog>

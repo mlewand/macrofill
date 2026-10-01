@@ -54,6 +54,11 @@ export type ConsumptionEntry = z.infer<typeof consumptionEntrySchema>;
 export const saveMealRequestSchema = z.object({
   meal: preparedMealSchema,
   consumptionEntry: consumptionEntrySchema.omit({ preparedMealId: true }),
+  /**
+   * The user the meal was made by, as the client knows them. A session of another user refuses it,
+   * so a meal never lands in the wrong account when the login changes meanwhile (another tab).
+   */
+  username: z.string().min(1).optional(),
   /** M6-7: a meal weighed with the scale comes with its recording (M3-11), stored with it (M4-7). */
   recording: scaleRecordingSchema.optional(),
 });

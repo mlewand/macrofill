@@ -120,6 +120,18 @@ describe('POST /api/meals', () => {
       expect(await count('prepared_meal_items')).toBe(0);
     });
 
+    it('M4-1: a save made for another user is refused, and nothing is saved (regression: #37)', async () => {
+      const res = await post({ ...request(), username: 'someone-else' });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'wrong_user' });
+      expect(await count('prepared_meals')).toBe(0);
+    });
+
+    it('M4-1: a save made for the logged-in user goes through', async () => {
+      const res = await post({ ...request(), username: owner.username });
+      expect(res.status).toBe(201);
+    });
+
     it('M4-3: a consumption entry id owned by another user is not found, and nothing is saved (regression: #40)', async () => {
       const otherEntryId = 'f1c7a5e6-8b9d-4c0e-9f1a-1b0c9d8e7f6a';
       const otherMealId = 'a2d8b6f7-9c0e-4d1f-8a2b-2c1d0e9f8a7b';

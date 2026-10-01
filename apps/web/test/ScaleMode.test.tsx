@@ -80,6 +80,7 @@ async function session({ connect = true } = {}) {
           catalog={catalog}
           onSaved={onSaved}
           onCancel={vi.fn()}
+          owner="mlewand"
           tracker={{ stableWaitMs: 60 }}
           reconnect={{ firstDelayMs: 5, maxDelayMs: 10, giveUpAfterMs: 50 }}
         />
@@ -223,6 +224,35 @@ describe('Scale Mode', () => {
       [200, 'manual'],
       [50, 'manual'],
     ]);
+  });
+
+  it('M5-8: a Scale Mode meal with no known owner is not sent (regression: #37)', async () => {
+    const driver = new MockScaleDriver();
+    const api = fakeApi({ catalog: () => Promise.resolve(catalog) });
+    render(
+      <ApiContext value={api}>
+        <ScaleContext value={() => driver}>
+          <ScaleMode
+            catalog={catalog}
+            onSaved={vi.fn()}
+            onCancel={vi.fn()}
+            tracker={{ stableWaitMs: 60 }}
+          />
+        </ScaleContext>
+      </ApiContext>,
+    );
+    fireEvent.click(button('Curd bowl'));
+    fireEvent.click(button(en.scale.connect));
+    await screen.findByText(en.scale.status.connected);
+    act(() => driver.drop());
+    fireEvent.click(await screen.findByRole('button', { name: en.scale.finishByHand }));
+    for (const grams of ['10', '20']) {
+      fireEvent.change(screen.getByLabelText(en.step.grams), { target: { value: grams } });
+      fireEvent.click(button(en.step.next));
+    }
+    fireEvent.click(button(en.summary.save));
+    expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
+    expect(api.saveMeal).not.toHaveBeenCalled();
   });
 
   it('M6-6: after a drop, it shows Reconnecting, keeps the session, and goes on once reconnected', async () => {
@@ -425,7 +455,7 @@ describe('Home', () => {
         </ScaleContext>
       </ApiContext>,
     );
-    fireEvent.click(button(en.home.weighMeal));
+    fireEvent.click(await screen.findByRole('button', { name: en.home.weighMeal }));
     const recipes = await screen.findByRole('heading', { name: en.recipes.title });
     expect(within(recipes.parentElement!).getByRole('button', { name: 'Curd bowl' })).toBeVisible();
   });

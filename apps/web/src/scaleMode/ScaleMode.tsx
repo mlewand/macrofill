@@ -20,6 +20,7 @@ import { formatGrams } from '../format';
 import { useCreateScaleDriver } from '../scale';
 import { reconnect } from './reconnect';
 import { reconnectSettings, trackerSettings, type ReconnectSettings } from './settings';
+import { belongsTo, lastUser } from '../session';
 import {
   canCorrect,
   canNext,
@@ -39,6 +40,8 @@ interface Props {
   tracker?: Partial<TrackerConfig>;
   /** Default: `reconnectSettings`. */
   reconnect?: ReconnectSettings;
+  /** Who's logged in as the session starts: the meal's owner (see Summary). */
+  owner?: string | undefined;
 }
 
 /** Scale Mode (M6-1 to M6-5, M6-9, M6-10): pick a recipe, connect, Start, weigh each step, save. */
@@ -48,6 +51,7 @@ export function ScaleMode({
   onCancel,
   tracker = trackerSettings,
   reconnect = reconnectSettings,
+  owner,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe>();
   if (recipe === undefined) {
@@ -60,6 +64,7 @@ export function ScaleMode({
       tracker={tracker}
       reconnect={reconnect}
       onSaved={onSaved}
+      owner={owner}
     />
   );
 }
@@ -76,6 +81,7 @@ function Session(props: {
   tracker: Partial<TrackerConfig>;
   reconnect: ReconnectSettings;
   onSaved: () => void;
+  owner: string | undefined;
 }) {
   const { t } = useTranslation();
   const { recipe, catalog } = props;
@@ -96,6 +102,8 @@ function Session(props: {
   );
   const [connection, setConnection] = useState<Connection>('idle');
   const [reconnectConfig] = useState(props.reconnect);
+  // Who the meal belongs to, fixed when the session starts (see Summary).
+  const [owner] = useState(props.owner);
   const everConnected = useRef(false);
   /** The reconnect in progress (M6-6), to stop it. */
   const reconnecting = useRef<AbortController | undefined>(undefined);
@@ -177,6 +185,9 @@ function Session(props: {
             if (action.type === 'undo' || action.type === 'editGrams') dispatch(action);
           }}
           onSaved={props.onSaved}
+          owner={owner}
+          // Sent only for a known owner who's still logged in (another tab may have changed it).
+          onSend={() => Promise.resolve(owner !== undefined && belongsTo(owner, lastUser()))}
         />
       </>
     );

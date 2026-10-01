@@ -11,7 +11,9 @@ export type SaveMealResult =
   /** An id is taken by another of the user's meals or entries; never reported as success. */
   | { status: 'conflict' }
   /** M4-3: an id belongs to another user's meal or entry, which this user can't see. */
-  | { status: 'not_found' };
+  | { status: 'not_found' }
+  /** The meal was made by another user than the one logged in now. */
+  | { status: 'wrong_user' };
 
 class Conflict extends Error {}
 class NotFound extends Error {}
@@ -28,6 +30,9 @@ export async function saveMeal(
   try {
     return await db.transaction(async (tx) => {
       const repos = createRepositories(tx, ownerId);
+      if (request.username !== undefined && request.username !== (await repos.user.username())) {
+        return { status: 'wrong_user' as const };
+      }
       const saved = await existing(repos, request);
       if (saved) return saved;
 

@@ -1,5 +1,6 @@
 import {
   catalogSchema,
+  meSchema,
   saveMealResponseSchema,
   todaySchema,
   type Catalog,
@@ -14,6 +15,8 @@ import { createApiClient, type ApiClient } from './client';
 export interface Api {
   /** M4-1: sets the session cookie. `invalid` for a wrong username or password. */
   login: (username: string, password: string) => Promise<'ok' | 'invalid'>;
+  /** Who the session belongs to (M4-1). */
+  me: () => Promise<string>;
   catalog: () => Promise<Catalog>;
   /** Resolves once the server has the meal (201 created, or 200 for a retry of a saved meal). */
   saveMeal: (request: SaveMealRequest) => Promise<SaveMealResponse>;
@@ -36,6 +39,11 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
       if (res.status === 204) return 'ok';
       if (res.status === 401) return 'invalid';
       throw new ApiError(res.status);
+    },
+    async me() {
+      const res = await client.me.$get();
+      if (!res.ok) throw new ApiError(res.status);
+      return meSchema.parse(await res.json()).username;
     },
     async catalog() {
       const res = await client.catalog.$get();
@@ -76,6 +84,7 @@ export function guardApi(api: Api, onUnauthorized: () => void): Api {
     };
   return {
     login: api.login,
+    me: api.me,
     catalog: guard(api.catalog),
     saveMeal: guard(api.saveMeal),
     today: guard(api.today),

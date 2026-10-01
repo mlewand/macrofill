@@ -7,6 +7,7 @@ import { loginRoutes, sessionAuth, type AuthEnv } from './http/auth';
 import { catalogRoutes } from './routes/catalog';
 import { eventRoutes } from './routes/events';
 import { mealRoutes } from './routes/meals';
+import { meRoutes } from './routes/me';
 import { todayRoutes } from './routes/today';
 
 export interface AppOptions {
@@ -24,6 +25,7 @@ function createApiRoutes(db: Db, now: () => Date) {
     .use(sessionAuth(db, now))
     .route('/', catalogRoutes(db))
     .route('/', mealRoutes(db))
+    .route('/', meRoutes(db))
     .route('/', eventRoutes(db))
     .route('/', todayRoutes(db, now));
 }

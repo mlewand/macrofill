@@ -7,10 +7,12 @@ import {
   type Recipe,
   type SaveMealRequest,
 } from '@macrofill/domain';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { NutritionTable } from '../NutritionTable';
+import { belongsTo, lastUser } from '../session';
+import { useDraftStore, type Draft } from '../storage/drafts';
 import {
   directEntry,
   isSummary,
@@ -25,14 +27,70 @@ import {
 interface Props {
   catalog: Catalog;
   onSaved: () => void;
+  /** Leaving: from the recipe list, or discarding the meal. */
   onCancel: () => void;
+  /** A session kept from before a reload (M5-8). */
+  resume?: Draft;
+  /** Who's logged in as the session starts: its owner, unless a kept session names one. */
+  owner?: string | undefined;
 }
 
-/** Direct Entry (M5-1 to M5-6): pick a recipe, enter each step, review and save. */
-export function DirectEntry({ catalog, onSaved, onCancel }: Props) {
-  const [state, setState] = useState<DirectEntryState>();
+/**
+ * Direct Entry (M5-1 to M5-6): pick a recipe, enter each step, review and save. The session is
+ * kept on the device from the recipe pick until it's saved or discarded (M5-8).
+ */
+export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Props) {
+  const drafts = useDraftStore();
+  // A session whose save was sent is resumed as it was: only resending that request is left.
+  const [resumed] = useState(() =>
+    resume?.sent ? resume.state : resume && resumable(resume.state, catalog),
+  );
+  const [state, setState] = useState<DirectEntryState | undefined>(resumed);
+  const [sent, setSent] = useState(resumed && resume?.sent);
+  // The user this session belongs to, fixed when it starts: another tab may change who's logged in.
+  const [owner] = useState(() => resume?.username ?? props.owner);
   const dispatch = (action: DirectEntryAction) =>
     setState((current) => (current ? directEntry(current, action) : current));
+
+  useEffect(() => {
+    // A kept session that no longer fits the catalog is dropped.
+    if (resume && !resumed) void drafts.clear();
+  }, [resume, resumed, drafts]);
+
+  useEffect(() => {
+    // Kept only for a known owner: one nobody owns couldn't be resumed (M5-8).
+    if (state && owner !== undefined) {
+      void drafts.save({ state, ...(sent ? { sent } : {}), username: owner });
+    }
+  }, [state, sent, owner, drafts]);
+
+  /**
+   * Keeps the request before it's sent; resolves whether it may be sent now. Not if who's logged in
+   * changed meanwhile (another tab): it's this session owner's meal. And not if an editable draft
+   * could outlive it: a reload would then let an edited retry go out under the same ids.
+   */
+  const keepSent = async (request: SaveMealRequest): Promise<boolean> => {
+    setSent(request);
+    if (state && owner !== undefined) {
+      const kept = await drafts.save({ state, sent: request, username: owner });
+      if (!kept && !(await drafts.clear())) return false;
+    }
+    // Sent only for a known owner, and only while that's still who's logged in. An unknown owner
+    // stays unknown: the session never takes on a user who shows up later.
+    return owner !== undefined && belongsTo(owner, lastUser());
+  };
+  // Saved: the kept session goes, tried twice. If it still came back after a reload, it's frozen on
+  // the request just saved, and resending that is harmless (M4-6).
+  const saved = async () => {
+    if (!(await drafts.clear())) await drafts.clear();
+    onSaved();
+  };
+  /** Discarded only once the kept session is gone; otherwise a reload would bring it back. */
+  const discard = async (): Promise<boolean> => {
+    if (!(await drafts.clear())) return false;
+    onCancel();
+    return true;
+  };
 
   if (state === undefined) {
     return (
@@ -44,9 +102,81 @@ export function DirectEntry({ catalog, onSaved, onCancel }: Props) {
     );
   }
   return isSummary(state) ? (
-    <Summary state={state} catalog={catalog} dispatch={dispatch} onSaved={onSaved} />
+    <Summary
+      state={state}
+      catalog={catalog}
+      dispatch={dispatch}
+      onSaved={() => void saved()}
+      owner={owner}
+      onDiscard={discard}
+      sent={sent}
+      onSend={keepSent}
+    />
   ) : (
-    <StepScreen key={state.current} state={state} catalog={catalog} dispatch={dispatch} />
+    <StepScreen
+      key={state.current}
+      state={state}
+      catalog={catalog}
+      dispatch={dispatch}
+      onDiscard={discard}
+    />
+  );
+}
+
+/**
+ * A kept session, if it still fits the catalog: its recipe with the same steps, in the same order.
+ * Products no longer in the catalog under the step's ingredient class are unpicked.
+ */
+function resumable(draft: DirectEntryState, catalog: Catalog): DirectEntryState | undefined {
+  const recipe = catalog.recipes.find((r) => r.id === draft.recipe.id);
+  const stepKey = (r: Recipe) => r.steps.map((s) => `${s.id}:${s.ingredientClassId}`).join();
+  if (!recipe || stepKey(recipe) !== stepKey(draft.recipe)) return undefined;
+  const classOf = new Map(catalog.products.map((p) => [p.id, p.ingredientClassId]));
+  return {
+    ...draft,
+    recipe,
+    steps: draft.steps.map((step, i) =>
+      step.productId === undefined ||
+      classOf.get(step.productId) === recipe.steps[i]!.ingredientClassId
+        ? step
+        : { ...step, productId: undefined },
+    ),
+  };
+}
+
+/** Discarding the meal in progress, after a confirmation. */
+export function DiscardMeal({ onDiscard }: { onDiscard: () => Promise<boolean> }) {
+  const { t } = useTranslation();
+  const [confirming, setConfirming] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (!confirming) {
+    return (
+      <button type="button" className="secondary" onClick={() => setConfirming(true)}>
+        {t('step.discard')}
+      </button>
+    );
+  }
+  return (
+    <div className="confirm" role="group" aria-label={t('step.discardQuestion')}>
+      <p>{t('step.discardQuestion')}</p>
+      {failed && (
+        <p role="alert" className="problem">
+          {t('step.discardFailed')}
+        </p>
+      )}
+      <div className="row">
+        <button
+          type="button"
+          className="danger"
+          onClick={() => void onDiscard().then((done) => setFailed(!done))}
+        >
+          {t('step.confirmDiscard')}
+        </button>
+        <button type="button" className="secondary" onClick={() => setConfirming(false)}>
+          {t('step.keep')}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -109,6 +239,7 @@ function StepScreen(props: {
   state: DirectEntryState;
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
+  onDiscard: () => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const { state, catalog, dispatch } = props;
@@ -170,6 +301,7 @@ function StepScreen(props: {
           {t('step.undo')}
         </button>
       </div>
+      <DiscardMeal onDiscard={props.onDiscard} />
     </form>
   );
 }
@@ -225,6 +357,14 @@ export function Summary(props: {
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
   onSaved: () => void;
+  /** Direct Entry only (M5-8). */
+  onDiscard?: () => Promise<boolean>;
+  /** Who the meal belongs to: the save names them, and the server refuses it for anyone else. */
+  owner?: string | undefined;
+  /** Direct Entry keeps the first request sent across a reload (M5-8); else the summary does. */
+  sent?: SaveMealRequest | undefined;
+  /** Resolves once the request is kept, with whether it may be sent now. */
+  onSend?: (request: SaveMealRequest) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -233,25 +373,36 @@ export function Summary(props: {
   const [failed, setFailed] = useState(false);
   // The first request sent. It may have reached the server even if the response didn't come
   // back, so from then on the summary is frozen and every retry resends exactly this (M4-6).
-  const [sent, setSent] = useState<SaveMealRequest>();
+  const [ownSent, setOwnSent] = useState<SaveMealRequest>();
+  const sent = props.sent ?? ownSent;
+  const setSent = async (request: SaveMealRequest): Promise<boolean> => {
+    setOwnSent(request);
+    return (await props.onSend?.(request)) ?? true;
+  };
   const frozen = sent !== undefined;
   const products = useMemo(() => new Map(catalog.products.map((p) => [p.id, p])), [catalog]);
 
   const items = mealItems(state);
-  const total: NutritionValues | undefined = items
-    ? mealNutrition(items, new Map(catalog.products.map((p) => [p.id, p.nutrition])))
-    : undefined;
+  const total = items && totalOf(items, catalog);
 
+  // A second tap before the first save's re-render must not send again.
+  const inFlight = useRef(false);
   const save = async () => {
-    const body = sent ?? saveRequest(state, new Date().toISOString());
-    if (!body) return;
-    setSent(body);
+    const made = saveRequest(state, new Date().toISOString());
+    const body =
+      sent ?? (made && (props.owner === undefined ? made : { ...made, username: props.owner }));
+    if (!body || inFlight.current) return;
+    inFlight.current = true;
     setSaving(true);
     setFailed(false);
     try {
+      // Kept first: if the server stores it and the page goes away before the answer, a reload
+      // still resends exactly this.
+      if (!(await setSent(body))) throw new Error('Not sent: the request could not be kept.');
       await api.saveMeal(body);
       props.onSaved();
     } catch {
+      inFlight.current = false;
       setFailed(true);
       setSaving(false);
     }
@@ -311,8 +462,22 @@ export function Summary(props: {
       >
         {t('step.undo')}
       </button>
+      {/* Not once a save was sent: the meal may be saved already. */}
+      {props.onDiscard && !frozen && <DiscardMeal onDiscard={props.onDiscard} />}
     </section>
   );
+}
+
+/** The meal's total, or undefined if a product is gone from the catalog (a resumed sent save). */
+function totalOf(
+  items: Parameters<typeof mealNutrition>[0],
+  catalog: Catalog,
+): NutritionValues | undefined {
+  try {
+    return mealNutrition(items, new Map(catalog.products.map((p) => [p.id, p.nutrition])));
+  } catch {
+    return undefined;
+  }
 }
 
 function SummaryItem(props: {

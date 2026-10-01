@@ -85,7 +85,7 @@ describe('login (M4-1, M4-2)', () => {
       .mockRejectedValueOnce(new ApiError(401))
       .mockResolvedValue(emptyCatalog);
     renderApp(fakeApi({ catalog, login: () => Promise.resolve('ok') }));
-    fireEvent.click(screen.getByRole('button', { name: en.home.logMeal }));
+    fireEvent.click(await screen.findByRole('button', { name: en.home.logMeal }));
     const dialog = await fillLogin('mlewand', 'the password');
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     // Still on the flow's screen: its retry works with the new session.
