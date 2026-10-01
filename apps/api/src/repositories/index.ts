@@ -9,6 +9,7 @@ import type {
   PreparedMealItem,
   Recipe,
   SaveMealRequest,
+  ScaleRecording,
 } from '@macrofill/domain';
 import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
@@ -21,6 +22,7 @@ import {
   products,
   recipeSteps,
   recipes,
+  scaleRecordings,
   users,
 } from '../db/schema';
 
@@ -240,6 +242,26 @@ export function createRepositories(db: Db, ownerId: string) {
           finishedAt: meal.finishedAt.toISOString(),
           items: items.map(toItem),
         };
+      },
+    },
+
+    scaleRecordings: {
+      /** Stores a meal's recording (M4-7), in the transaction that saves the meal. */
+      async insert(preparedMealId: string, recording: ScaleRecording): Promise<void> {
+        await db.insert(scaleRecordings).values({ preparedMealId, ownerId, recording });
+      },
+
+      async find(preparedMealId: string): Promise<ScaleRecording | undefined> {
+        const [row] = await db
+          .select({ recording: scaleRecordings.recording })
+          .from(scaleRecordings)
+          .where(
+            and(
+              eq(scaleRecordings.preparedMealId, preparedMealId),
+              eq(scaleRecordings.ownerId, ownerId),
+            ),
+          );
+        return row?.recording;
       },
     },
 

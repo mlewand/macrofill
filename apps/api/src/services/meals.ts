@@ -48,6 +48,7 @@ export async function saveMeal(
           ? new Conflict()
           : new NotFound();
       }
+      if (request.recording) await repos.scaleRecordings.insert(request.meal.id, request.recording);
       const body = await stored(repos, request.meal.id);
       if (!body) throw new Error('Saved meal not found.');
       return { status: 'created' as const, body };
@@ -92,9 +93,26 @@ async function stored(repos: Repositories, mealId: string): Promise<SaveMealResp
   return { meal, consumptionEntry };
 }
 
-/** Recipe and products must exist and be visible to the user. */
-async function references(repos: Repositories, { meal }: SaveMealRequest): Promise<Issue[]> {
+/**
+ * Recipe and products must exist and be visible to the user. A recording (M6-7) must be of this
+ * meal, weighed with the scale.
+ */
+async function references(
+  repos: Repositories,
+  { meal, recording }: SaveMealRequest,
+): Promise<Issue[]> {
   const issues: Issue[] = [];
+  if (recording !== undefined && meal.inputMethod !== 'scale') {
+    issues.push({
+      path: 'recording',
+      message: 'Only a meal weighed with the scale has a recording.',
+    });
+  } else if (recording !== undefined && recording.captureSessionId !== meal.id) {
+    issues.push({
+      path: 'recording.captureSessionId',
+      message: 'Must be the id of the meal it is saved with.',
+    });
+  }
   if (meal.recipeId !== undefined && !(await repos.recipes.exists(meal.recipeId))) {
     issues.push({ path: 'meal.recipeId', message: 'Unknown recipe.' });
   }
