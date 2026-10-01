@@ -1,7 +1,7 @@
 import type { Catalog, SaveMealRequest } from '@macrofill/domain';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ApiContext, type Api } from '../src/api/api';
+import { ApiContext, ApiError, type Api } from '../src/api/api';
 import { App } from '../src/App';
 import type { DirectEntryState } from '../src/directEntry/state';
 import { DraftContext, type Draft, type DraftStore } from '../src/storage/drafts';
@@ -407,6 +407,90 @@ describe('Direct Entry across a reload (M5-8)', () => {
     fireEvent.click(screen.getByRole('button', { name: en.summary.save }));
     await screen.findByText(en.saved.title);
     expect(retry).toHaveBeenCalledWith(request);
+  });
+
+  it('M5-8: a session whose save was sent resumes as it was, even if the catalog changed (regression: #37)', async () => {
+    const saveMeal = vi.fn<Api['saveMeal']>().mockRejectedValueOnce(new Error('offline'));
+    const first = memoryDrafts({ ...draftAtMilk, current: 2 });
+    const { view } = renderWithDrafts(first.store, fakeApi(saveMeal));
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.summary.saveFailed);
+    await vi.waitFor(() => expect(first.keptSent()).toBeDefined());
+    const request = saveMeal.mock.calls[0]![0];
+    view.unmount();
+
+    // The curd moved to another ingredient class since.
+    const moved = {
+      ...catalog,
+      products: catalog.products.map((p) =>
+        p.id === draftAtMilk.steps[0]!.productId ? { ...p, ingredientClassId: 'milk' } : p,
+      ),
+    };
+    const again = memoryDrafts(first.kept(), first.keptSent());
+    const retry = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+    renderWithDrafts(
+      again.store,
+      baseFakeApi({ catalog: () => Promise.resolve(moved), saveMeal: retry }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(retry).toHaveBeenCalledWith(request);
+  });
+
+  it('M5-8: a session kept for another user is dropped, not resumed (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'other');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      renderWithDrafts(drafts.store);
+      expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+      expect(drafts.kept()).toBeUndefined();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: logging in as someone else mid-meal drops the session and goes home (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      const catalogCall = vi
+        .fn<Api['catalog']>()
+        .mockRejectedValueOnce(new ApiError(401))
+        .mockResolvedValue(catalog);
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({ catalog: catalogCall, login: () => Promise.resolve('ok') }),
+      );
+      const dialog = await screen.findByRole('dialog', { name: en.login.title });
+      fireEvent.change(within(dialog).getByLabelText(en.login.username), {
+        target: { value: 'other' },
+      });
+      fireEvent.change(within(dialog).getByLabelText(en.login.password), {
+        target: { value: 'the password' },
+      });
+      fireEvent.click(within(dialog).getByRole('button', { name: en.login.submit }));
+      expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+      expect(drafts.kept()).toBeUndefined();
+      expect(localStorage.getItem('macrofill.user')).toBe('other');
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: drafts are stamped with the user who last logged in', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      renderWithDrafts(drafts.store);
+      fireEvent.click(await screen.findByRole('button', { name: en.home.logMeal }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+      await vi.waitFor(() => expect(drafts.store.save).toHaveBeenCalled());
+      expect(vi.mocked(drafts.store.save).mock.calls.at(-1)![0].username).toBe('mlewand');
+    } finally {
+      localStorage.clear();
+    }
   });
 
   it('M5-8: Discard meal, once confirmed, clears the kept session and goes home', async () => {

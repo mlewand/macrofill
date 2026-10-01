@@ -11,6 +11,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { NutritionTable } from '../NutritionTable';
+import { lastUser } from '../session';
 import { useDraftStore, type Draft } from '../storage/drafts';
 import {
   directEntry,
@@ -38,7 +39,10 @@ interface Props {
  */
 export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
   const drafts = useDraftStore();
-  const [resumed] = useState(() => resume && resumable(resume.state, catalog));
+  // A session whose save was sent is resumed as it was: only resending that request is left.
+  const [resumed] = useState(() =>
+    resume?.sent ? resume.state : resume && resumable(resume.state, catalog),
+  );
   const [state, setState] = useState<DirectEntryState | undefined>(resumed);
   const [sent, setSent] = useState(resumed && resume?.sent);
   const dispatch = (action: DirectEntryAction) =>
@@ -50,7 +54,14 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
   }, [resume, resumed, drafts]);
 
   useEffect(() => {
-    if (state) void drafts.save({ state, ...(sent ? { sent } : {}) });
+    const username = lastUser();
+    if (state) {
+      void drafts.save({
+        state,
+        ...(sent ? { sent } : {}),
+        ...(username === undefined ? {} : { username }),
+      });
+    }
   }, [state, sent, drafts]);
 
   const saved = () => void drafts.clear().then(onSaved);
@@ -333,9 +344,7 @@ export function Summary(props: {
   const products = useMemo(() => new Map(catalog.products.map((p) => [p.id, p])), [catalog]);
 
   const items = mealItems(state);
-  const total: NutritionValues | undefined = items
-    ? mealNutrition(items, new Map(catalog.products.map((p) => [p.id, p.nutrition])))
-    : undefined;
+  const total = items && totalOf(items, catalog);
 
   const save = async () => {
     const body = sent ?? saveRequest(state, new Date().toISOString());
@@ -410,6 +419,18 @@ export function Summary(props: {
       {props.onDiscard && !frozen && <DiscardMeal onDiscard={props.onDiscard} />}
     </section>
   );
+}
+
+/** The meal's total, or undefined if a product is gone from the catalog (a resumed sent save). */
+function totalOf(
+  items: Parameters<typeof mealNutrition>[0],
+  catalog: Catalog,
+): NutritionValues | undefined {
+  try {
+    return mealNutrition(items, new Map(catalog.products.map((p) => [p.id, p.nutrition])));
+  } catch {
+    return undefined;
+  }
 }
 
 function SummaryItem(props: {

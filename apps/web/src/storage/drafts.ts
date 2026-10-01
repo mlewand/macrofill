@@ -26,6 +26,8 @@ export interface Draft {
    * reload the summary stays frozen and a retry resends exactly this (M4-6).
    */
   sent?: SaveMealRequest;
+  /** Who was logged in when it was kept (see `session.ts`). */
+  username?: string;
 }
 
 const stepDraftSchema = z.object({
@@ -49,7 +51,11 @@ const draftSchema = z
   .refine((d) => d.steps.length === d.recipe.steps.length && d.current <= d.steps.length);
 
 const storedSchema = z
-  .object({ state: draftSchema, sent: saveMealRequestSchema.optional() })
+  .object({
+    state: draftSchema,
+    sent: saveMealRequestSchema.optional(),
+    username: z.string().optional(),
+  })
   .refine(
     ({ state, sent }) =>
       !sent || (sent.meal.id === state.mealId && sent.consumptionEntry.id === state.entryId),
@@ -59,8 +65,12 @@ const storedSchema = z
 export function parseDraft(value: unknown): Draft | undefined {
   const result = storedSchema.safeParse(value);
   if (!result.success) return undefined;
-  const { state, sent } = result.data;
-  return { state: parseState(state), ...(sent ? { sent } : {}) };
+  const { state, sent, username } = result.data;
+  return {
+    state: parseState(state),
+    ...(sent ? { sent } : {}),
+    ...(username === undefined ? {} : { username }),
+  };
 }
 
 function parseState(state: z.infer<typeof draftSchema>): DirectEntryState {

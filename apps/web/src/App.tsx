@@ -5,6 +5,7 @@ import { ApiContext, guardApi, useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
 import { Login } from './Login';
 import { ScaleMode } from './scaleMode/ScaleMode';
+import { belongsToCurrentUser, lastUser } from './session';
 import { useDraftStore, type Draft } from './storage/drafts';
 import { TodayView } from './today/TodayView';
 
@@ -19,12 +20,20 @@ export function App() {
   const [logins, setLogins] = useState(0);
   const baseApi = useApi();
   const api = useMemo(() => guardApi(baseApi, () => setNeedsLogin(true)), [baseApi]);
-  const loggedIn = () => {
+  const drafts = useDraftStore();
+  const [user, setUser] = useState(lastUser);
+  const loggedIn = (username: string) => {
     setNeedsLogin(false);
     setLogins((n) => n + 1);
+    // Someone else now: what was open belonged to the previous user (M5-8).
+    if (user !== undefined && username !== user) {
+      void drafts.clear();
+      setResume(undefined);
+      setScreen('home');
+    }
+    setUser(username);
   };
   // M5-8: a Direct Entry session kept from before a reload opens again.
-  const drafts = useDraftStore();
   const [resume, setResume] = useState<Draft>();
   // Nothing is shown until it's known whether there's a kept session: a meal started meanwhile
   // would overwrite it. IndexedDB answers in milliseconds.
@@ -35,6 +44,10 @@ export function App() {
       if (!current) return;
       setDraftLoaded(true);
       if (!draft) return;
+      if (!belongsToCurrentUser(draft.username)) {
+        void drafts.clear();
+        return;
+      }
       setResume(draft);
       setScreen('directEntry');
     });
