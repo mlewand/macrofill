@@ -16,7 +16,8 @@
   },
   "home": {
     "weighMeal": "Weigh a meal",
-    "logMeal": "Type in a meal"
+    "logMeal": "Type in a meal",
+    "userUnknown": "Couldn't check who's logged in, so a meal can't be started yet. Check the connection and try again."
   },
   "recipes": {
     "title": "What are you making?",

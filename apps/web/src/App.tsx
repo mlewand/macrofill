@@ -1,7 +1,7 @@
 import type { Catalog } from '@macrofill/domain';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiContext, guardApi, useApi } from './api/api';
+import { ApiContext, ApiError, guardApi, useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
 import { Login } from './Login';
 import { OutboxProvider, useSync, type SaveResult } from './outbox/Outbox';
@@ -36,6 +36,8 @@ export function App() {
   const generation = useRef(0);
   // Whether /api/me has answered (or given up): until the user is known, nothing starts.
   const [meSettled, setMeSettled] = useState(false);
+  // Asking again (Try again, or back online) while the user is still unknown.
+  const [meAttempt, setMeAttempt] = useState(0);
   /** Someone else now, or nobody was known: what was open may be another user's (M5-8). */
   const userIs = (username: string) => {
     if (username !== user) {
@@ -77,12 +79,23 @@ export function App() {
           return username;
         });
       },
-      () => current && setMeSettled(true),
+      (error: unknown) => {
+        if (!current) return;
+        setMeSettled(true);
+        // No session: the login form settles who it is.
+        if (error instanceof ApiError && error.status === 401) setNeedsLogin(true);
+      },
     );
     return () => {
       current = false;
     };
-  }, [baseApi, drafts]);
+  }, [baseApi, drafts, meAttempt]);
+  useEffect(() => {
+    if (user !== undefined) return;
+    const online = () => setMeAttempt((n) => n + 1);
+    window.addEventListener('online', online);
+    return () => window.removeEventListener('online', online);
+  }, [user]);
 
   // A login in another tab shares this tab's cookie: the same applies.
   useEffect(
@@ -145,10 +158,35 @@ export function App() {
             // Keyed by logins, so what failed without a session loads again after one.
             <section key={logins}>
               <h1>{t('app.name')}</h1>
-              <button type="button" className="primary" onClick={() => setScreen('scaleMode')}>
+              {/* A meal must belong to someone: none starts until the user is known (M5-8). */}
+              {user === undefined && (
+                <>
+                  <p role="alert" className="problem">
+                    {t('home.userUnknown')}
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setMeAttempt((n) => n + 1)}
+                  >
+                    {t('app.retry')}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="primary"
+                disabled={user === undefined}
+                onClick={() => setScreen('scaleMode')}
+              >
                 {t('home.weighMeal')}
               </button>
-              <button type="button" className="primary" onClick={() => setScreen('directEntry')}>
+              <button
+                type="button"
+                className="primary"
+                disabled={user === undefined}
+                onClick={() => setScreen('directEntry')}
+              >
                 {t('home.logMeal')}
               </button>
               <TodayView />
