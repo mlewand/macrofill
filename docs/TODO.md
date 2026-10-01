@@ -48,9 +48,3 @@ Done in `@mlewand/huajun-ble-scale` 0.0.4 (library PR #1); nothing open:
 - Monotonic timestamp: `Reading.receivedAtMonotonic`, alongside the unchanged `receivedAt`. Use it for `ScaleReading.timestamp`.
 - `toReading(frame, times)` is exported, so `ReplayScaleDriver` can re-parse stored bytes with `parseFrame` + `toReading` (M3-11).
 - `CapacitorTransport.deviceId` holds the picked device's ID, and `new CapacitorTransport({ deviceId })` connects to it without the chooser (M6-6). On the web this works within the page session of the first pick. After a reload it depends on Chrome's `navigator.bluetooth.getDevices()`, which is still behind a flag; see "Resume Scale Mode after page reload" above.
-
-## Scale library from npm
-
-`packages/scale` depends on `@mlewand/huajun-ble-scale` 0.0.4 through the tarball attached to the library's GitHub release `v0.0.4`, because pnpm's `minimumReleaseAge` held back the npm release when `HuajunDriver` was added. The tarball is the npm-published one (same integrity).
-
-Switch to the npm version range (`^0.0.4`) once the hold has passed, and check that pnpm adds no `minimumReleaseAgeExclude` entry.

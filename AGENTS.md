@@ -14,7 +14,6 @@ Current phase: **C**, about to start. Phase B's exit was confirmed on 2026-10-01
 
 Handover from Phase B. Delete each point once it's resolved, and this section once it's empty.
 
-- **Scale library from npm, as soon as the hold allows.** It doesn't block other Phase C work. `packages/scale` depends on the library through the tarball on its GitHub release `v0.0.4`, because pnpm's `minimumReleaseAge` held back the npm release (published 2026-09-30, 09:49 UTC). Switch to `^0.0.4` as its own small PR once `pnpm add` adds no `minimumReleaseAgeExclude` entry. It's an exception to "don't implement `docs/TODO.md` items": a pending maintenance step, not a deferred feature. That PR deletes the TODO item "Scale library from npm".
 - **Recording (M3-11, M6-7).** Readings carry `raw`, but nothing records them yet. The mock's `raw` is empty, so only real sessions can be re-parsed. Replay uses the library's `parseFrame` and `toReading`.
 - **Tracker decisions from Phase B**, beyond the criteria text, are in the descriptions of #22, #27 and #29: correction references, undo back to before Start, and M3-1 kept literal for a stalled stream. The tracker's settings, for tuning on the real scale, are in `apps/web/src/scaleMode/settings.ts`.
 
