@@ -1,13 +1,22 @@
-import type { Catalog, SaveMealRequest } from '@macrofill/domain';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { localDay, type Catalog, type SaveMealRequest, type Today } from '@macrofill/domain';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { IDBFactory } from 'fake-indexeddb';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiContext, ApiError, type Api } from '../src/api/api';
+import { OutboxProvider, OutboxStoreContext, useSaveMeal } from '../src/outbox/Outbox';
+import { indexedDbOutbox, type OutboxStore } from '../src/outbox/store';
 import { App } from '../src/App';
 import type { DirectEntryState } from '../src/directEntry/state';
-import { DraftContext, type Draft, type DraftStore } from '../src/storage/drafts';
+import {
+  DraftContext,
+  indexedDbDraftStore,
+  type Draft,
+  type DraftStore,
+} from '../src/storage/drafts';
 import en from '../src/i18n/en.json';
 import { rememberUser } from '../src/session';
 import { emptyToday, fakeApi as baseFakeApi, stored } from './support/api';
+import { outboxItem } from './support/outbox';
 
 const nutrition = (protein: number, fibre: number | null = null) => ({
   kcal: 100,
@@ -76,10 +85,11 @@ const catalog: Catalog = {
   ],
 };
 
-function fakeApi(saveMeal?: Api['saveMeal']): Api {
+function fakeApi(saveMeal?: Api['saveMeal'], overrides: Partial<Api> = {}): Api {
   return baseFakeApi({
     catalog: () => Promise.resolve(catalog),
     ...(saveMeal ? { saveMeal } : {}),
+    ...overrides,
   });
 }
 
@@ -538,7 +548,14 @@ describe('Direct Entry across a reload (M5-8)', () => {
     try {
       const drafts = memoryDrafts();
       await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
-      renderWithDrafts(drafts.store);
+      // The server names whoever logged in last, as the shared cookie does.
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          me: () => Promise.resolve(localStorage.getItem('macrofill.user') ?? 'mlewand'),
+        }),
+      );
       await screen.findByText('Step 2 of 2');
       localStorage.setItem('macrofill.user', 'other');
       act(() => {
@@ -932,6 +949,35 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: a kept session that loads during a re-check of the user waits for that answer (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      // The database is blocked at first (another tab); it loads on the retry, a second later.
+      vi.mocked(drafts.store.load).mockRejectedValueOnce(new Error('blocked'));
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithDrafts(drafts.store, baseFakeApi({ catalog: () => Promise.resolve(catalog), me }));
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      // Back on the tab: the cookie may be someone else's now.
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(drafts.store.load).toHaveBeenCalledTimes(2), {
+        timeout: 3000,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText('Step 2 of 2')).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: offline, a kept session of the remembered user still resumes', async () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {
@@ -987,26 +1033,28 @@ describe('Direct Entry across a reload (M5-8)', () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {
       let refuse!: () => void;
+      // No session: log in. Asked again meanwhile (back on the tab), that answer comes late.
       const me = vi
         .fn<Api['me']>()
+        .mockRejectedValueOnce(new ApiError(401))
         .mockImplementationOnce(
           () => new Promise<string>((_, reject) => (refuse = () => reject(new ApiError(401)))),
         )
         .mockResolvedValue('mlewand');
-      const today = vi
-        .fn<Api['today']>()
-        .mockRejectedValueOnce(new ApiError(401))
-        .mockResolvedValue(emptyToday);
       renderWithDrafts(
         memoryDrafts().store,
         baseFakeApi({
           catalog: () => Promise.resolve(catalog),
           me,
-          today,
+          today: () => Promise.resolve(emptyToday),
           login: () => Promise.resolve('ok'),
         }),
       );
       const dialog = await screen.findByRole('dialog', { name: en.login.title });
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
       fireEvent.change(within(dialog).getByLabelText(en.login.username), {
         target: { value: 'mlewand' },
       });
@@ -1027,7 +1075,11 @@ describe('Direct Entry across a reload (M5-8)', () => {
     localStorage.clear();
     try {
       let answer!: (username: string) => void;
-      const me = vi.fn(() => new Promise<string>((resolve) => (answer = resolve)));
+      // The first answer is held back; asked again after the login elsewhere, it's the new user.
+      const me = vi
+        .fn<Api['me']>()
+        .mockImplementationOnce(() => new Promise<string>((resolve) => (answer = resolve)))
+        .mockResolvedValue('other');
       renderWithDrafts(
         memoryDrafts().store,
         baseFakeApi({ catalog: () => Promise.resolve(catalog), me }),
@@ -1185,5 +1237,897 @@ describe('Direct Entry across a reload (M5-8)', () => {
     renderWithDrafts(drafts.store);
     await screen.findByText('Step 1 of 2');
     expect(checkedProduct()).toEqual([]);
+  });
+});
+
+describe('saving through the outbox (M5-9)', () => {
+  /** Today for the real current day, so a meal saved now counts toward it. */
+  const todayNow = (): Promise<Today> =>
+    Promise.resolve({ ...emptyToday, day: localDay(new Date(), emptyToday.timezone) });
+
+  /**
+   * The fixture meals' day, for the offline list (today's only): 2026-01-15, 07:30 UTC. Only `Date`
+   * is faked; it's still the 14th in Los Angeles (this device) and the 15th in Warsaw (the user).
+   */
+  const onFixtureDay = () =>
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-01-15T07:30:00.000Z') });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function renderWithOutbox(api: Api, outbox: OutboxStore, draft?: DirectEntryState) {
+    const drafts = memoryDrafts(draft);
+    render(
+      <ApiContext value={api}>
+        <OutboxStoreContext value={outbox}>
+          <DraftContext value={drafts.store}>
+            <App />
+          </DraftContext>
+        </OutboxStoreContext>
+      </ApiContext>,
+    );
+    return drafts;
+  }
+
+  const atSummary = { ...draftAtMilk, current: 2 };
+
+  it('M5-9: a meal saved offline is kept, pending in Today and counted, and sent once back online', async () => {
+    let online = false;
+    const saveMeal = vi.fn<Api['saveMeal']>((r) =>
+      online ? Promise.resolve(stored(r)) : Promise.reject(new TypeError('Failed to fetch')),
+    );
+    const today = vi.fn(todayNow);
+    const outbox = indexedDbOutbox(new IDBFactory());
+    const drafts = renderWithOutbox(fakeApi(saveMeal, { today }), outbox, atSummary);
+
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    expect(await screen.findByText(en.saved.pending)).toBeInTheDocument();
+    expect(drafts.kept()).toBeUndefined();
+    expect(await outbox.all()).toHaveLength(1);
+
+    click(en.saved.done);
+    const entry = await screen.findByText(en.today.pending);
+    expect(entry.closest('li')).toHaveTextContent('Curd bowl');
+    // Counted: 150 g and 3.5 g at 100 kcal per 100 g.
+    expect(screen.getByRole('row', { name: new RegExp(`^${en.nutrient.kcal}`) })).toHaveTextContent(
+      '154 kcal',
+    );
+    expect(within(entry.closest('li')!).queryByRole('button')).not.toBeInTheDocument();
+
+    online = true;
+    act(() => void window.dispatchEvent(new Event('online')));
+    await vi.waitFor(() => expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument());
+    expect(await outbox.all()).toEqual([]);
+    // The same request both times: no duplicate (M4-6).
+    expect(saveMeal.mock.calls[1]![0]).toEqual(saveMeal.mock.calls[0]![0]);
+    expect(today.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('M5-9: online, a save is sent at once and nothing is left pending', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    renderWithOutbox(fakeApi(undefined, { today: todayNow }), outbox, atSummary);
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(screen.queryByText(en.saved.pending)).not.toBeInTheDocument();
+    expect(await outbox.all()).toEqual([]);
+  });
+
+  it('M5-9: meals left from before are sent when the app starts', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1));
+    const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+    renderWithOutbox(fakeApi(saveMeal, { today: todayNow }), outbox);
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    await vi.waitFor(async () => expect(await outbox.all()).toEqual([]));
+  });
+
+  it('M5-9, M4-2: a meal waiting for a session is sent after logging in', async () => {
+    let session = false;
+    const saveMeal = vi.fn<Api['saveMeal']>((r) =>
+      session ? Promise.resolve(stored(r)) : Promise.reject(new ApiError(401)),
+    );
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1));
+    renderWithOutbox(
+      fakeApi(saveMeal, {
+        today: todayNow,
+        login: () => {
+          session = true;
+          return Promise.resolve('ok');
+        },
+      }),
+      outbox,
+    );
+    const dialog = await screen.findByRole('dialog', { name: en.login.title });
+    fireEvent.change(within(dialog).getByLabelText(en.login.username), {
+      target: { value: 'mlewand' },
+    });
+    fireEvent.change(within(dialog).getByLabelText(en.login.password), {
+      target: { value: 'the password' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: en.login.submit }));
+    await vi.waitFor(async () => expect(await outbox.all()).toEqual([]));
+    expect(saveMeal).toHaveBeenCalledTimes(2);
+  });
+
+  it('M5-9: a meal the server refuses while Save waits is reported as not saved, and kept in Today (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const drafts = renderWithOutbox(
+      fakeApi(() => Promise.reject(new ApiError(409)), { today: todayNow }),
+      outbox,
+      atSummary,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    // Not "Meal saved", and not stuck on a frozen summary either.
+    expect(await screen.findByRole('status')).toHaveTextContent(en.saved.refusedTitle);
+    expect(screen.getByText(en.saved.refused)).toBeInTheDocument();
+    expect(drafts.kept()).toBeUndefined();
+    // The meal is kept on the device, listed as not saved, until removed.
+    expect(await outbox.all()).toEqual([expect.objectContaining({ refused: 409 })]);
+    click(en.saved.done);
+    expect(await screen.findByRole('region', { name: en.today.refusedTitle })).toBeInTheDocument();
+    warn.mockRestore();
+  });
+
+  it('M5-9: meals sent at startup show in Today once the server has them (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1, new Date().toISOString()));
+    let accept!: () => void;
+    const saveMeal = vi.fn<Api['saveMeal']>(
+      (r) => new Promise((resolve) => (accept = () => resolve(stored(r)))),
+    );
+    const today = vi.fn(todayNow);
+    renderWithOutbox(fakeApi(saveMeal, { today }), outbox);
+    // Pending while it's being sent...
+    expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalled());
+    const loads = today.mock.calls.length;
+    accept();
+    // ...then Today loads again, from the server that has it now.
+    await vi.waitFor(() => expect(today.mock.calls.length).toBeGreaterThan(loads));
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+  });
+
+  it("M5-9: another user's waiting meals never show, also right after a switch (regression: #41)", async () => {
+    onFixtureDay();
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1), username: 'mlewand' });
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: a meal refused in the background stays on the device, shown as not saved, until removed (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1, new Date().toISOString()));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new ApiError(400)), { today: todayNow }),
+      outbox,
+    );
+    const section = await screen.findByRole('region', { name: en.today.refusedTitle });
+    expect(within(section).getByRole('alert')).toHaveTextContent(en.today.refusedHint);
+    expect(await outbox.all()).toHaveLength(1);
+    // Not counted: it isn't in the day.
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    fireEvent.click(within(section).getByRole('button', { name: en.today.remove }));
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('region', { name: en.today.refusedTitle })).not.toBeInTheDocument(),
+    );
+    expect(await outbox.all()).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it("M5-9: a login in another tab sends that user's waiting meals (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1), username: 'other' });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(
+        fakeApi(saveMeal, {
+          today: todayNow,
+          me: () => Promise.resolve(localStorage.getItem('macrofill.user') ?? 'mlewand'),
+        }),
+        outbox,
+      );
+      await screen.findByRole('button', { name: en.home.logMeal });
+      expect(saveMeal).not.toHaveBeenCalled();
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: when the server names a different user at start, their waiting meals are sent (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1), username: 'other' });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(
+        fakeApi(saveMeal, { today: todayNow, me: () => Promise.resolve('other') }),
+        outbox,
+      );
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: nothing waiting on the device shows before the user is known (regression: #41)', async () => {
+    localStorage.clear();
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add({ ...outboxItem(1), username: 'other' });
+    let answer!: (username: string) => void;
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new TypeError('offline')), {
+        today: () => Promise.reject(new TypeError('offline')),
+        me: () => new Promise<string>((resolve) => (answer = resolve)),
+      }),
+      outbox,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    act(() => answer('mlewand'));
+    // Known now, and it's someone else's meal: still not shown.
+    expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    localStorage.clear();
+  });
+
+  it("M5-9: if the user can't be learned, no one's waiting meals show (regression: #41)", async () => {
+    localStorage.clear();
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add({ ...outboxItem(1), username: 'other' });
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new TypeError('offline')), {
+        today: () => Promise.reject(new TypeError('offline')),
+        me: () => Promise.reject(new TypeError('offline')),
+      }),
+      outbox,
+    );
+    expect(await screen.findByText(en.home.userUnknown)).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    expect(screen.queryByText(en.today.pendingTitle)).not.toBeInTheDocument();
+  });
+
+  it("M5-9: a refused meal's time is shown in the user's timezone (regression: #41)", async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    // 07:00 UTC: 08:00 in Warsaw, the user's timezone; 23:00 the day before on this device.
+    await outbox.add({ ...outboxItem(1, '2026-01-15T07:00:00.000Z'), refused: 400 });
+    renderWithOutbox(fakeApi(undefined, { today: todayNow }), outbox);
+    const section = await screen.findByRole('region', { name: en.today.refusedTitle });
+    expect(within(section).getByText(/08:00/)).toBeInTheDocument();
+  });
+
+  it('M5-9: a meal with no owner is not put in the outbox (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    let save!: ReturnType<typeof useSaveMeal>;
+    function Grab() {
+      save = useSaveMeal();
+      return null;
+    }
+    render(
+      <ApiContext value={fakeApi()}>
+        <OutboxStoreContext value={outbox}>
+          <OutboxProvider>
+            <Grab />
+          </OutboxProvider>
+        </OutboxStoreContext>
+      </ApiContext>,
+    );
+    const { request, entry } = outboxItem(1);
+    delete request.username;
+    await expect(save(request, entry)).rejects.toThrow(/owner/);
+    expect(await outbox.all()).toEqual([]);
+  });
+
+  it("M5-9: a remembered user's waiting meals don't show before the server confirms them (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, new Date().toISOString()));
+      let answer!: (username: string) => void;
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: todayNow,
+          me: () => new Promise<string>((resolve) => (answer = resolve)),
+        }),
+        outbox,
+      );
+      await screen.findByRole('button', { name: en.home.logMeal });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+      // The session is someone else's: still not shown.
+      act(() => answer('other'));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: offline, the waiting meals show newest first (regression: #41)', async () => {
+    onFixtureDay();
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1, '2026-01-15T07:00:00.000Z'));
+    await outbox.add(outboxItem(2, '2026-01-15T07:20:00.000Z'));
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new TypeError('offline')), {
+        today: () => Promise.reject(new TypeError('offline')),
+      }),
+      outbox,
+    );
+    await screen.findByText(en.today.pendingTitle);
+    const times = screen.getAllByRole('listitem').map((li) => li.querySelector('time')?.dateTime);
+    expect(times).toEqual(['2026-01-15T07:20:00.000Z', '2026-01-15T07:00:00.000Z']);
+  });
+
+  it("M5-9: if the server can't confirm the remembered user, their meals stay out of the server's day (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, new Date().toISOString()));
+      const today = vi.fn(todayNow);
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today,
+          me: () => Promise.reject(new TypeError('timeout')),
+        }),
+        outbox,
+      );
+      await screen.findByRole('heading', { name: en.today.title });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // No server day to mix them into: it isn't even asked for (M4-1). They're listed on their own.
+      expect(today).not.toHaveBeenCalled();
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: offline, with the user remembered, what waits on the device still shows', async () => {
+    onFixtureDay();
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.pendingTitle)).toBeInTheDocument();
+      expect(screen.getByText(en.today.pending)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: waiting meals are sent only once the server has confirmed the user (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1));
+      let answer!: (username: string) => void;
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(
+        fakeApi(saveMeal, {
+          today: todayNow,
+          me: () => new Promise<string>((resolve) => (answer = resolve)),
+        }),
+        outbox,
+      );
+      await screen.findByRole('button', { name: en.home.logMeal });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(saveMeal).not.toHaveBeenCalled();
+      act(() => answer('mlewand'));
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: a session kept while another tab blocks the database resumes once it lets go (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const factory = new IDBFactory();
+      // An older version of the app, open in another tab, that kept a session.
+      const old = await new Promise<IDBDatabase>((resolve) => {
+        const open = factory.open('macrofill', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('drafts');
+        open.onsuccess = () => resolve(open.result);
+      });
+      await new Promise<void>((resolve) => {
+        const put = old
+          .transaction('drafts', 'readwrite')
+          .objectStore('drafts')
+          .put({ state: draftAtMilk, username: 'mlewand' }, 'directEntry');
+        put.onsuccess = () => resolve();
+      });
+      render(
+        <ApiContext value={fakeApi()}>
+          <DraftContext value={indexedDbDraftStore(factory)}>
+            <App />
+          </DraftContext>
+        </ApiContext>,
+      );
+      expect(await screen.findByText(en.app.blocked)).toBeInTheDocument();
+      old.close();
+      expect(await screen.findByText('Step 2 of 2', {}, { timeout: 4000 })).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: back on the tab and offline, queued meals show again, without the earlier day (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, new Date().toISOString()));
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockRejectedValue(new TypeError('offline'));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), { today: todayNow, me }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      // Offline: the remembered user's queued meals, on their own.
+      expect(await screen.findByText(en.today.pendingTitle)).toBeInTheDocument();
+      expect(screen.getByText(en.today.pending)).toBeInTheDocument();
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M7-1: the timezone is kept for the user Today was asked for, not one who logged in meanwhile (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      let answer!: (today: Today) => void;
+      const today = vi.fn(() => new Promise<Today>((resolve) => (answer = resolve)));
+      renderWithOutbox(fakeApi(undefined, { today }), indexedDbOutbox(new IDBFactory()));
+      await vi.waitFor(() => expect(today).toHaveBeenCalled());
+      // Another tab logs in as someone else; this tab hasn't seen the storage event yet.
+      localStorage.setItem('macrofill.user', 'other');
+      await act(async () => {
+        answer({ ...emptyToday, day: localDay(new Date(), emptyToday.timezone) });
+        await Promise.resolve();
+      });
+      expect(localStorage.getItem('macrofill.timezone:other')).toBeNull();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M4-1: coming back to the tab hides the day loaded before until the server confirms the user (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithOutbox(
+        fakeApi(undefined, { today: todayNow, me }),
+        indexedDbOutbox(new IDBFactory()),
+      );
+      expect(await screen.findByRole('table')).toBeInTheDocument();
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      // Another tab may have logged in as someone else: nothing of the earlier day shows meanwhile.
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.getByText(en.app.loading)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it("M7-1: offline, only today's queued meals are listed under Today (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      const now = Date.now();
+      await outbox.add(outboxItem(1, new Date(now).toISOString()));
+      await outbox.add(outboxItem(2, new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString()));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      await screen.findByText(en.today.pendingTitle);
+      expect(screen.getAllByText(en.today.pending)).toHaveLength(1);
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M7-1: after a failed load, Today shows the day once a re-check loads it (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const today = vi
+        .fn<Api['today']>()
+        .mockRejectedValueOnce(new TypeError('offline'))
+        .mockImplementation(todayNow);
+      renderWithOutbox(fakeApi(undefined, { today }), indexedDbOutbox(new IDBFactory()));
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(await screen.findByRole('table')).toBeInTheDocument();
+      expect(screen.queryByText(en.today.loadFailed)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: a user change in another tab, after an offline check, lists nothing until the server answers (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1, new Date().toISOString()), username: 'other' });
+      const me = vi
+        .fn<Api['me']>()
+        .mockRejectedValueOnce(new TypeError('offline'))
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me,
+        }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key: 'macrofill.user',
+            oldValue: 'mlewand',
+            newValue: 'other',
+          }),
+        );
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: coming back to the tab hides queued meals until the server confirms the user again (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, new Date().toISOString()));
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), { today: todayNow, me }),
+        outbox,
+      );
+      // Confirmed: the queued meal is in the day.
+      expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+      // Another tab may have logged in as someone else, with no storage event; back on this tab:
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      // Until the server answers again, it's out of the day.
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it("M5-9: offline, queued meals show in the user's timezone from the last time Today loaded (regression: #41)", async () => {
+    onFixtureDay();
+    localStorage.setItem('macrofill.timezone:mlewand', 'Europe/Warsaw');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      // 07:00 UTC: 08:00 in Warsaw; 23:00 the day before on this device (Los Angeles).
+      await outbox.add(outboxItem(1, '2026-01-15T07:00:00.000Z'));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      await screen.findByText(en.today.pendingTitle);
+      expect(screen.getByText(/08:00/)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it("M5-9: offline, another user's remembered timezone is not used (regression: #41)", async () => {
+    onFixtureDay();
+    localStorage.clear();
+    try {
+      // Someone else used Today on this device (Warsaw)...
+      renderWithOutbox(
+        fakeApi(undefined, { today: todayNow, me: () => Promise.resolve('other') }),
+        indexedDbOutbox(new IDBFactory()),
+      );
+      await screen.findByRole('heading', { name: en.today.title });
+      await vi.waitFor(() =>
+        expect(Object.keys(localStorage).some((k) => k.startsWith('macrofill.timezone'))).toBe(
+          true,
+        ),
+      );
+      cleanup();
+      // ...then this user, offline, who never loaded Today here.
+      const outbox = indexedDbOutbox(new IDBFactory());
+      // 07:00 UTC: 23:00 the day before on this device (Los Angeles), 08:00 in Warsaw.
+      await outbox.add(outboxItem(1, '2026-01-15T07:00:00.000Z'));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      await screen.findByText(en.today.pendingTitle);
+      expect(screen.getByText(/23:00/)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M4-1: Today shows no server day until the server confirms the user (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      // /api/me gets no answer in time, while the cookie may be someone else's now.
+      const me = vi
+        .fn<Api['me']>()
+        .mockRejectedValueOnce(new TypeError('offline'))
+        .mockResolvedValue('mlewand');
+      const today = vi.fn(todayNow);
+      renderWithOutbox(fakeApi(undefined, { today, me }), indexedDbOutbox(new IDBFactory()));
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      expect(today).not.toHaveBeenCalled();
+      // Try again asks who's logged in first; then the day loads.
+      fireEvent.click(screen.getAllByRole('button', { name: en.app.retry }).at(-1)!);
+      expect(await screen.findByRole('table')).toBeInTheDocument();
+      expect(me).toHaveBeenCalledTimes(2);
+      expect(today).toHaveBeenCalledTimes(1);
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it("M4-1: while the server is being asked who's logged in, Today loads nothing (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const me = vi.fn<Api['me']>(() => new Promise<string>(() => undefined));
+      const today = vi.fn(todayNow);
+      renderWithOutbox(fakeApi(undefined, { today, me }), indexedDbOutbox(new IDBFactory()));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(today).not.toHaveBeenCalled();
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: a server error from /api/me counts as unreachable: Today offers Try again (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const me = vi
+        .fn<Api['me']>()
+        .mockRejectedValueOnce(new ApiError(503))
+        .mockResolvedValue('mlewand');
+      const today = vi.fn(todayNow);
+      renderWithOutbox(fakeApi(undefined, { today, me }), indexedDbOutbox(new IDBFactory()));
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      fireEvent.click(screen.getAllByRole('button', { name: en.app.retry }).at(-1)!);
+      expect(await screen.findByRole('table')).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M7-1: a stored timezone that is not one falls back to the device timezone (regression: #41)', async () => {
+    onFixtureDay();
+    localStorage.setItem('macrofill.user', 'mlewand');
+    localStorage.setItem('macrofill.timezone:mlewand', 'Not/AZone');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, '2026-01-15T07:00:00.000Z'));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      await screen.findByText(en.today.pendingTitle);
+      // 07:00 UTC on this device (Los Angeles).
+      expect(screen.getByText(/23:00/)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it("M7-1: while the user is checked again, an earlier load failure isn't shown (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithOutbox(
+        fakeApi(undefined, { today: () => Promise.reject(new TypeError('offline')), me }),
+        indexedDbOutbox(new IDBFactory()),
+      );
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      expect(screen.queryByText(en.today.loadFailed)).not.toBeInTheDocument();
+      expect(screen.getByText(en.app.loading)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: Today remembers the user timezone for when it is offline', async () => {
+    localStorage.clear();
+    const outbox = indexedDbOutbox(new IDBFactory());
+    renderWithOutbox(fakeApi(undefined, { today: todayNow }), outbox);
+    await screen.findByRole('heading', { name: en.today.title });
+    await vi.waitFor(() =>
+      expect(localStorage.getItem('macrofill.timezone:mlewand')).toBe('Europe/Warsaw'),
+    );
+    localStorage.clear();
+  });
+
+  it("M5-9: while the server is being asked who's logged in, Today's offline view lists nothing (regression: #41)", async () => {
+    onFixtureDay();
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1));
+      let refuse!: () => void;
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me: () =>
+            new Promise<string>((_, reject) => (refuse = () => reject(new TypeError('offline')))),
+        }),
+        outbox,
+      );
+      expect(await screen.findByText(en.app.loading)).toBeInTheDocument();
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+      // The server can't be reached: offline, the remembered user's list shows.
+      act(() => refuse());
+      expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: a user change seen in another tab sends nothing until the server confirms it (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1), username: 'other' });
+      let confirm!: (username: string) => void;
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>((resolve) => (confirm = resolve)));
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(fakeApi(saveMeal, { today: todayNow, me }), outbox);
+      await screen.findByRole('button', { name: en.home.logMeal });
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(saveMeal).not.toHaveBeenCalled();
+      act(() => confirm('other'));
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: a sync in flight stops the moment the user is checked again, before any re-render (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      // In memory: it answers within microtasks, as IndexedDB may, so nothing else runs between
+      // the first request and the second.
+      let items = [outboxItem(1), outboxItem(2)];
+      const outbox: OutboxStore = {
+        add: (item) => {
+          items = [...items.filter((i) => i.request.meal.id !== item.request.meal.id), item];
+          return Promise.resolve();
+        },
+        all: () => Promise.resolve(items),
+        remove: (id) => {
+          items = items.filter((i) => i.request.meal.id !== id);
+          return Promise.resolve();
+        },
+      };
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      let release!: () => void;
+      const saveMeal = vi
+        .fn<Api['saveMeal']>()
+        .mockImplementationOnce(
+          (r) => new Promise((resolve) => (release = () => resolve(stored(r)))),
+        )
+        .mockImplementation((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(fakeApi(saveMeal, { today: todayNow, me }), outbox);
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+      // Back on the tab, and the first request finishes, before React has re-rendered.
+      document.dispatchEvent(new Event('visibilitychange'));
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // The second waits for the server's answer about the user.
+      expect(saveMeal).toHaveBeenCalledTimes(1);
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: offline, Today still lists what waits on the device', async () => {
+    onFixtureDay();
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1));
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new TypeError('offline')), {
+        today: () => Promise.reject(new TypeError('offline')),
+      }),
+      outbox,
+    );
+    expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+    expect(await screen.findByText(en.today.pendingTitle)).toBeInTheDocument();
+    expect(screen.getByText(en.today.pending)).toBeInTheDocument();
   });
 });

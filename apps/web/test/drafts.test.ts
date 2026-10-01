@@ -1,7 +1,8 @@
 import { IDBFactory } from 'fake-indexeddb';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { saveRequest, startDirectEntry } from '../src/directEntry/state';
-import { indexedDbDraftStore, parseDraft } from '../src/storage/drafts';
+import { deviceStores } from '../src/storage/device';
+import { indexedDbDraftStore, noDraftStore, parseDraft } from '../src/storage/drafts';
 
 const recipe = {
   id: '9a13c2a4-8d6e-401e-aeb3-deb367561938',
@@ -89,16 +90,55 @@ describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
     expect(parseDraft({ state, sent: other, username: 'mlewand' })).toBeUndefined();
   });
 
-  it('M5-8: without IndexedDB (e.g. blocked), nothing is kept and nothing breaks', async () => {
-    const broken = {
+  it('M5-8: with IndexedDB unavailable, nothing is kept, and nothing can come back (regression: #41)', async () => {
+    const unavailable = {
       open: () => {
-        throw new Error('blocked');
+        throw new DOMException('denied', 'SecurityError');
       },
     } as unknown as IDBFactory;
-    const store = indexedDbDraftStore(broken);
-    // It says so, for a caller that must know (a request about to be sent).
-    await expect(store.save(draft)).resolves.toBe(false);
+    const store = indexedDbDraftStore(unavailable);
+    // No draft can outlive a sent request, so a save may go ahead.
+    await expect(store.save(draft)).resolves.toBe(true);
     await expect(store.load()).resolves.toBeUndefined();
+    await expect(store.clear()).resolves.toBe(true);
+  });
+
+  it('M5-8: a database that fails to open says a write failed (regression: #37)', async () => {
+    // Opens, then fails: something was or may be kept, so the caller must know.
+    const failing = {
+      open: () => {
+        const request = {} as IDBOpenDBRequest & { onerror: (() => void) | null };
+        setTimeout(() => request.onerror?.(), 0);
+        return request;
+      },
+    } as unknown as IDBFactory;
+    const store = indexedDbDraftStore(failing);
+    await expect(store.save(draft)).resolves.toBe(false);
     await expect(store.clear()).resolves.toBe(false);
+  });
+});
+
+describe('device stores (M5-8, M5-9)', () => {
+  it('M5-8, M5-9: without IndexedDB, the app mounts and keeps nothing on the device (regression: #41)', async () => {
+    vi.stubGlobal('indexedDB', undefined);
+    try {
+      const stores = deviceStores();
+      expect(stores.outbox).toBeUndefined();
+      await expect(stores.drafts.save(draft)).resolves.toBe(true);
+      await expect(stores.drafts.load()).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('M5-8, M5-9: with IndexedDB, both stores are on it', () => {
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    try {
+      const stores = deviceStores();
+      expect(stores.outbox).toBeDefined();
+      expect(stores.drafts).not.toBe(noDraftStore);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

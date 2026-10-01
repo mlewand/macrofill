@@ -9,8 +9,8 @@ import {
 } from '@macrofill/domain';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApi } from '../api/api';
 import { NutritionTable } from '../NutritionTable';
+import { useSaveMeal, type SaveResult } from '../outbox/Outbox';
 import { belongsTo, lastUser } from '../session';
 import { useDraftStore, type Draft } from '../storage/drafts';
 import {
@@ -26,7 +26,7 @@ import {
 
 interface Props {
   catalog: Catalog;
-  onSaved: () => void;
+  onSaved: (result: SaveResult) => void;
   /** Leaving: from the recipe list, or discarding the meal. */
   onCancel: () => void;
   /** A session kept from before a reload (M5-8). */
@@ -81,9 +81,9 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Pr
   };
   // Saved: the kept session goes, tried twice. If it still came back after a reload, it's frozen on
   // the request just saved, and resending that is harmless (M4-6).
-  const saved = async () => {
+  const saved = async (result: SaveResult) => {
     if (!(await drafts.clear())) await drafts.clear();
-    onSaved();
+    onSaved(result);
   };
   /** Discarded only once the kept session is gone; otherwise a reload would bring it back. */
   const discard = async (): Promise<boolean> => {
@@ -106,7 +106,7 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Pr
       state={state}
       catalog={catalog}
       dispatch={dispatch}
-      onSaved={() => void saved()}
+      onSaved={(result) => void saved(result)}
       owner={owner}
       onDiscard={discard}
       sent={sent}
@@ -356,7 +356,8 @@ export function Summary(props: {
   state: DirectEntryState;
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
-  onSaved: () => void;
+  /** Saved: the server has it, or it waits in the outbox (M5-9). */
+  onSaved: (result: SaveResult) => void;
   /** Direct Entry only (M5-8). */
   onDiscard?: () => Promise<boolean>;
   /** Who the meal belongs to: the save names them, and the server refuses it for anyone else. */
@@ -367,7 +368,7 @@ export function Summary(props: {
   onSend?: (request: SaveMealRequest) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
-  const api = useApi();
+  const saveMeal = useSaveMeal();
   const { state, catalog, dispatch } = props;
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -399,8 +400,15 @@ export function Summary(props: {
       // Kept first: if the server stores it and the page goes away before the answer, a reload
       // still resends exactly this.
       if (!(await setSent(body))) throw new Error('Not sent: the request could not be kept.');
-      await api.saveMeal(body);
-      props.onSaved();
+      // How Today shows it while it waits to be sent (M5-9).
+      const entry = {
+        id: body.consumptionEntry.id,
+        preparedMealId: body.meal.id,
+        eatenAt: body.consumptionEntry.eatenAt,
+        recipeName: state.recipe.name,
+        nutrition: total ?? UNKNOWN_NUTRITION,
+      };
+      props.onSaved(await saveMeal(body, entry));
     } catch {
       inFlight.current = false;
       setFailed(true);
@@ -467,6 +475,18 @@ export function Summary(props: {
     </section>
   );
 }
+
+/** Every value unknown (M2-3): a meal whose products are gone from the catalog. */
+const UNKNOWN_NUTRITION: NutritionValues = {
+  kcal: null,
+  fat: null,
+  saturates: null,
+  carbs: null,
+  sugars: null,
+  protein: null,
+  salt: null,
+  fibre: null,
+};
 
 /** The meal's total, or undefined if a product is gone from the catalog (a resumed sent save). */
 function totalOf(

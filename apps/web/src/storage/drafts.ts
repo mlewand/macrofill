@@ -8,12 +8,14 @@ import {
 import { createContext, useContext } from 'react';
 import { z } from 'zod';
 import type { DirectEntryState } from '../directEntry/state';
+import { IndexedDbBlocked, IndexedDbUnavailable, idb } from './idb';
 
 /**
  * M5-8: the in-progress Direct Entry session, kept on the device so a page reload resumes it.
  * Loading never fails: no draft, a broken one or no IndexedDB all load as none.
  */
 export interface DraftStore {
+  /** Undefined when there's none. Rejects only with `IndexedDbBlocked`: then try again later. */
   load: () => Promise<Draft | undefined>;
   /** Resolves whether the draft is kept: it never rejects, but a caller may need to know. */
   save: (draft: Draft) => Promise<boolean>;
@@ -92,49 +94,35 @@ function parseState(state: z.infer<typeof draftSchema>): DirectEntryState {
   };
 }
 
-const DB_NAME = 'macrofill';
-const DB_VERSION = 1;
-const DRAFTS = 'drafts';
 const KEY = 'directEntry';
-const FAILED = Symbol('IndexedDB failed');
 
-/** The draft store on IndexedDB. Storage failures are swallowed: a draft is a convenience. */
+/** The draft store on IndexedDB. Never rejects: a draft is a convenience, but `save` and `clear`
+ * say whether they worked, for a caller that must know. */
 export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore {
-  let db: Promise<IDBDatabase> | undefined;
-  const open = () =>
-    (db ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const request = factory.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = () => request.result.createObjectStore(DRAFTS);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error('IndexedDB failed to open'));
-    }));
-
-  const run = async <T>(
-    mode: IDBTransactionMode,
-    request: (store: IDBObjectStore) => IDBRequest<T>,
-  ): Promise<T | typeof FAILED> => {
+  const run = idb(factory);
+  const attempt = async (work: () => Promise<unknown>): Promise<boolean> => {
     try {
-      const database = await open();
-      return await new Promise<T>((resolve, reject) => {
-        const transaction = database.transaction(DRAFTS, mode);
-        const done = request(transaction.objectStore(DRAFTS));
-        transaction.oncomplete = () => resolve(done.result);
-        transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB failed'));
-        transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB aborted'));
-      });
-    } catch {
-      db = undefined;
-      return FAILED;
+      await work();
+      return true;
+    } catch (error) {
+      // Unavailable: nothing is kept, and nothing can come back after a reload either.
+      return error instanceof IndexedDbUnavailable;
     }
   };
-
   return {
     load: async () => {
-      const value = await run('readonly', (store): IDBRequest<unknown> => store.get(KEY));
-      return value === FAILED ? undefined : parseDraft(value);
+      try {
+        return parseDraft(
+          await run('drafts', 'readonly', (store): IDBRequest<unknown> => store.get(KEY)),
+        );
+      } catch (error) {
+        // Blocked: a kept session may well be there; the caller waits and tries again.
+        if (error instanceof IndexedDbBlocked) throw error;
+        return undefined;
+      }
     },
-    save: async (draft) => (await run('readwrite', (store) => store.put(draft, KEY))) !== FAILED,
-    clear: async () => (await run('readwrite', (store) => store.delete(KEY))) !== FAILED,
+    save: (draft) => attempt(() => run('drafts', 'readwrite', (store) => store.put(draft, KEY))),
+    clear: () => attempt(() => run('drafts', 'readwrite', (store) => store.delete(KEY))),
   };
 }
 

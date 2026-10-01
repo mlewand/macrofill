@@ -1,0 +1,63 @@
+import {
+  saveMealRequestSchema,
+  todayEntrySchema,
+  type SaveMealRequest,
+  type TodayEntry,
+} from '@macrofill/domain';
+import { z } from 'zod';
+import { idb } from '../storage/idb';
+
+/** M5-9: a saved meal on its way to the server. */
+export interface OutboxItem {
+  request: SaveMealRequest;
+  /** How Today shows it while it's pending, worked out when it was saved. */
+  entry: TodayEntry;
+  /** ISO time it was saved, for sending in order. */
+  queuedAt: string;
+  /** Who was logged in when it was saved (see `session.ts`): only they send it. */
+  username?: string;
+  /** The status the server refused it with for good: kept, not sent again, until removed. */
+  refused?: number;
+}
+
+const itemSchema = z.object({
+  request: saveMealRequestSchema,
+  entry: todayEntrySchema,
+  queuedAt: z.iso.datetime(),
+  username: z.string().optional(),
+  refused: z.number().int().optional(),
+});
+
+/** Where saved meals wait; kept by meal id, so saving the same meal twice keeps one. */
+export interface OutboxStore {
+  /** Rejects if the meal couldn't be kept (e.g. no IndexedDB): then it must be sent directly. */
+  add: (item: OutboxItem) => Promise<void>;
+  /**
+   * Oldest first. Items that don't parse (e.g. from another version) are left out. Rejects if the
+   * outbox can't be read.
+   */
+  all: () => Promise<OutboxItem[]>;
+  remove: (mealId: string) => Promise<void>;
+}
+
+export function indexedDbOutbox(factory: IDBFactory = indexedDB): OutboxStore {
+  const run = idb(factory);
+  return {
+    add: async (item) => {
+      await run('outbox', 'readwrite', (store) => store.put(item, item.request.meal.id));
+    },
+    all: async () => {
+      // A failed read rejects: an outbox that can't be read isn't an empty one.
+      const values: unknown[] = await run('outbox', 'readonly', (store) => store.getAll());
+      return values
+        .flatMap((value) => {
+          const result = itemSchema.safeParse(value);
+          return result.success ? [result.data as OutboxItem] : [];
+        })
+        .sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
+    },
+    remove: async (mealId) => {
+      await run('outbox', 'readwrite', (store) => store.delete(mealId));
+    },
+  };
+}

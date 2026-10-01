@@ -17,6 +17,7 @@ import {
 } from '../directEntry/DirectEntry';
 import { isSummary, stepProblem } from '../directEntry/state';
 import { formatGrams } from '../format';
+import type { SaveResult } from '../outbox/Outbox';
 import { useCreateScaleDriver } from '../scale';
 import { reconnect } from './reconnect';
 import { reconnectSettings, trackerSettings, type ReconnectSettings } from './settings';
@@ -34,7 +35,7 @@ import { useWakeLock } from './wakeLock';
 
 interface Props {
   catalog: Catalog;
-  onSaved: () => void;
+  onSaved: (result: SaveResult) => void;
   onCancel: () => void;
   /** Default: `trackerSettings`. */
   tracker?: Partial<TrackerConfig>;
@@ -80,7 +81,7 @@ function Session(props: {
   catalog: Catalog;
   tracker: Partial<TrackerConfig>;
   reconnect: ReconnectSettings;
-  onSaved: () => void;
+  onSaved: (result: SaveResult) => void;
   owner: string | undefined;
 }) {
   const { t } = useTranslation();

@@ -26,6 +26,9 @@ export interface Api {
   deleteEntry: (id: string) => Promise<void>;
 }
 
+/** How long a save request may take before it counts as unanswered. */
+const SAVE_TIMEOUT_MS = 15_000;
+
 export class ApiError extends Error {
   constructor(readonly status: number) {
     super(`api responded ${status}`);
@@ -51,7 +54,11 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
       return catalogSchema.parse(await res.json());
     },
     async saveMeal(request) {
-      const res = await client.meals.$post({ json: request });
+      // A request that never gets an answer fails after a while, so a sync can go on later.
+      const res = await client.meals.$post(
+        { json: request },
+        { init: { signal: AbortSignal.timeout(SAVE_TIMEOUT_MS) } },
+      );
       if (res.status !== 200 && res.status !== 201) throw new ApiError(res.status);
       return saveMealResponseSchema.parse(await res.json());
     },

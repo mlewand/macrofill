@@ -1,6 +1,6 @@
 // Who last logged in on this device: the api keeps the session in an HttpOnly cookie, so the app
 // only knows the username typed into the login form. Kept data on the device (the Direct Entry
-// draft, M5-8) is stamped with it, so another user logging in never gets someone else's meal.
+// draft, M5-8; the outbox, M5-9) is stamped with it, so another user logging in never gets someone else's meal.
 
 const KEY = 'macrofill.user';
 
@@ -50,4 +50,49 @@ export function belongsTo(owner: string | undefined, user: string | undefined): 
 /** Whether data stamped with `owner` may be used now. */
 export function belongsToCurrentUser(owner: string | undefined): boolean {
   return belongsTo(owner, lastUser());
+}
+
+/**
+ * Whether a meal stamped with `owner` is `user`'s: both known and the same. Stricter than
+ * `belongsTo`, for what's queued to be sent or shown (M5-9): an unknown user sees and sends none.
+ */
+export function isOwnedBy(owner: string | undefined, user: string | undefined): boolean {
+  return owner !== undefined && owner === user;
+}
+
+/** Per user: on a shared device, nobody's times show in another user's timezone. */
+const timezoneKey = (username: string) => `macrofill.timezone:${username}`;
+
+/**
+ * The timezone of `username` from the last time Today loaded for them, for showing times offline
+ * (M7-1).
+ */
+export function lastTimezone(username: string | undefined): string | undefined {
+  if (username === undefined) return undefined;
+  let timezone: string | null;
+  try {
+    timezone = localStorage.getItem(timezoneKey(username));
+  } catch {
+    return undefined;
+  }
+  // A damaged value isn't a timezone: times would fail to format.
+  return timezone !== null && isTimeZone(timezone) ? timezone : undefined;
+}
+
+function isTimeZone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function rememberTimezone(username: string | undefined, timezone: string): void {
+  if (username === undefined) return;
+  try {
+    localStorage.setItem(timezoneKey(username), timezone);
+  } catch {
+    // Offline times then fall back to the device's timezone.
+  }
 }
