@@ -29,8 +29,12 @@ export function rememberUser(username: string): void {
   }
 }
 
-/** Whether data stamped with `owner` may be used now. Unknown on either side means yes. */
+/** Whether data stamped with `owner` may be used by `user`. Unknown on either side means yes. */
+export function belongsTo(owner: string | undefined, user: string | undefined): boolean {
+  return owner === undefined || user === undefined || owner === user;
+}
+
+/** Whether data stamped with `owner` may be used now. */
 export function belongsToCurrentUser(owner: string | undefined): boolean {
-  const current = lastUser();
-  return owner === undefined || current === undefined || owner === current;
+  return belongsTo(owner, lastUser());
 }

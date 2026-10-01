@@ -28,9 +28,9 @@ describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
   it('M5-8: keeps a draft until it is cleared', async () => {
     const store = indexedDbDraftStore(new IDBFactory());
     expect(await store.load()).toBeUndefined();
-    await store.save(draft);
+    expect(await store.save(draft)).toBe(true);
     expect(await store.load()).toEqual(draft);
-    await store.clear();
+    expect(await store.clear()).toBe(true);
     expect(await store.load()).toBeUndefined();
   });
 
@@ -85,8 +85,9 @@ describe('Direct Entry drafts in IndexedDB (M5-8)', () => {
       },
     } as unknown as IDBFactory;
     const store = indexedDbDraftStore(broken);
-    await expect(store.save(draft)).resolves.toBeUndefined();
+    // It says so, for a caller that must know (a request about to be sent).
+    await expect(store.save(draft)).resolves.toBe(false);
     await expect(store.load()).resolves.toBeUndefined();
-    await expect(store.clear()).resolves.toBeUndefined();
+    await expect(store.clear()).resolves.toBe(false);
   });
 });

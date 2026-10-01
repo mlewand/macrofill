@@ -319,11 +319,11 @@ function memoryDrafts(initial?: DirectEntryState, sent?: SaveMealRequest) {
     load: vi.fn(() => Promise.resolve(kept)),
     save: vi.fn((draft: Draft) => {
       kept = draft;
-      return Promise.resolve();
+      return Promise.resolve(true);
     }),
     clear: vi.fn(() => {
       kept = undefined;
-      return Promise.resolve();
+      return Promise.resolve(true);
     }),
   };
   return { store, kept: () => kept?.state, keptSent: () => kept?.sent };
@@ -564,6 +564,48 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: a save whose user changed while its request was being kept is not sent (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: { ...draftAtMilk, current: 2 }, username: 'mlewand' });
+      // Another tab logs in as someone else while the request is being kept.
+      vi.mocked(drafts.store.save).mockImplementation(() => {
+        localStorage.setItem('macrofill.user', 'other');
+        return Promise.resolve(true);
+      });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithDrafts(drafts.store, fakeApi(saveMeal));
+      fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(saveMeal).not.toHaveBeenCalled();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: if the request can not be kept, the editable draft goes, and the save is sent (regression: #37)', async () => {
+    const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+    vi.mocked(drafts.store.save).mockResolvedValue(false);
+    const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+    renderWithDrafts(drafts.store, fakeApi(saveMeal));
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(drafts.store.clear).toHaveBeenCalled();
+    expect(saveMeal).toHaveBeenCalledTimes(1);
+  });
+
+  it('M5-8: if neither the request can be kept nor the draft cleared, nothing is sent (regression: #37)', async () => {
+    const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+    vi.mocked(drafts.store.save).mockResolvedValue(false);
+    vi.mocked(drafts.store.clear).mockResolvedValue(false);
+    const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+    renderWithDrafts(drafts.store, fakeApi(saveMeal));
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
+    expect(saveMeal).not.toHaveBeenCalled();
+  });
+
   it('M5-8: drafts are stamped with the user who last logged in', async () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {
@@ -619,8 +661,8 @@ describe('Direct Entry across a reload (M5-8)', () => {
     let loaded!: (draft: Draft) => void;
     const store: DraftStore = {
       load: () => new Promise((resolve) => (loaded = resolve)),
-      save: vi.fn(() => Promise.resolve()),
-      clear: vi.fn(() => Promise.resolve()),
+      save: vi.fn(() => Promise.resolve(true)),
+      clear: vi.fn(() => Promise.resolve(true)),
     };
     renderWithDrafts(store);
     expect(screen.queryByRole('button', { name: en.home.logMeal })).not.toBeInTheDocument();

@@ -15,8 +15,10 @@ import type { DirectEntryState } from '../directEntry/state';
  */
 export interface DraftStore {
   load: () => Promise<Draft | undefined>;
-  save: (draft: Draft) => Promise<void>;
-  clear: () => Promise<void>;
+  /** Resolves whether the draft is kept: it never rejects, but a caller may need to know. */
+  save: (draft: Draft) => Promise<boolean>;
+  /** Resolves whether no draft is left. */
+  clear: () => Promise<boolean>;
 }
 
 export interface Draft {
@@ -90,6 +92,7 @@ const DB_NAME = 'macrofill';
 const DB_VERSION = 1;
 const DRAFTS = 'drafts';
 const KEY = 'directEntry';
+const FAILED = Symbol('IndexedDB failed');
 
 /** The draft store on IndexedDB. Storage failures are swallowed: a draft is a convenience. */
 export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore {
@@ -105,7 +108,7 @@ export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore
   const run = async <T>(
     mode: IDBTransactionMode,
     request: (store: IDBObjectStore) => IDBRequest<T>,
-  ): Promise<T | undefined> => {
+  ): Promise<T | typeof FAILED> => {
     try {
       const database = await open();
       return await new Promise<T>((resolve, reject) => {
@@ -117,26 +120,25 @@ export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore
       });
     } catch {
       db = undefined;
-      return undefined;
+      return FAILED;
     }
   };
 
   return {
-    load: async () => parseDraft(await run('readonly', (store) => store.get(KEY))),
-    save: async (draft) => {
-      await run('readwrite', (store) => store.put(draft, KEY));
+    load: async () => {
+      const value = await run('readonly', (store): IDBRequest<unknown> => store.get(KEY));
+      return value === FAILED ? undefined : parseDraft(value);
     },
-    clear: async () => {
-      await run('readwrite', (store) => store.delete(KEY));
-    },
+    save: async (draft) => (await run('readwrite', (store) => store.put(draft, KEY))) !== FAILED,
+    clear: async () => (await run('readwrite', (store) => store.delete(KEY))) !== FAILED,
   };
 }
 
 /** Keeps nothing: the default, so components work without a provider. */
 export const noDraftStore: DraftStore = {
   load: () => Promise.resolve(undefined),
-  save: () => Promise.resolve(),
-  clear: () => Promise.resolve(),
+  save: () => Promise.resolve(true),
+  clear: () => Promise.resolve(true),
 };
 
 export const DraftContext = createContext<DraftStore>(noDraftStore);

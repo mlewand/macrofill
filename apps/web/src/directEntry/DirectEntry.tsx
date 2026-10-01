@@ -11,7 +11,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { NutritionTable } from '../NutritionTable';
-import { lastUser } from '../session';
+import { belongsTo, lastUser } from '../session';
 import { useDraftStore, type Draft } from '../storage/drafts';
 import {
   directEntry,
@@ -65,15 +65,22 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
     }
   }, [state, sent, owner, drafts]);
 
-  const keepSent = async (request: SaveMealRequest) => {
+  /**
+   * Keeps the request before it's sent; resolves whether it may be sent now. Not if who's logged in
+   * changed meanwhile (another tab): it's this session owner's meal. And not if an editable draft
+   * could outlive it: a reload would then let an edited retry go out under the same ids.
+   */
+  const keepSent = async (request: SaveMealRequest): Promise<boolean> => {
     setSent(request);
     if (state) {
-      await drafts.save({
+      const kept = await drafts.save({
         state,
         sent: request,
         ...(owner === undefined ? {} : { username: owner }),
       });
+      if (!kept && !(await drafts.clear())) return false;
     }
+    return belongsTo(owner, lastUser());
   };
   const saved = () => void drafts.clear().then(onSaved);
   const discard = () => void drafts.clear().then(onCancel);
@@ -336,8 +343,8 @@ export function Summary(props: {
   onDiscard?: () => void;
   /** Direct Entry keeps the first request sent across a reload (M5-8); else the summary does. */
   sent?: SaveMealRequest | undefined;
-  /** Resolves once the request is kept, so it's kept before it's sent. */
-  onSend?: (request: SaveMealRequest) => Promise<void>;
+  /** Resolves once the request is kept, with whether it may be sent now. */
+  onSend?: (request: SaveMealRequest) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -348,9 +355,9 @@ export function Summary(props: {
   // back, so from then on the summary is frozen and every retry resends exactly this (M4-6).
   const [ownSent, setOwnSent] = useState<SaveMealRequest>();
   const sent = props.sent ?? ownSent;
-  const setSent = async (request: SaveMealRequest) => {
+  const setSent = async (request: SaveMealRequest): Promise<boolean> => {
     setOwnSent(request);
-    await props.onSend?.(request);
+    return (await props.onSend?.(request)) ?? true;
   };
   const frozen = sent !== undefined;
   const products = useMemo(() => new Map(catalog.products.map((p) => [p.id, p])), [catalog]);
@@ -369,7 +376,7 @@ export function Summary(props: {
     try {
       // Kept first: if the server stores it and the page goes away before the answer, a reload
       // still resends exactly this.
-      await setSent(body);
+      if (!(await setSent(body))) throw new Error('Not sent: the request could not be kept.');
       await api.saveMeal(body);
       props.onSaved();
     } catch {
