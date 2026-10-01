@@ -310,6 +310,9 @@ describe('Direct Entry', () => {
     const save = screen.getByRole('button', { name: en.summary.save });
     fireEvent.click(save);
     fireEvent.click(save);
+    // The request goes out once the draft has it.
+    await vi.waitFor(() => expect(api.saveMeal).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(api.saveMeal).toHaveBeenCalledTimes(1);
   });
 });
@@ -482,6 +485,43 @@ describe('Direct Entry across a reload (M5-8)', () => {
     } finally {
       localStorage.clear();
     }
+  });
+
+  it('M5-8: the first request is kept on the device before it is sent (regression: #37)', async () => {
+    const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+    let keptBeforeSending: SaveMealRequest | undefined;
+    const saveMeal = vi.fn<Api['saveMeal']>((request) => {
+      keptBeforeSending = drafts.keptSent();
+      return Promise.resolve(stored(request));
+    });
+    renderWithDrafts(drafts.store, fakeApi(saveMeal));
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(keptBeforeSending).toEqual(saveMeal.mock.calls[0]![0]);
+  });
+
+  it('M5-8: logging in when nobody was known yet drops the open session (regression: #37)', async () => {
+    localStorage.clear();
+    const drafts = memoryDrafts(draftAtMilk);
+    const catalogCall = vi
+      .fn<Api['catalog']>()
+      .mockRejectedValueOnce(new ApiError(401))
+      .mockResolvedValue(catalog);
+    renderWithDrafts(
+      drafts.store,
+      baseFakeApi({ catalog: catalogCall, login: () => Promise.resolve('ok') }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: en.login.title });
+    fireEvent.change(within(dialog).getByLabelText(en.login.username), {
+      target: { value: 'someone' },
+    });
+    fireEvent.change(within(dialog).getByLabelText(en.login.password), {
+      target: { value: 'the password' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: en.login.submit }));
+    expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+    expect(drafts.kept()).toBeUndefined();
+    localStorage.clear();
   });
 
   it('M5-8: drafts are stamped with the user who last logged in', async () => {

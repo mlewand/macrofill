@@ -11,8 +11,11 @@ export interface SyncResult {
   stopped?: 'unauthorized' | 'unreachable';
 }
 
-/** Statuses that a retry can't change: such a meal leaves the outbox. */
-const FINAL = new Set([400, 409, 410, 422]);
+/**
+ * Statuses that a retry can't change: such a meal leaves the outbox. 404: an id belongs to another
+ * user (M4-3).
+ */
+const FINAL = new Set([400, 404, 409, 410, 422]);
 
 /**
  * M5-9: sends the current user's meals in the outbox, oldest first, removing each the server accepts. Retries never

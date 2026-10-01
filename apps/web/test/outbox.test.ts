@@ -119,6 +119,23 @@ describe('syncOutbox (M5-9)', () => {
     expect((await store.all()).map((i) => i.username)).toEqual(['other']);
   });
 
+  it.each([400, 404, 409, 410, 422])(
+    'M5-9: a meal refused with %i can never be saved, so it leaves the outbox',
+    async (status) => {
+      const store = indexedDbOutbox(new IDBFactory());
+      await store.add(outboxItem(1));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const result = await syncOutbox(
+        store,
+        api(() => Promise.reject(new ApiError(status))),
+        undefined,
+      );
+      expect(result.dropped).toEqual([outboxItem(1).request.meal.id]);
+      expect(await store.all()).toEqual([]);
+      warn.mockRestore();
+    },
+  );
+
   it('M5-9: a meal the server refuses for good leaves the outbox, and the rest go on', async () => {
     const store = indexedDbOutbox(new IDBFactory());
     await store.add(outboxItem(1));
