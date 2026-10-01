@@ -22,13 +22,16 @@ export function TodayView() {
   const [today, setToday] = useState<Today>();
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  // A meal leaving the outbox is on the server now: load the day again.
-  const pendingIds = pending.map((e) => e.id).join();
+  // A meal leaving the outbox is on the server now: load the day again. One joining it needs no
+  // reload: it's merged in below.
+  const pendingIds = pending.map((e) => e.id);
   const [lastPendingIds, setLastPendingIds] = useState(pendingIds);
-  if (pendingIds !== lastPendingIds) {
+  if (pendingIds.join() !== lastPendingIds.join()) {
     setLastPendingIds(pendingIds);
-    setFailed(false);
-    setAttempt((n) => n + 1);
+    if (lastPendingIds.some((id) => !pendingIds.includes(id))) {
+      setFailed(false);
+      setAttempt((n) => n + 1);
+    }
   }
 
   useEffect(() => {

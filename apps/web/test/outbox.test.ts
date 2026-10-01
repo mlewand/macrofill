@@ -65,7 +65,7 @@ describe('syncOutbox (M5-9)', () => {
     await store.add(outboxItem(2));
     await store.add(outboxItem(1));
     const server = api((r) => Promise.resolve(stored(r)));
-    expect(await syncOutbox(store, server)).toEqual({
+    expect(await syncOutbox(store, server, undefined)).toEqual({
       synced: [outboxItem(1).request.meal.id, outboxItem(2).request.meal.id],
       dropped: [],
     });
@@ -81,11 +81,11 @@ describe('syncOutbox (M5-9)', () => {
     await store.add(outboxItem(1));
     await store.add(outboxItem(2));
     const offline = api(() => Promise.reject(new TypeError('Failed to fetch')));
-    expect(await syncOutbox(store, offline)).toMatchObject({ stopped: 'unreachable' });
+    expect(await syncOutbox(store, offline, undefined)).toMatchObject({ stopped: 'unreachable' });
     expect(offline.saveMeal).toHaveBeenCalledTimes(1);
     expect(await store.all()).toHaveLength(2);
     const failing = api(() => Promise.reject(new ApiError(503)));
-    expect(await syncOutbox(store, failing)).toMatchObject({ stopped: 'unreachable' });
+    expect(await syncOutbox(store, failing, undefined)).toMatchObject({ stopped: 'unreachable' });
     expect(await store.all()).toHaveLength(2);
   });
 
@@ -96,6 +96,7 @@ describe('syncOutbox (M5-9)', () => {
       await syncOutbox(
         store,
         api(() => Promise.reject(new ApiError(401))),
+        undefined,
       ),
     ).toEqual({
       synced: [],
@@ -103,6 +104,19 @@ describe('syncOutbox (M5-9)', () => {
       stopped: 'unauthorized',
     });
     expect(await store.all()).toHaveLength(1);
+  });
+
+  it("M5-9: only the current user's meals are sent; another user's wait for them", async () => {
+    const store = indexedDbOutbox(new IDBFactory());
+    await store.add({ ...outboxItem(1), username: 'other' });
+    await store.add({ ...outboxItem(2), username: 'mlewand' });
+    await store.add(outboxItem(3));
+    const server = api((r) => Promise.resolve(stored(r)));
+    expect(await syncOutbox(store, server, 'mlewand')).toEqual({
+      synced: [outboxItem(2).request.meal.id, outboxItem(3).request.meal.id],
+      dropped: [],
+    });
+    expect((await store.all()).map((i) => i.username)).toEqual(['other']);
   });
 
   it('M5-9: a meal the server refuses for good leaves the outbox, and the rest go on', async () => {
@@ -115,7 +129,7 @@ describe('syncOutbox (M5-9)', () => {
         ? Promise.reject(new ApiError(410))
         : Promise.resolve(stored(r)),
     );
-    expect(await syncOutbox(store, server)).toEqual({
+    expect(await syncOutbox(store, server, undefined)).toEqual({
       synced: [outboxItem(2).request.meal.id],
       dropped: [outboxItem(1).request.meal.id],
     });

@@ -620,7 +620,9 @@ describe('saving through the outbox (M5-9)', () => {
     const entry = await screen.findByText(en.today.pending);
     expect(entry.closest('li')).toHaveTextContent('Curd bowl');
     // Counted: 150 g and 3.5 g at 100 kcal per 100 g.
-    expect(screen.getByRole('row', { name: new RegExp(`^${en.nutrient.kcal}`) })).toHaveTextContent('154 kcal');
+    expect(screen.getByRole('row', { name: new RegExp(`^${en.nutrient.kcal}`) })).toHaveTextContent(
+      '154 kcal',
+    );
     expect(within(entry.closest('li')!).queryByRole('button')).not.toBeInTheDocument();
 
     online = true;

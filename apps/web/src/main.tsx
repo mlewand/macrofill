@@ -4,6 +4,8 @@ import { ApiContext, createHttpApi } from './api/api';
 import { HuajunDriver } from '@macrofill/scale/huajun';
 import { App } from './App';
 import './i18n';
+import { OutboxStoreContext } from './outbox/Outbox';
+import { indexedDbOutbox } from './outbox/store';
 import { ScaleContext, scaleDriverFactory } from './scale';
 import { DraftContext, indexedDbDraftStore } from './storage/drafts';
 import './styles.css';
@@ -16,9 +18,11 @@ void scaleDriverFactory(() => new HuajunDriver()).then((createScaleDriver) =>
     <StrictMode>
       <ApiContext value={createHttpApi()}>
         <DraftContext value={indexedDbDraftStore()}>
-          <ScaleContext value={createScaleDriver}>
-            <App />
-          </ScaleContext>
+          <OutboxStoreContext value={indexedDbOutbox()}>
+            <ScaleContext value={createScaleDriver}>
+              <App />
+            </ScaleContext>
+          </OutboxStoreContext>
         </DraftContext>
       </ApiContext>
     </StrictMode>,

@@ -109,3 +109,32 @@ function keptDraft(page: Page): Promise<unknown> {
       }),
   );
 }
+
+test('M5-9: a meal saved offline waits on the device, survives a restart and is sent once online', async ({
+  page,
+  context,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: en.home.logMeal }).click();
+  await page.getByRole('button', { name: 'Curd' }).click();
+  const grams = page.getByLabel(en.step.grams);
+  await grams.fill('123');
+  await page.getByRole('button', { name: en.step.next }).click();
+  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: en.step.skip }).click();
+
+  await context.setOffline(true);
+  await page.getByRole('button', { name: en.summary.save }).click();
+  await expect(page.getByText(en.saved.pending)).toBeVisible();
+  await page.getByRole('button', { name: en.saved.done }).click();
+  // Offline, the day can't load, but the meal waiting on the device shows.
+  await expect(page.getByText(en.today.pendingTitle)).toBeVisible();
+
+  // Closing and opening the app: the service worker serves it offline; the meal is still there.
+  await page.reload();
+  await expect(page.getByText(en.today.pending)).toBeVisible();
+
+  // Back online: sent, and in Today like any other meal.
+  await context.setOffline(false);
+  await expect(page.getByText(en.today.pending)).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.getByRole('region', { name: en.today.title }).getByRole('table')).toBeVisible();
+});

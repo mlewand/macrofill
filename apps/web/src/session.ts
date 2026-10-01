@@ -1,6 +1,6 @@
 // Who last logged in on this device: the api keeps the session in an HttpOnly cookie, so the app
 // only knows the username typed into the login form. Kept data on the device (the Direct Entry
-// draft, M5-8) is stamped with it, so another user logging in never gets someone else's meal.
+// draft, M5-8; the outbox, M5-9) is stamped with it, so another user logging in never gets someone else's meal.
 
 const KEY = 'macrofill.user';
 
@@ -20,8 +20,12 @@ export function rememberUser(username: string): void {
   }
 }
 
-/** Whether data stamped with `owner` may be used now. Unknown on either side means yes. */
+/** Whether data stamped with `owner` may be used by `user`. Unknown on either side means yes. */
+export function belongsTo(owner: string | undefined, user: string | undefined): boolean {
+  return owner === undefined || user === undefined || owner === user;
+}
+
+/** Whether data stamped with `owner` may be used now. */
 export function belongsToCurrentUser(owner: string | undefined): boolean {
-  const current = lastUser();
-  return owner === undefined || current === undefined || owner === current;
+  return belongsTo(owner, lastUser());
 }

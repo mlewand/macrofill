@@ -1,4 +1,5 @@
 import { ApiError, type Api } from '../api/api';
+import { belongsTo } from '../session';
 import type { OutboxStore } from './store';
 
 export interface SyncResult {
@@ -14,15 +15,18 @@ export interface SyncResult {
 const FINAL = new Set([400, 409, 410, 422]);
 
 /**
- * M5-9: sends the outbox's meals, oldest first, removing each the server accepts. Retries never
+ * M5-9: sends the current user's meals in the outbox, oldest first, removing each the server accepts. Retries never
  * duplicate a meal (M4-6). Stops at the first meal that can't be sent now, leaving it and the rest.
  */
 export async function syncOutbox(
   store: OutboxStore,
   api: Pick<Api, 'saveMeal'>,
+  /** The current user (`lastUser()`): another user's meals wait for them. */
+  user: string | undefined,
 ): Promise<SyncResult> {
   const result: SyncResult = { synced: [], dropped: [] };
   for (const item of await store.all()) {
+    if (!belongsTo(item.username, user)) continue;
     const id = item.request.meal.id;
     try {
       await api.saveMeal(item.request);

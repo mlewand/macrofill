@@ -14,12 +14,15 @@ export interface OutboxItem {
   entry: TodayEntry;
   /** ISO time it was saved, for sending in order. */
   queuedAt: string;
+  /** Who was logged in when it was saved (see `session.ts`): only they send it. */
+  username?: string;
 }
 
 const itemSchema = z.object({
   request: saveMealRequestSchema,
   entry: todayEntrySchema,
   queuedAt: z.iso.datetime(),
+  username: z.string().optional(),
 });
 
 /** Where saved meals wait; kept by meal id, so saving the same meal twice keeps one. */

@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { useApi } from '../api/api';
+import { belongsToCurrentUser, lastUser } from '../session';
 import type { OutboxItem, OutboxStore } from './store';
 import { syncOutbox } from './sync';
 
@@ -49,8 +50,9 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
     running.current = (async () => {
       do {
         again.current = false;
-        await syncOutbox(store, api).catch(() => undefined);
-        setPending(await store.all());
+        await syncOutbox(store, api, lastUser()).catch(() => undefined);
+        // Only the current user's meals are theirs to see.
+        setPending((await store.all()).filter((item) => belongsToCurrentUser(item.username)));
       } while (again.current);
     })();
     try {
@@ -72,7 +74,13 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
       const id = request.meal.id;
       try {
         if (!store) throw new Error('no outbox');
-        await store.add({ request, entry, queuedAt: new Date().toISOString() });
+        const username = lastUser();
+        await store.add({
+          request,
+          entry,
+          queuedAt: new Date().toISOString(),
+          ...(username === undefined ? {} : { username }),
+        });
       } catch {
         // Nowhere to keep it: send it now, and let the caller report a failure.
         await api.saveMeal(request);
