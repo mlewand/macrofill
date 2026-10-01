@@ -798,6 +798,29 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it("M5-8: a stamped kept session waits until the user is known, and isn't shown to someone else (regression: #37)", async () => {
+    localStorage.clear();
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      const me = vi
+        .fn<Api['me']>()
+        .mockRejectedValueOnce(new TypeError('offline'))
+        .mockResolvedValue('other');
+      renderWithDrafts(drafts.store, baseFakeApi({ catalog: () => Promise.resolve(catalog), me }));
+      expect(await screen.findByText(en.home.userUnknown)).toBeInTheDocument();
+      expect(screen.queryByText('Step 2 of 2')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: en.app.retry }));
+      await vi.waitFor(() =>
+        expect(screen.getByRole('button', { name: en.home.logMeal })).toBeEnabled(),
+      );
+      expect(screen.queryByText('Step 2 of 2')).not.toBeInTheDocument();
+      await vi.waitFor(() => expect(drafts.kept()).toBeUndefined());
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: a waiting unstamped session dropped by a login leaves Home, not a new meal (regression: #37)', async () => {
     localStorage.clear();
     try {
