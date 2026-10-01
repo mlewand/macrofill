@@ -162,11 +162,11 @@ describe('M4-3: ownership over the full route table', () => {
     await database.close();
   });
 
-  // Every handler under /api, whatever its method, ALL included.
+  // Every handler at /api or under it, whatever its method, ALL included.
   const routes = [
     ...new Set(
       createApp({ db: {} as Db })
-        .routes.filter((r) => r.path.startsWith('/api/'))
+        .routes.filter((r) => r.path === '/api' || r.path.startsWith('/api/'))
         .map((r) => `${r.method} ${r.path}`),
     ),
   ];
