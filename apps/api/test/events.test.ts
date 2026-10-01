@@ -94,6 +94,14 @@ describe('POST /api/events (M4-10)', () => {
     expect(await rows()).toEqual([]);
   });
 
+  it('M4-10: a retry naming one event id in two letter cases is still a retry (regression: #46)', async () => {
+    const id = 'f1e2d3c4-b5a6-4978-8a9b-0c1d2e3f4a5b';
+    expect((await post({ events: [event(id)] })).status).toBe(204);
+    const retry = await post({ events: [event(id), event(id.toUpperCase())] });
+    expect(retry.status).toBe(204);
+    expect(await rows()).toHaveLength(1);
+  });
+
   it('M4-10: a batch is 1 to 100 events', async () => {
     expect((await post({ events: [] })).status).toBe(400);
     const ids = Array.from(

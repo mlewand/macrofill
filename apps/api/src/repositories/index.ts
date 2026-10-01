@@ -289,8 +289,11 @@ export function createRepositories(db: Db, ownerId: string) {
           )
           .onConflictDoNothing({ target: usageEvents.id })
           .returning({ id: usageEvents.id });
-        const insertedIds = new Set(inserted.map((row) => row.id));
-        const kept = [...new Set(events.map((e) => e.id))].filter((id) => !insertedIds.has(id));
+        // UUIDs compare in lowercase, as Postgres returns them: an id may come in either case.
+        const insertedIds = new Set(inserted.map((row) => row.id.toLowerCase()));
+        const kept = [...new Set(events.map((e) => e.id.toLowerCase()))].filter(
+          (id) => !insertedIds.has(id),
+        );
         if (kept.length === 0) return true;
         const own = await db
           .select({ id: usageEvents.id })
