@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import { useApi } from '../api/api';
-import { belongsToCurrentUser, lastUser } from '../session';
+import { isOwnedBy, lastUser } from '../session';
 import type { OutboxItem, OutboxStore } from './store';
 import { syncOutbox } from './sync';
 
@@ -130,7 +130,8 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
  */
 export function usePending(): OutboxItem[] {
   const pending = useContext(OutboxContext)?.pending ?? [];
-  return pending.filter((item) => belongsToCurrentUser(item.username));
+  const user = lastUser();
+  return pending.filter((item) => isOwnedBy(item.username, user));
 }
 
 /** How long a save waits for the server before it reports the meal as pending. */

@@ -713,6 +713,29 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: a login in another tab as someone else reloads Today for them (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const today = vi.fn(() => Promise.resolve(emptyToday));
+      renderWithDrafts(
+        memoryDrafts().store,
+        baseFakeApi({ catalog: () => Promise.resolve(catalog), today }),
+      );
+      await screen.findByRole('button', { name: en.home.logMeal });
+      await vi.waitFor(() => expect(today).toHaveBeenCalled());
+      const loads = today.mock.calls.length;
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      await vi.waitFor(() => expect(today.mock.calls.length).toBeGreaterThan(loads));
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: an answer about the user that a login made stale is ignored (regression: #37)', async () => {
     localStorage.clear();
     try {
@@ -1093,6 +1116,23 @@ describe('saving through the outbox (M5-9)', () => {
     expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
     expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
     localStorage.clear();
+  });
+
+  it("M5-9: if the user can't be learned, no one's waiting meals show (regression: #41)", async () => {
+    localStorage.clear();
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add({ ...outboxItem(1), username: 'other' });
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new TypeError('offline')), {
+        today: () => Promise.reject(new TypeError('offline')),
+        me: () => Promise.reject(new TypeError('offline')),
+      }),
+      outbox,
+    );
+    expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    expect(screen.queryByText(en.today.pendingTitle)).not.toBeInTheDocument();
   });
 
   it('M5-9: offline, Today still lists what waits on the device', async () => {

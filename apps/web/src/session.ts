@@ -42,3 +42,11 @@ export function belongsTo(owner: string | undefined, user: string | undefined): 
 export function belongsToCurrentUser(owner: string | undefined): boolean {
   return belongsTo(owner, lastUser());
 }
+
+/**
+ * Whether a meal stamped with `owner` is `user`'s: both known and the same. Stricter than
+ * `belongsTo`, for what's queued to be sent or shown (M5-9): an unknown user sees and sends none.
+ */
+export function isOwnedBy(owner: string | undefined, user: string | undefined): boolean {
+  return owner !== undefined && owner === user;
+}

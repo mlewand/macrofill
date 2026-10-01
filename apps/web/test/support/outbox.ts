@@ -36,5 +36,5 @@ export function outboxItem(n: number, queuedAt = `2026-01-15T07:0${n}:00.000Z`):
       fibre: null,
     },
   };
-  return { request, entry, queuedAt };
+  return { request, entry, queuedAt, username: 'mlewand' };
 }

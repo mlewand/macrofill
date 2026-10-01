@@ -72,6 +72,7 @@ export function App() {
             void drafts.clear();
             setResume(undefined);
             setScreen('home');
+            setLogins((n) => n + 1);
           }
           return username;
         });
@@ -92,6 +93,8 @@ export function App() {
           void drafts.clear();
           setResume(undefined);
           setScreen('home');
+          // The home screen loads again, for the new user.
+          setLogins((n) => n + 1);
         }
         setUser(username);
         // Logged in elsewhere: what waits for this user is sent now (M5-9).

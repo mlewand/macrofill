@@ -1,5 +1,5 @@
 import { ApiError, type Api } from '../api/api';
-import { belongsTo } from '../session';
+import { isOwnedBy } from '../session';
 import type { OutboxStore } from './store';
 
 export interface SyncResult {
@@ -36,7 +36,7 @@ export async function syncOutbox(
 ): Promise<SyncResult> {
   const result: SyncResult = { synced: [], dropped: [] };
   for (const item of await store.all()) {
-    if (item.refused !== undefined || !belongsTo(item.username, currentUser())) continue;
+    if (item.refused !== undefined || !isOwnedBy(item.username, currentUser())) continue;
     const id = item.request.meal.id;
     try {
       await api.saveMeal(item.request);

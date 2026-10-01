@@ -77,7 +77,7 @@ describe('syncOutbox (M5-9)', () => {
     await store.add(outboxItem(2));
     await store.add(outboxItem(1));
     const server = api((r) => Promise.resolve(stored(r)));
-    expect(await syncOutbox(store, server, () => undefined)).toEqual({
+    expect(await syncOutbox(store, server, () => 'mlewand')).toEqual({
       synced: [outboxItem(1).request.meal.id, outboxItem(2).request.meal.id],
       dropped: [],
     });
@@ -93,13 +93,13 @@ describe('syncOutbox (M5-9)', () => {
     await store.add(outboxItem(1));
     await store.add(outboxItem(2));
     const offline = api(() => Promise.reject(new TypeError('Failed to fetch')));
-    expect(await syncOutbox(store, offline, () => undefined)).toMatchObject({
+    expect(await syncOutbox(store, offline, () => 'mlewand')).toMatchObject({
       stopped: 'unreachable',
     });
     expect(offline.saveMeal).toHaveBeenCalledTimes(1);
     expect(await store.all()).toHaveLength(2);
     const failing = api(() => Promise.reject(new ApiError(503)));
-    expect(await syncOutbox(store, failing, () => undefined)).toMatchObject({
+    expect(await syncOutbox(store, failing, () => 'mlewand')).toMatchObject({
       stopped: 'unreachable',
     });
     expect(await store.all()).toHaveLength(2);
@@ -112,7 +112,7 @@ describe('syncOutbox (M5-9)', () => {
       await syncOutbox(
         store,
         api(() => Promise.reject(new ApiError(401))),
-        () => undefined,
+        () => 'mlewand',
       ),
     ).toEqual({
       synced: [],
@@ -126,13 +126,16 @@ describe('syncOutbox (M5-9)', () => {
     const store = indexedDbOutbox(new IDBFactory());
     await store.add({ ...outboxItem(1), username: 'other' });
     await store.add({ ...outboxItem(2), username: 'mlewand' });
-    await store.add(outboxItem(3));
+    const unstamped = outboxItem(3);
+    delete unstamped.username;
+    await store.add(unstamped);
     const server = api((r) => Promise.resolve(stored(r)));
     expect(await syncOutbox(store, server, () => 'mlewand')).toEqual({
-      synced: [outboxItem(2).request.meal.id, outboxItem(3).request.meal.id],
+      // Not the unstamped one: a meal with no known owner is nobody's to send.
+      synced: [outboxItem(2).request.meal.id],
       dropped: [],
     });
-    expect((await store.all()).map((i) => i.username)).toEqual(['other']);
+    expect((await store.all()).map((i) => i.username)).toEqual(['other', undefined]);
   });
 
   it.each([400, 404, 409, 422])(
@@ -140,12 +143,12 @@ describe('syncOutbox (M5-9)', () => {
     async (status) => {
       const store = indexedDbOutbox(new IDBFactory());
       await store.add(outboxItem(1));
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => 'mlewand');
       const server = api(() => Promise.reject(new ApiError(status)));
-      const result = await syncOutbox(store, server, () => undefined);
+      const result = await syncOutbox(store, server, () => 'mlewand');
       expect(result.dropped).toEqual([outboxItem(1).request.meal.id]);
       expect(await store.all()).toEqual([{ ...outboxItem(1), refused: status }]);
-      await syncOutbox(store, server, () => undefined);
+      await syncOutbox(store, server, () => 'mlewand');
       expect(server.saveMeal).toHaveBeenCalledTimes(1);
       warn.mockRestore();
     },
@@ -157,7 +160,7 @@ describe('syncOutbox (M5-9)', () => {
     const result = await syncOutbox(
       store,
       api(() => Promise.reject(new ApiError(410))),
-      () => undefined,
+      () => 'mlewand',
     );
     expect(result).toEqual({ synced: [outboxItem(1).request.meal.id], dropped: [] });
     expect(await store.all()).toEqual([]);
@@ -172,9 +175,18 @@ describe('syncOutbox (M5-9)', () => {
         ? Promise.reject(new ApiError(403))
         : Promise.resolve(stored(r)),
     );
-    const result = await syncOutbox(store, server, () => undefined);
+    const result = await syncOutbox(store, server, () => 'mlewand');
     expect(result).toEqual({ synced: [outboxItem(2).request.meal.id], dropped: [] });
     expect(await store.all()).toEqual([outboxItem(1)]);
+  });
+
+  it('M5-9: with no known user, nothing is sent (regression: #41)', async () => {
+    const store = indexedDbOutbox(new IDBFactory());
+    await store.add(outboxItem(1));
+    const server = api((r) => Promise.resolve(stored(r)));
+    expect(await syncOutbox(store, server, () => undefined)).toEqual({ synced: [], dropped: [] });
+    expect(server.saveMeal).not.toHaveBeenCalled();
+    expect(await store.all()).toHaveLength(1);
   });
 
   it('M5-9: when another user logs in mid-sync, the rest of the backlog waits (regression: #41)', async () => {
@@ -196,13 +208,13 @@ describe('syncOutbox (M5-9)', () => {
     const store = indexedDbOutbox(new IDBFactory());
     await store.add(outboxItem(1));
     await store.add(outboxItem(2));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => 'mlewand');
     const server = api((r) =>
       r.meal.id === outboxItem(1).request.meal.id
         ? Promise.reject(new ApiError(409))
         : Promise.resolve(stored(r)),
     );
-    expect(await syncOutbox(store, server, () => undefined)).toEqual({
+    expect(await syncOutbox(store, server, () => 'mlewand')).toEqual({
       synced: [outboxItem(2).request.meal.id],
       dropped: [outboxItem(1).request.meal.id],
     });
@@ -215,7 +227,7 @@ describe('settleWithin (M5-9)', () => {
   it('M5-9: a save stops waiting for the network after a while (regression: #41)', async () => {
     vi.useFakeTimers();
     try {
-      const never = new Promise<string>(() => undefined);
+      const never = new Promise<string>(() => 'mlewand');
       const result = settleWithin(never, 1000, 'timeout');
       await vi.advanceTimersByTimeAsync(1000);
       expect(await result).toBe('timeout');
