@@ -17,6 +17,8 @@ export function mealRoutes(db: Db) {
         return invalidRequest(c, result.issues);
       case 'conflict':
         return c.json({ error: 'conflict' as const }, 409);
+      case 'wrong_user':
+        return c.json({ error: 'wrong_user' as const }, 403);
       case 'deleted':
         return c.json({ error: 'deleted' as const }, 410);
     }

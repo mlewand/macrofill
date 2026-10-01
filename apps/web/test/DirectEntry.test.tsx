@@ -611,6 +611,42 @@ describe('Direct Entry across a reload (M5-8)', () => {
     expect(saveMeal).not.toHaveBeenCalled();
   });
 
+  it('M5-8: the save names the user the session belongs to, for the server to check (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: { ...draftAtMilk, current: 2 }, username: 'mlewand' });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithDrafts(drafts.store, fakeApi(saveMeal));
+      fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+      await screen.findByText(en.saved.title);
+      expect(saveMeal.mock.calls[0]![0].username).toBe('mlewand');
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: a discard that can not remove the kept session says so and stays (regression: #37)', async () => {
+    const drafts = memoryDrafts(draftAtMilk);
+    vi.mocked(drafts.store.clear).mockResolvedValue(false);
+    renderWithDrafts(drafts.store);
+    await screen.findByText('Step 2 of 2');
+    click(en.step.discard);
+    click(en.step.confirmDiscard);
+    expect(await screen.findByText(en.step.discardFailed)).toBeInTheDocument();
+    expect(screen.getByText('Step 2 of 2')).toBeInTheDocument();
+  });
+
+  it('M5-8: after a save, a failed removal of the kept session is tried again (regression: #37)', async () => {
+    const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+    vi.mocked(drafts.store.clear).mockResolvedValueOnce(false);
+    renderWithDrafts(drafts.store);
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(drafts.store.clear).toHaveBeenCalledTimes(2);
+    expect(drafts.kept()).toBeUndefined();
+  });
+
   it('M5-8: drafts are stamped with the user who last logged in', async () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {

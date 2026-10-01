@@ -9,7 +9,9 @@ export type SaveMealResult =
   /** The meal was saved and its entry has since been deleted (M7-4); it's not brought back. */
   | { status: 'deleted' }
   /** An id is taken by a meal or entry the user can't see; never reported as success. */
-  | { status: 'conflict' };
+  | { status: 'conflict' }
+  /** The meal was made by another user than the one logged in now. */
+  | { status: 'wrong_user' };
 
 class Conflict extends Error {}
 
@@ -25,6 +27,9 @@ export async function saveMeal(
   try {
     return await db.transaction(async (tx) => {
       const repos = createRepositories(tx, ownerId);
+      if (request.username !== undefined && request.username !== (await repos.user.username())) {
+        return { status: 'wrong_user' as const };
+      }
       const saved = await existing(repos, request);
       if (saved) return saved;
 

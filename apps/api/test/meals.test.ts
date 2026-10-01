@@ -119,6 +119,18 @@ describe('POST /api/meals', () => {
       expect(await count('prepared_meal_items')).toBe(0);
     });
 
+    it('M4-1: a save made for another user is refused, and nothing is saved (regression: #37)', async () => {
+      const res = await post({ ...request(), username: 'someone-else' });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'wrong_user' });
+      expect(await count('prepared_meals')).toBe(0);
+    });
+
+    it('M4-1: a save made for the logged-in user goes through', async () => {
+      const res = await post({ ...request(), username: owner.username });
+      expect(res.status).toBe(201);
+    });
+
     it('a retry with a different consumption entry id is a conflict, not a replay (regression: #11)', async () => {
       await post(request());
       const body = request();
