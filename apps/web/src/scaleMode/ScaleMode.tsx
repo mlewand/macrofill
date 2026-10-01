@@ -122,6 +122,7 @@ function Session(props: {
         trackerConfig: state.tracker.config,
       }),
   );
+  const track = useTrack();
   // The state as last rendered: what the user saw when tapping.
   const shown = useRef(state);
   useEffect(() => {
@@ -132,15 +133,19 @@ function Session(props: {
    * back, or that go to the flow only (after finishing by hand), change nothing there.
    */
   const tap = (action: ScaleModeAction) => {
+    const before = shown.current;
+    const after = scaleMode(before, action);
     const event = trackerEvent(action);
-    if (event && scaleMode(shown.current, action).tracker !== shown.current.tracker) {
-      recorder.event(event, performance.now());
+    if (event && after.tracker !== before.tracker) recorder.event(event, performance.now());
+    // M7-8: Undo on the first step goes back to before Start; the meal's step doesn't change, so
+    // the flow's events miss it.
+    if (before.tracker.baseline !== undefined && after.tracker.baseline === undefined) {
+      track('step_undone', { inputMethod: 'scale', step: 0 });
     }
     dispatch(action);
   };
   const [connection, setConnection] = useState<Connection>('idle');
   const [reconnectConfig] = useState(props.reconnect);
-  const track = useTrack();
   const { startedAt } = state.flow;
   // The first step is shown from Start: connecting and the bowl don't count (M7-8).
   useFlowEvents(state.flow, state.tracker.baseline !== undefined);

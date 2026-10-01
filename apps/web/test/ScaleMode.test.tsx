@@ -362,6 +362,13 @@ describe('Scale Mode', () => {
     expect(s.track).toHaveBeenLastCalledWith('flow_abandoned', expect.anything());
   });
 
+  it('M7-8: Undo on the first step, back to before Start, tracks step undone (regression: #52)', async () => {
+    const s = await started();
+    fireEvent.click(button(en.step.undo));
+    expect(button(en.scale.start)).toBeInTheDocument();
+    expect(s.track).toHaveBeenLastCalledWith('step_undone', { inputMethod: 'scale', step: 0 });
+  });
+
   it('M7-8: leaving the page after the meal is saved tracks nothing more', async () => {
     const s = await started();
     await s.play(s.script.add(214).stable({ forMs: 0 }));
