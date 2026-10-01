@@ -731,6 +731,26 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it("M5-8: a kept session the server says isn't this user's is dropped (regression: #37)", async () => {
+    localStorage.clear();
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          me: () => Promise.resolve('other'),
+        }),
+      );
+      expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+      expect(screen.queryByText('Step 2 of 2')).not.toBeInTheDocument();
+      expect(drafts.kept()).toBeUndefined();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: an answer about the user that a login made stale is ignored (regression: #37)', async () => {
     localStorage.clear();
     try {
