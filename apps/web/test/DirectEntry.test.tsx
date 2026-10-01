@@ -805,6 +805,44 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: when its owner logs back in, a waiting kept session resumes (regression: #37)', async () => {
+    // No local storage, and the session expired: nobody is known until the login.
+    const blocked = () => {
+      throw new DOMException('blocked', 'SecurityError');
+    };
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
+    try {
+      const drafts = memoryDrafts(draftAtMilk);
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          me: vi
+            .fn<Api['me']>()
+            .mockRejectedValueOnce(new ApiError(401))
+            .mockResolvedValue('mlewand'),
+          login: () => Promise.resolve('ok'),
+        }),
+      );
+      const dialog = await screen.findByRole('dialog', { name: en.login.title });
+      fireEvent.change(within(dialog).getByLabelText(en.login.username), {
+        target: { value: 'mlewand' },
+      });
+      fireEvent.change(within(dialog).getByLabelText(en.login.password), {
+        target: { value: 'pw' },
+      });
+      fireEvent.click(within(dialog).getByRole('button', { name: en.login.submit }));
+      expect(await screen.findByText('Step 2 of 2')).toBeInTheDocument();
+      expect(drafts.kept()).toEqual(draftAtMilk);
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+      rememberUser('mlewand');
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: a kept session waits until the user is known, then resumes (regression: #37)', async () => {
     localStorage.clear();
     try {
