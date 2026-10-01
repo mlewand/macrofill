@@ -10,6 +10,7 @@ import type {
   Recipe,
   SaveMealRequest,
   ScaleRecording,
+  UsageEvent,
 } from '@macrofill/domain';
 import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
@@ -23,6 +24,7 @@ import {
   recipeSteps,
   recipes,
   scaleRecordings,
+  usageEvents,
   users,
 } from '../db/schema';
 
@@ -262,6 +264,27 @@ export function createRepositories(db: Db, ownerId: string) {
             ),
           );
         return row?.recording;
+      },
+    },
+
+    usageEvents: {
+      /** Stores the events as the user's. An id already stored (a retry) is left as it is. */
+      async insert(events: readonly UsageEvent[]): Promise<void> {
+        if (events.length === 0) return;
+        await db
+          .insert(usageEvents)
+          .values(
+            events.map((e) => ({
+              id: e.id,
+              ownerId,
+              clientSessionId: e.clientSessionId,
+              name: e.name,
+              props: e.props,
+              occurredAt: new Date(e.occurredAt),
+              appVersion: e.appVersion,
+            })),
+          )
+          .onConflictDoNothing({ target: usageEvents.id });
       },
     },
 
