@@ -162,8 +162,6 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
 
 **Updating:** `git pull && ./deploy.sh`.
 
-**Exporting a scale recording (M4-7):** a meal weighed with the scale is saved with its recording: every frame from the scale, as bytes, and every tap in Scale Mode. Logged in, open `https://<prod-hostname>/api/today` in Chrome: each entry's `preparedMealId` is its meal. Then `https://<prod-hostname>/api/meals/<preparedMealId>/recording` downloads the recording as `recording-<id>.json`. A meal entered by hand has none (404).
-
 **Changing a password:** without showing it or keeping it in the shell history:
 
 ```sh
