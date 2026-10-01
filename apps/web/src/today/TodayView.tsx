@@ -58,6 +58,8 @@ export function TodayView(props: {
         if (!current) return;
         // For showing times in the user's timezone offline too.
         if (lastUser() === askedFor) rememberTimezone(askedFor, loaded.timezone);
+        // Also after an automatic reload (the user confirmed again): it loaded now.
+        setFailed(false);
         setToday(loaded);
       },
       () => current && setFailed(true),

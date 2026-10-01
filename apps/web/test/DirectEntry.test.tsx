@@ -1666,6 +1666,60 @@ describe('saving through the outbox (M5-9)', () => {
     }
   });
 
+  it('M7-1: after a failed load, Today shows the day once a re-check loads it (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const today = vi
+        .fn<Api['today']>()
+        .mockRejectedValueOnce(new TypeError('offline'))
+        .mockImplementation(todayNow);
+      renderWithOutbox(fakeApi(undefined, { today }), indexedDbOutbox(new IDBFactory()));
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(await screen.findByRole('table')).toBeInTheDocument();
+      expect(screen.queryByText(en.today.loadFailed)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: a user change in another tab, after an offline check, lists nothing until the server answers (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1, new Date().toISOString()), username: 'other' });
+      const me = vi
+        .fn<Api['me']>()
+        .mockRejectedValueOnce(new TypeError('offline'))
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me,
+        }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key: 'macrofill.user',
+            oldValue: 'mlewand',
+            newValue: 'other',
+          }),
+        );
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-9: coming back to the tab hides queued meals until the server confirms the user again (regression: #41)', async () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {

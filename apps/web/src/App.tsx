@@ -1,5 +1,5 @@
 import type { Catalog } from '@macrofill/domain';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiContext, ApiError, guardApi, useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
@@ -47,6 +47,12 @@ export function App() {
   // /api/me couldn't reach the server: offline, the remembered user's queued meals may be listed
   // on their own, where no server data can mix with them (M5-9).
   const [unreachable, setUnreachable] = useState(false);
+  /** Asks the server again who's logged in; until it answers, nobody is trusted (M5-9). */
+  const recheckUser = useCallback(() => {
+    setConfirmed(false);
+    setUnreachable(false);
+    setMeAttempt((n) => n + 1);
+  }, []);
   /** Someone else now, or nobody was known: what was open may be another user's (M5-8). */
   const userIs = (username: string) => {
     if (username !== user) {
@@ -117,21 +123,16 @@ export function App() {
   // says so (local storage blocked), so ask again.
   useEffect(() => {
     const visible = () => {
-      if (document.visibilityState !== 'visible') return;
-      // Not trusted again until the server answers (M5-9).
-      setConfirmed(false);
-      setUnreachable(false);
-      setMeAttempt((n) => n + 1);
+      if (document.visibilityState === 'visible') recheckUser();
     };
     document.addEventListener('visibilitychange', visible);
     return () => document.removeEventListener('visibilitychange', visible);
-  }, []);
+  }, [recheckUser]);
   useEffect(() => {
     if (user !== undefined && confirmed) return;
-    const online = () => setMeAttempt((n) => n + 1);
-    window.addEventListener('online', online);
-    return () => window.removeEventListener('online', online);
-  }, [user, confirmed]);
+    window.addEventListener('online', recheckUser);
+    return () => window.removeEventListener('online', recheckUser);
+  }, [user, confirmed, recheckUser]);
 
   // A login in another tab shares this tab's cookie: the same applies.
   useEffect(
@@ -139,8 +140,7 @@ export function App() {
       onUserChangedElsewhere((username) => {
         generation.current++;
         // Changed in another tab: the server confirms it again.
-        setConfirmed(false);
-        setMeAttempt((n) => n + 1);
+        recheckUser();
         if (username !== user) {
           void drafts.clear();
           setResume(undefined);
@@ -152,7 +152,7 @@ export function App() {
         // Logged in elsewhere: what waits for this user is sent now (M5-9).
         setLogins((n) => n + 1);
       }),
-    [user, drafts],
+    [user, drafts, recheckUser],
   );
   // M5-8: a Direct Entry session kept from before a reload opens again.
   // Nothing is shown until it's known whether there's a kept session: a meal started meanwhile
@@ -236,11 +236,7 @@ export function App() {
                   <p role="alert" className="problem">
                     {t('home.userUnknown')}
                   </p>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => setMeAttempt((n) => n + 1)}
-                  >
+                  <button type="button" className="secondary" onClick={recheckUser}>
                     {t('app.retry')}
                   </button>
                 </>
@@ -261,7 +257,7 @@ export function App() {
               >
                 {t('home.logMeal')}
               </button>
-              {user !== undefined && <TodayView recheckUser={() => setMeAttempt((n) => n + 1)} />}
+              {user !== undefined && <TodayView recheckUser={recheckUser} />}
             </section>
           )}
           {screen === 'scaleMode' && (
