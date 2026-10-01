@@ -1,6 +1,7 @@
 export * from './auth.js';
 export * from './catalog.js';
 export * from './common.js';
+export * from './events.js';
 export * from './format.js';
 export * from './input.js';
 export * from './macros.js';

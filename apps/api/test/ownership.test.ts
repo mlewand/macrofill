@@ -130,6 +130,31 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
     expect((await a.request(`/api/meals/${id}/recording`)).status).toBe(200);
   },
 
+  'POST /api/events': async ({ a, b, db }) => {
+    // A's event; nothing reads events back, so B can only send one with the same id: not found,
+    // as for any of A's resources. Regression test in events.test.ts.
+    const event = {
+      id: '4b9a6f2c-0d8e-4a7f-9e5b-6c7d8e9f0a1b',
+      clientSessionId: '5c0b7a3d-1e9f-4b8a-8f6c-7d8e9f0a1b2c',
+      occurredAt: '2026-01-15T07:00:00.000Z',
+      appVersion: 'abc1234',
+      name: 'flow_started',
+      props: { inputMethod: 'scale' },
+    };
+    expect((await a.request('/api/events', json({ events: [event] }))).status).toBe(204);
+    const asB = { ...event, props: { inputMethod: 'direct' } };
+    // With one of B's own: the batch is refused whole, nothing of it stored.
+    const ofB = { ...event, id: '6d1c8b4e-2f0a-4c9b-9a7d-8e9f0a1b2c3d' };
+    const res = await b.request('/api/events', json({ events: [ofB, asB] }));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not_found' });
+    const rows = await queryRows<{ owner_id: string; props: unknown }>(
+      db,
+      sql`select owner_id, props from usage_events`,
+    );
+    expect(rows).toEqual([{ owner_id: userA.id, props: { inputMethod: 'scale' } }]);
+  },
+
   'POST /api/meals': async ({ b, db }) => {
     const meals = await count(db, 'prepared_meals');
     // A's meal ids, with only a seed product: not found, as for any of A's resources. With A's
@@ -178,6 +203,7 @@ const reviewedHandlers: Record<string, number> = {
   'GET /api/catalog': 1,
   'POST /api/meals': 2,
   'GET /api/meals/:id/recording': 2,
+  'POST /api/events': 2,
   'GET /api/today': 1,
   'DELETE /api/consumption-entries/:id': 2,
 };

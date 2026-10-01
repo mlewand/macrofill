@@ -5,6 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Db } from './db/client';
 import { loginRoutes, sessionAuth, type AuthEnv } from './http/auth';
 import { catalogRoutes } from './routes/catalog';
+import { eventRoutes } from './routes/events';
 import { mealRoutes } from './routes/meals';
 import { todayRoutes } from './routes/today';
 
@@ -23,6 +24,7 @@ function createApiRoutes(db: Db, now: () => Date) {
     .use(sessionAuth(db, now))
     .route('/', catalogRoutes(db))
     .route('/', mealRoutes(db))
+    .route('/', eventRoutes(db))
     .route('/', todayRoutes(db, now));
 }
 
