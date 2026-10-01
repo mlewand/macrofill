@@ -25,8 +25,8 @@ export function App() {
   const loggedIn = (username: string) => {
     setNeedsLogin(false);
     setLogins((n) => n + 1);
-    // Someone else now: what was open belonged to the previous user (M5-8).
-    if (user !== undefined && username !== user) {
+    // Someone else now, or nobody was known: what was open may be another user's (M5-8).
+    if (username !== user) {
       void drafts.clear();
       setResume(undefined);
       setScreen('home');

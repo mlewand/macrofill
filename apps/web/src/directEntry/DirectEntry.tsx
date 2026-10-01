@@ -7,7 +7,7 @@ import {
   type Recipe,
   type SaveMealRequest,
 } from '@macrofill/domain';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { NutritionTable } from '../NutritionTable';
@@ -64,6 +64,17 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
     }
   }, [state, sent, drafts]);
 
+  const keepSent = async (request: SaveMealRequest) => {
+    setSent(request);
+    const username = lastUser();
+    if (state) {
+      await drafts.save({
+        state,
+        sent: request,
+        ...(username === undefined ? {} : { username }),
+      });
+    }
+  };
   const saved = () => void drafts.clear().then(onSaved);
   const discard = () => void drafts.clear().then(onCancel);
 
@@ -84,7 +95,7 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
       onSaved={saved}
       onDiscard={discard}
       sent={sent}
-      onSend={setSent}
+      onSend={keepSent}
     />
   ) : (
     <StepScreen
@@ -325,7 +336,8 @@ export function Summary(props: {
   onDiscard?: () => void;
   /** Direct Entry keeps the first request sent across a reload (M5-8); else the summary does. */
   sent?: SaveMealRequest | undefined;
-  onSend?: (request: SaveMealRequest) => void;
+  /** Resolves once the request is kept, so it's kept before it's sent. */
+  onSend?: (request: SaveMealRequest) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const api = useApi();
@@ -336,9 +348,9 @@ export function Summary(props: {
   // back, so from then on the summary is frozen and every retry resends exactly this (M4-6).
   const [ownSent, setOwnSent] = useState<SaveMealRequest>();
   const sent = props.sent ?? ownSent;
-  const setSent = (request: SaveMealRequest) => {
+  const setSent = async (request: SaveMealRequest) => {
     setOwnSent(request);
-    props.onSend?.(request);
+    await props.onSend?.(request);
   };
   const frozen = sent !== undefined;
   const products = useMemo(() => new Map(catalog.products.map((p) => [p.id, p])), [catalog]);
@@ -346,16 +358,22 @@ export function Summary(props: {
   const items = mealItems(state);
   const total = items && totalOf(items, catalog);
 
+  // A second tap before the first save's re-render must not send again.
+  const inFlight = useRef(false);
   const save = async () => {
     const body = sent ?? saveRequest(state, new Date().toISOString());
-    if (!body) return;
-    setSent(body);
+    if (!body || inFlight.current) return;
+    inFlight.current = true;
     setSaving(true);
     setFailed(false);
     try {
+      // Kept first: if the server stores it and the page goes away before the answer, a reload
+      // still resends exactly this.
+      await setSent(body);
       await api.saveMeal(body);
       props.onSaved();
     } catch {
+      inFlight.current = false;
       setFailed(true);
       setSaving(false);
     }
