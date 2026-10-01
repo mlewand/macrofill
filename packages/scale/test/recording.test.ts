@@ -1,4 +1,10 @@
-import { createTracker, scaleRecordingSchema, track, type ScaleRecording } from '@macrofill/domain';
+import {
+  createTracker,
+  defaultTrackerConfig,
+  scaleRecordingSchema,
+  track,
+  type ScaleRecording,
+} from '@macrofill/domain';
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScaleTransport } from '@mlewand/huajun-ble-scale';
@@ -24,6 +30,7 @@ function capture(name: string, events: ScaleRecording['events'] = []): ScaleReco
   return {
     captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
     driverId: 'huajun',
+    trackerConfig: defaultTrackerConfig,
     frames: lines.map(({ t, hex }) => ({
       timestamp: t,
       receivedAt: 1_780_000_000_000 + t,
@@ -46,7 +53,11 @@ describe('SessionRecorder (M3-11)', () => {
 
   it('M3-11: records every frame (bytes, both receive times, parsed reading) and every user event', async () => {
     const driver = new MockScaleDriver({ now: () => Date.now() });
-    const recorder = new SessionRecorder('b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c', driver.id);
+    const recorder = new SessionRecorder({
+      captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      driverId: driver.id,
+      trackerConfig: defaultTrackerConfig,
+    });
     const stop = recorder.record(driver);
     await driver.connect();
     const start = Date.now();
@@ -78,7 +89,11 @@ describe('SessionRecorder (M3-11)', () => {
   });
 
   it('M3-11: keeps the raw bytes, as base64', () => {
-    const recorder = new SessionRecorder('b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c', 'huajun');
+    const recorder = new SessionRecorder({
+      captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      driverId: 'huajun',
+      trackerConfig: defaultTrackerConfig,
+    });
     const raw = new Uint8Array([0xac, 0x05, 0x00, 0x14, 0x89, 0x02, 0xca, 0xe7]);
     const reading: ScaleReading = { grams: 525.7, stable: true, timestamp: 5, receivedAt: 9, raw };
     recorder.frame(reading);
@@ -87,15 +102,20 @@ describe('SessionRecorder (M3-11)', () => {
     expect(fromBase64(frame!.raw)).toEqual(raw);
   });
 
-  it('M3-11: past the size limit it counts the frames it drops, instead of failing the save', () => {
-    const recorder = new SessionRecorder('b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c', 'mock', 3);
+  it('M3-11: past the size limit it counts the frames it drops, instead of failing the save (regression: #38)', () => {
+    const recorder = new SessionRecorder({
+      captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      driverId: 'mock',
+      trackerConfig: defaultTrackerConfig,
+      maxFrames: 3,
+    });
     expect(recorder.recording().droppedFrames).toBe(0);
     for (let t = 0; t < 5; t++) {
       recorder.frame({ grams: 1, timestamp: t, receivedAt: t, raw: new Uint8Array(0) });
     }
     const recording = recorder.recording();
     expect(recording.frames.map((f) => f.timestamp)).toEqual([0, 1, 2]);
-    // A replay of it is known to be incomplete. (regression: #38)
+    // A replay of it is known to be incomplete.
     expect(recording.droppedFrames).toBe(2);
   });
 
@@ -103,7 +123,11 @@ describe('SessionRecorder (M3-11)', () => {
     let clock = 100;
     const transport = new FakeTransport();
     const driver = new HuajunDriver({ transport: () => transport, monotonicNow: () => clock });
-    const recorder = new SessionRecorder('b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c', driver.id);
+    const recorder = new SessionRecorder({
+      captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      driverId: driver.id,
+      trackerConfig: defaultTrackerConfig,
+    });
     recorder.record(driver);
     await driver.connect();
     const bad = new Uint8Array([0xac, 0x05, 0x00]);
@@ -137,6 +161,32 @@ describe('replay (M3-11)', () => {
     expect(readings.every((r) => r.raw.length === 8)).toBe(true);
   });
 
+  it('M3-11: replay uses the tracker settings the session was recorded with (regression: #38)', () => {
+    // A step of -2 g: within this session's 5 g tolerance it's 0; with today's default, a correction.
+    const frame = (timestamp: number, grams: number) => ({
+      timestamp,
+      receivedAt: timestamp,
+      raw: '',
+      reading: { grams, stable: true },
+    });
+    const recording: ScaleRecording = {
+      captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      driverId: 'mock',
+      trackerConfig: { ...defaultTrackerConfig, negativeToleranceGrams: 5 },
+      frames: [frame(0, 312), frame(225, 310)],
+      droppedFrames: 0,
+      events: [
+        { type: 'start', at: 100 },
+        { type: 'next', at: 300 },
+      ],
+    };
+    expect(replaySession(recording).steps).toEqual([
+      { skipped: false, grams: 0, weightSource: 'scale', reading: 310 },
+    ]);
+    // A replay with other settings, e.g. to try a tuning, can say so.
+    expect(replaySession(recording, defaultTrackerConfig).pending?.type).toBe('needsCorrection');
+  });
+
   it('M3-11, M3-14: frames in another unit replay without grams', () => {
     const readings = replayReadings(capture('unit-cycle'));
     expect(readings.some((r) => r.grams === undefined)).toBe(true);
@@ -153,6 +203,7 @@ describe('replay (M3-11)', () => {
     const recording: ScaleRecording = {
       captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
       driverId: 'mock',
+      trackerConfig: defaultTrackerConfig,
       frames: [{ timestamp: 3, receivedAt: 4, raw: '', reading: { grams: 312, stable: true } }],
       droppedFrames: 0,
       events: [],
@@ -169,7 +220,11 @@ describe('replay (M3-11)', () => {
     let clock = 0;
     const transport = new FakeTransport();
     const driver = new HuajunDriver({ transport: () => transport, monotonicNow: () => clock });
-    const recorder = new SessionRecorder('b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c', driver.id);
+    const recorder = new SessionRecorder({
+      captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      driverId: driver.id,
+      trackerConfig: defaultTrackerConfig,
+    });
     recorder.record(driver);
     let live = createTracker();
     driver.onReading((reading) => (live = track(live, { type: 'reading', reading })));

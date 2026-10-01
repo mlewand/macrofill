@@ -25,12 +25,24 @@ export class SessionRecorder {
   readonly #events: RecordedEvent[] = [];
   #dropped = 0;
 
-  constructor(
-    readonly captureSessionId: string,
-    readonly driverId: string,
-    /** Frames past this are dropped, so a very long session still saves. */
-    readonly maxFrames = MAX_RECORDED_FRAMES,
-  ) {}
+  readonly captureSessionId: string;
+  readonly driverId: string;
+  readonly trackerConfig: TrackerConfig;
+  /** Frames past this are counted, not kept, so a very long session still saves. */
+  readonly maxFrames: number;
+
+  constructor(options: {
+    captureSessionId: string;
+    driverId: string;
+    /** The tracker's settings in this session (M3-11: a replay uses them). */
+    trackerConfig: TrackerConfig;
+    maxFrames?: number;
+  }) {
+    this.captureSessionId = options.captureSessionId;
+    this.driverId = options.driverId;
+    this.trackerConfig = { ...options.trackerConfig };
+    this.maxFrames = options.maxFrames ?? MAX_RECORDED_FRAMES;
+  }
 
   /**
    * Records every frame `driver` delivers until the returned function is called: its readings, and
@@ -81,6 +93,7 @@ export class SessionRecorder {
     return {
       captureSessionId: this.captureSessionId,
       driverId: this.driverId,
+      trackerConfig: { ...this.trackerConfig },
       frames: [...this.#frames],
       droppedFrames: this.#dropped,
       events: [...this.#events],
@@ -121,13 +134,14 @@ export function replayReadings(recording: ScaleRecording): ScaleReading[] {
 
 /**
  * M3-11: the tracker's state after replaying a recording: its re-parsed readings and its user
- * events, in the order they happened (a reading first, when both have the same time).
+ * events, in the order they happened (a reading first, when both have the same time). With the
+ * tracker settings the session ran with, unless `config` says otherwise (e.g. to try a tuning).
  */
 export function replaySession(
   recording: ScaleRecording,
-  config?: Partial<TrackerConfig>,
+  config: Partial<TrackerConfig> = recording.trackerConfig,
 ): TrackerState {
-  let state = createTracker(config);
+  let state = createTracker({ ...recording.trackerConfig, ...config });
   const events = [...recording.events].sort((a, b) => a.at - b.at);
   let next = 0;
   const userEventsUntil = (time: number) => {

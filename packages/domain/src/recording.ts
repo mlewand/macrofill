@@ -19,6 +19,16 @@ export const recordedFrameSchema = z.object({
   reading: z.object({ grams: z.number().optional(), stable: z.boolean().optional() }).strict(),
 });
 
+/** The weight tracker's settings (`TrackerConfig`) a session ran with. */
+export const trackerConfigSchema = z
+  .object({
+    stabilityToleranceGrams: z.number().nonnegative(),
+    stabilityWindowMs: z.number().nonnegative(),
+    stableWaitMs: z.number().nonnegative(),
+    negativeToleranceGrams: z.number().nonnegative(),
+  })
+  .strict();
+
 /** A user event given to the weight tracker, at `at` ms on the monotonic clock. */
 export const recordedEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.enum(['start', 'next', 'confirm', 'skip', 'undo']), at: z.number() }).strict(),
@@ -37,6 +47,8 @@ export const scaleRecordingSchema = z.object({
   captureSessionId: idSchema,
   /** `ScaleDriver.id`, e.g. `huajun`. */
   driverId: z.string().min(1),
+  /** The tracker's settings in the session, so a replay after a retune still matches it. */
+  trackerConfig: trackerConfigSchema,
   frames: z.array(recordedFrameSchema).max(MAX_RECORDED_FRAMES),
   /** Frames left out past `MAX_RECORDED_FRAMES`: if any, a replay can't match the session. */
   droppedFrames: z.number().int().nonnegative(),

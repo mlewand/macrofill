@@ -4,6 +4,12 @@ import { MAX_RECORDED_FRAMES, scaleRecordingSchema, type ScaleRecording } from '
 const recording: ScaleRecording = {
   captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
   driverId: 'huajun',
+  trackerConfig: {
+    stabilityToleranceGrams: 1,
+    stabilityWindowMs: 1000,
+    stableWaitMs: 1500,
+    negativeToleranceGrams: 0.3,
+  },
   frames: [
     {
       timestamp: 1234.5,
