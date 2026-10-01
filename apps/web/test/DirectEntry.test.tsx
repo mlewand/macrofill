@@ -842,6 +842,48 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it("M5-8: a kept session waits for the server's answer about the user, not just the remembered one (regression: #37)", async () => {
+    // Remembered here: mlewand. Another tab logged in as someone else but couldn't save it.
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      let answer!: (username: string) => void;
+      const me = vi.fn<Api['me']>(() => new Promise<string>((resolve) => (answer = resolve)));
+      renderWithDrafts(drafts.store, baseFakeApi({ catalog: () => Promise.resolve(catalog), me }));
+      await vi.waitFor(() => expect(me).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(screen.queryByText('Step 2 of 2')).not.toBeInTheDocument();
+      act(() => answer('other'));
+      // Home starts over for them.
+      await vi.waitFor(() =>
+        expect(screen.getByRole('button', { name: en.home.logMeal })).toBeInTheDocument(),
+      );
+      expect(screen.queryByText('Step 2 of 2')).not.toBeInTheDocument();
+      await vi.waitFor(() => expect(drafts.kept()).toBeUndefined());
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: offline, a kept session of the remembered user still resumes', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+      );
+      expect(await screen.findByText('Step 2 of 2')).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: a waiting unstamped session dropped by a login leaves Home, not a new meal (regression: #37)', async () => {
     localStorage.clear();
     try {
