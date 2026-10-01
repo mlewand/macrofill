@@ -300,6 +300,15 @@ export function createRepositories(db: Db, ownerId: string) {
         return deleted.length > 0;
       },
 
+      /** Whether the user has an entry with this id. */
+      async exists(id: string): Promise<boolean> {
+        const rows = await db
+          .select({ id: consumptionEntries.id })
+          .from(consumptionEntries)
+          .where(and(eq(consumptionEntries.id, id), eq(consumptionEntries.ownerId, ownerId)));
+        return rows.length > 0;
+      },
+
       async findByMeal(preparedMealId: string): Promise<ConsumptionEntry | undefined> {
         const [entry] = await db
           .select()
