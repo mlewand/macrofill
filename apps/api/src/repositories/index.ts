@@ -31,6 +31,15 @@ import {
 export function createRepositories(db: Db, ownerId: string) {
   return {
     user: {
+      async username(): Promise<string> {
+        const [user] = await db
+          .select({ username: users.username })
+          .from(users)
+          .where(eq(users.id, ownerId));
+        if (!user) throw new Error('Current user not found.');
+        return user.username;
+      },
+
       async timezone(): Promise<string> {
         const [user] = await db
           .select({ timezone: users.timezone })

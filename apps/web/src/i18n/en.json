@@ -39,7 +39,8 @@
     "discard": "Discard meal",
     "discardQuestion": "Discard this meal? What you entered so far is lost.",
     "confirmDiscard": "Discard",
-    "keep": "Keep"
+    "keep": "Keep",
+    "discardFailed": "Couldn't discard the meal on this device. Try again."
   },
   "scale": {
     "status": {

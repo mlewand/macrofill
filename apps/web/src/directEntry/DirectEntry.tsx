@@ -82,8 +82,18 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
     }
     return belongsTo(owner, lastUser());
   };
-  const saved = () => void drafts.clear().then(onSaved);
-  const discard = () => void drafts.clear().then(onCancel);
+  // Saved: the kept session goes, tried twice. If it still came back after a reload, it's frozen on
+  // the request just saved, and resending that is harmless (M4-6).
+  const saved = async () => {
+    if (!(await drafts.clear())) await drafts.clear();
+    onSaved();
+  };
+  /** Discarded only once the kept session is gone; otherwise a reload would bring it back. */
+  const discard = async (): Promise<boolean> => {
+    if (!(await drafts.clear())) return false;
+    onCancel();
+    return true;
+  };
 
   if (state === undefined) {
     return (
@@ -99,7 +109,8 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
       state={state}
       catalog={catalog}
       dispatch={dispatch}
-      onSaved={saved}
+      onSaved={() => void saved()}
+      owner={owner}
       onDiscard={discard}
       sent={sent}
       onSend={keepSent}
@@ -137,9 +148,10 @@ function resumable(draft: DirectEntryState, catalog: Catalog): DirectEntryState 
 }
 
 /** Discarding the meal in progress, after a confirmation. */
-export function DiscardMeal({ onDiscard }: { onDiscard: () => void }) {
+export function DiscardMeal({ onDiscard }: { onDiscard: () => Promise<boolean> }) {
   const { t } = useTranslation();
   const [confirming, setConfirming] = useState(false);
+  const [failed, setFailed] = useState(false);
   if (!confirming) {
     return (
       <button type="button" className="secondary" onClick={() => setConfirming(true)}>
@@ -150,8 +162,17 @@ export function DiscardMeal({ onDiscard }: { onDiscard: () => void }) {
   return (
     <div className="confirm" role="group" aria-label={t('step.discardQuestion')}>
       <p>{t('step.discardQuestion')}</p>
+      {failed && (
+        <p role="alert" className="problem">
+          {t('step.discardFailed')}
+        </p>
+      )}
       <div className="row">
-        <button type="button" className="danger" onClick={onDiscard}>
+        <button
+          type="button"
+          className="danger"
+          onClick={() => void onDiscard().then((done) => setFailed(!done))}
+        >
           {t('step.confirmDiscard')}
         </button>
         <button type="button" className="secondary" onClick={() => setConfirming(false)}>
@@ -221,7 +242,7 @@ function StepScreen(props: {
   state: DirectEntryState;
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
-  onDiscard: () => void;
+  onDiscard: () => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const { state, catalog, dispatch } = props;
@@ -340,7 +361,9 @@ export function Summary(props: {
   dispatch: (action: DirectEntryAction) => void;
   onSaved: () => void;
   /** Direct Entry only (M5-8). */
-  onDiscard?: () => void;
+  onDiscard?: () => Promise<boolean>;
+  /** Who the meal belongs to: the save names them, and the server refuses it for anyone else. */
+  owner?: string | undefined;
   /** Direct Entry keeps the first request sent across a reload (M5-8); else the summary does. */
   sent?: SaveMealRequest | undefined;
   /** Resolves once the request is kept, with whether it may be sent now. */
@@ -368,7 +391,9 @@ export function Summary(props: {
   // A second tap before the first save's re-render must not send again.
   const inFlight = useRef(false);
   const save = async () => {
-    const body = sent ?? saveRequest(state, new Date().toISOString());
+    const made = saveRequest(state, new Date().toISOString());
+    const body =
+      sent ?? (made && (props.owner === undefined ? made : { ...made, username: props.owner }));
     if (!body || inFlight.current) return;
     inFlight.current = true;
     setSaving(true);

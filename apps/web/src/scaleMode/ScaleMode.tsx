@@ -18,6 +18,7 @@ import {
 import { isSummary, stepProblem } from '../directEntry/state';
 import { formatGrams } from '../format';
 import { useCreateScaleDriver } from '../scale';
+import { lastUser } from '../session';
 import { trackerSettings } from './settings';
 import {
   canCorrect,
@@ -73,6 +74,8 @@ function Session(props: {
     }),
   );
   const [connection, setConnection] = useState<Connection>('idle');
+  // Who the meal belongs to, fixed when the session starts (see Summary).
+  const [owner] = useState(lastUser);
   const everConnected = useRef(false);
 
   useWakeLock(true);
@@ -129,6 +132,7 @@ function Session(props: {
             if (action.type === 'undo' || action.type === 'editGrams') dispatch(action);
           }}
           onSaved={props.onSaved}
+          owner={owner}
         />
       </>
     );
