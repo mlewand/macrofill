@@ -10,7 +10,7 @@ import {
   type TrackerState,
 } from '@macrofill/domain';
 import { parseFrame, toReading } from '@mlewand/huajun-ble-scale';
-import type { ScaleDriver, ScaleReading } from './driver.js';
+import type { RejectedFrame, ScaleDriver, ScaleReading } from './driver.js';
 import { toScaleReading } from './reading.js';
 
 /** A user event as the tracker gets it. */
@@ -23,6 +23,7 @@ export type UserEvent = Exclude<TrackerEvent, { type: 'reading' }>;
 export class SessionRecorder {
   readonly #frames: RecordedFrame[] = [];
   readonly #events: RecordedEvent[] = [];
+  #dropped = 0;
 
   constructor(
     readonly captureSessionId: string,
@@ -31,17 +32,39 @@ export class SessionRecorder {
     readonly maxFrames = MAX_RECORDED_FRAMES,
   ) {}
 
-  /** Records every reading `driver` delivers until the returned function is called. */
-  record(driver: Pick<ScaleDriver, 'onReading'>): () => void {
-    return driver.onReading((reading) => this.frame(reading));
+  /**
+   * Records every frame `driver` delivers until the returned function is called: its readings, and
+   * the payloads it couldn't parse, so a parser fix can be checked against them.
+   */
+  record(driver: Pick<ScaleDriver, 'onReading' | 'onRejectedFrame'>): () => void {
+    const offReading = driver.onReading((reading) => this.frame(reading));
+    const offRejected = driver.onRejectedFrame?.((frame) => this.rejected(frame));
+    return () => {
+      offReading();
+      offRejected?.();
+    };
+  }
+
+  /** A payload that parsed into no reading. */
+  rejected(frame: RejectedFrame): void {
+    this.#push({
+      timestamp: frame.timestamp,
+      receivedAt: frame.receivedAt,
+      raw: toBase64(frame.raw),
+      reading: {},
+    });
+  }
+
+  #push(frame: RecordedFrame) {
+    if (this.#frames.length >= this.maxFrames) this.#dropped++;
+    else this.#frames.push(frame);
   }
 
   frame(reading: ScaleReading): void {
-    if (this.#frames.length >= this.maxFrames) return;
     const parsed: RecordedFrame['reading'] = {};
     if (reading.grams !== undefined) parsed.grams = reading.grams;
     if (reading.stable !== undefined) parsed.stable = reading.stable;
-    this.#frames.push({
+    this.#push({
       timestamp: reading.timestamp,
       receivedAt: reading.receivedAt,
       raw: toBase64(reading.raw),
@@ -59,6 +82,7 @@ export class SessionRecorder {
       captureSessionId: this.captureSessionId,
       driverId: this.driverId,
       frames: [...this.#frames],
+      droppedFrames: this.#dropped,
       events: [...this.#events],
     };
   }

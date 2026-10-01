@@ -31,6 +31,7 @@ function capture(name: string, events: ScaleRecording['events'] = []): ScaleReco
       // Deliberately wrong: replay must re-parse the bytes, not trust what was stored.
       reading: { grams: -1 },
     })),
+    droppedFrames: 0,
     events,
   };
 }
@@ -86,12 +87,37 @@ describe('SessionRecorder (M3-11)', () => {
     expect(fromBase64(frame!.raw)).toEqual(raw);
   });
 
-  it('M3-11: stops at the size limit instead of failing the save', () => {
+  it('M3-11: past the size limit it counts the frames it drops, instead of failing the save', () => {
     const recorder = new SessionRecorder('b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c', 'mock', 3);
+    expect(recorder.recording().droppedFrames).toBe(0);
     for (let t = 0; t < 5; t++) {
       recorder.frame({ grams: 1, timestamp: t, receivedAt: t, raw: new Uint8Array(0) });
     }
-    expect(recorder.recording().frames.map((f) => f.timestamp)).toEqual([0, 1, 2]);
+    const recording = recorder.recording();
+    expect(recording.frames.map((f) => f.timestamp)).toEqual([0, 1, 2]);
+    // A replay of it is known to be incomplete. (regression: #38)
+    expect(recording.droppedFrames).toBe(2);
+  });
+
+  it('M3-11: records the frames the parser rejects too, with their receive times (regression: #38)', async () => {
+    let clock = 100;
+    const transport = new FakeTransport();
+    const driver = new HuajunDriver({ transport: () => transport, monotonicNow: () => clock });
+    const recorder = new SessionRecorder('b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c', driver.id);
+    recorder.record(driver);
+    await driver.connect();
+    const bad = new Uint8Array([0xac, 0x05, 0x00]);
+    const before = Date.now();
+    transport.send(bad);
+    clock = 325;
+    transport.send(new Uint8Array([0xac, 0x05, 0x00, 0x14, 0x89, 0x02, 0xca, 0xe7]));
+    const { frames } = recorder.recording();
+    expect(frames).toHaveLength(2);
+    expect(frames[0]).toMatchObject({ timestamp: 100, raw: toBase64(bad), reading: {} });
+    expect(frames[0]!.receivedAt).toBeGreaterThanOrEqual(before);
+    expect(frames[1]).toMatchObject({ timestamp: 325, reading: { grams: 525.7 } });
+    // Replay re-parses both: today's parser still rejects the first one.
+    expect(replayReadings(recorder.recording()).map((r) => r.timestamp)).toEqual([325]);
   });
 });
 
@@ -128,6 +154,7 @@ describe('replay (M3-11)', () => {
       captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
       driverId: 'mock',
       frames: [{ timestamp: 3, receivedAt: 4, raw: '', reading: { grams: 312, stable: true } }],
+      droppedFrames: 0,
       events: [],
     };
     expect(replayReadings(recording)).toEqual([

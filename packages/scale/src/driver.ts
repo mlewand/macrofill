@@ -16,6 +16,13 @@ export interface ScaleCapabilities {
 
 export type ConnectionState = 'connected' | 'disconnected';
 
+/** A payload the driver couldn't parse, with its receive times (M3-11). */
+export interface RejectedFrame {
+  raw: Uint8Array;
+  timestamp: number;
+  receivedAt: number;
+}
+
 /** The scale abstraction every driver implements (see "Scale driver abstraction" in the requirements). */
 export interface ScaleDriver {
   readonly id: string;
@@ -25,6 +32,8 @@ export interface ScaleDriver {
   disconnect(): Promise<void>;
   onReading(cb: (r: ScaleReading) => void): () => void;
   onConnectionChange(cb: (state: ConnectionState) => void): () => void;
+  /** Payloads that parse into no reading, for recording (M3-11). Drivers without bytes omit it. */
+  onRejectedFrame?(cb: (frame: RejectedFrame) => void): () => void;
   tare?(): Promise<void>;
 }
 

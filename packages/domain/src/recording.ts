@@ -3,7 +3,7 @@ import { idSchema } from './common.js';
 
 /**
  * M3-11: at most this many frames per recording, about an hour and a quarter at the Huajun scale's
- * 225 ms. Bounds the size of a save request.
+ * 225 ms. Bounds the size of a save request; a longer session counts what it leaves out.
  */
 export const MAX_RECORDED_FRAMES = 20_000;
 
@@ -28,7 +28,8 @@ export const recordedEventSchema = z.discriminatedUnion('type', [
 ]);
 
 /**
- * M3-11: everything a Scale Mode capture session got from the scale and the user, so it can be
+ * M3-11: everything a Scale Mode capture session got from the scale (frames the parser rejected
+ * included, with an empty reading) and the user, so it can be
  * replayed (re-parsed with the library's current parser) and investigated.
  */
 export const scaleRecordingSchema = z.object({
@@ -37,6 +38,8 @@ export const scaleRecordingSchema = z.object({
   /** `ScaleDriver.id`, e.g. `huajun`. */
   driverId: z.string().min(1),
   frames: z.array(recordedFrameSchema).max(MAX_RECORDED_FRAMES),
+  /** Frames left out past `MAX_RECORDED_FRAMES`: if any, a replay can't match the session. */
+  droppedFrames: z.number().int().nonnegative(),
   events: z.array(recordedEventSchema),
 });
 

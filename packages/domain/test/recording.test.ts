@@ -13,6 +13,7 @@ const recording: ScaleRecording = {
     },
     { timestamp: 1459.5, receivedAt: 1_780_000_000_225, raw: '', reading: {} },
   ],
+  droppedFrames: 0,
   events: [
     { type: 'start', at: 1300 },
     { type: 'correct', at: 1400, grams: 20.5 },
