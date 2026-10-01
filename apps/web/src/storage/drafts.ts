@@ -16,8 +16,10 @@ import { idb } from './idb';
  */
 export interface DraftStore {
   load: () => Promise<Draft | undefined>;
-  save: (draft: Draft) => Promise<void>;
-  clear: () => Promise<void>;
+  /** Resolves whether the draft is kept: it never rejects, but a caller may need to know. */
+  save: (draft: Draft) => Promise<boolean>;
+  /** Resolves whether no draft is left. */
+  clear: () => Promise<boolean>;
 }
 
 export interface Draft {
@@ -89,33 +91,38 @@ function parseState(state: z.infer<typeof draftSchema>): DirectEntryState {
 
 const KEY = 'directEntry';
 
-/** The draft store on IndexedDB. Storage failures are swallowed: a draft is a convenience. */
+/** The draft store on IndexedDB. Never rejects: a draft is a convenience, but `save` and `clear`
+ * say whether they worked, for a caller that must know. */
 export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore {
   const run = idb(factory);
-  const quietly = async <T>(work: () => Promise<T>): Promise<T | undefined> => {
+  const attempt = async (work: () => Promise<unknown>): Promise<boolean> => {
     try {
-      return await work();
+      await work();
+      return true;
     } catch {
-      return undefined;
+      return false;
     }
   };
   return {
-    load: async () =>
-      parseDraft(await quietly(() => run('drafts', 'readonly', (store) => store.get(KEY)))),
-    save: async (draft) => {
-      await quietly(() => run('drafts', 'readwrite', (store) => store.put(draft, KEY)));
+    load: async () => {
+      try {
+        return parseDraft(
+          await run('drafts', 'readonly', (store): IDBRequest<unknown> => store.get(KEY)),
+        );
+      } catch {
+        return undefined;
+      }
     },
-    clear: async () => {
-      await quietly(() => run('drafts', 'readwrite', (store) => store.delete(KEY)));
-    },
+    save: (draft) => attempt(() => run('drafts', 'readwrite', (store) => store.put(draft, KEY))),
+    clear: () => attempt(() => run('drafts', 'readwrite', (store) => store.delete(KEY))),
   };
 }
 
 /** Keeps nothing: the default, so components work without a provider. */
 export const noDraftStore: DraftStore = {
   load: () => Promise.resolve(undefined),
-  save: () => Promise.resolve(),
-  clear: () => Promise.resolve(),
+  save: () => Promise.resolve(true),
+  clear: () => Promise.resolve(true),
 };
 
 export const DraftContext = createContext<DraftStore>(noDraftStore);

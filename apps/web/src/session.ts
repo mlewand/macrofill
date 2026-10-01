@@ -12,6 +12,15 @@ export function lastUser(): string | undefined {
   }
 }
 
+/** Calls `cb` when another tab logs in as someone (it changes the remembered user). */
+export function onUserChangedElsewhere(cb: (username: string) => void): () => void {
+  const listener = (event: StorageEvent) => {
+    if (event.key === KEY && event.newValue !== null) cb(event.newValue);
+  };
+  window.addEventListener('storage', listener);
+  return () => window.removeEventListener('storage', listener);
+}
+
 export function rememberUser(username: string): void {
   try {
     localStorage.setItem(KEY, username);
