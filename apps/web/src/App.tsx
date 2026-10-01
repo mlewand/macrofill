@@ -103,8 +103,8 @@ export function App() {
         setMeSettled(true);
         // A login since makes this failure stale too.
         if (asked !== generation.current) return;
-        // Not an answer from the server (offline, or no answer in time).
-        setUnreachable(!(error instanceof ApiError));
+        // No answer about the user: offline, no answer in time, or a server error.
+        setUnreachable(!(error instanceof ApiError) || error.status >= 500);
         // No session: the login form settles who it is.
         if (error instanceof ApiError && error.status === 401) setNeedsLogin(true);
       },
@@ -262,7 +262,7 @@ export function App() {
               >
                 {t('home.logMeal')}
               </button>
-              <TodayView />
+              {user !== undefined && <TodayView recheckUser={() => setMeAttempt((n) => n + 1)} />}
             </section>
           )}
           {screen === 'scaleMode' && (

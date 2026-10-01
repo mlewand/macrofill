@@ -51,20 +51,26 @@ export function isOwnedBy(owner: string | undefined, user: string | undefined): 
   return owner !== undefined && owner === user;
 }
 
-const TIMEZONE_KEY = 'macrofill.timezone';
+/** Per user: on a shared device, nobody's times show in another user's timezone. */
+const timezoneKey = (username: string) => `macrofill.timezone:${username}`;
 
-/** The user's timezone from the last time Today loaded, for showing times offline (M7-1). */
-export function lastTimezone(): string | undefined {
+/**
+ * The timezone of `username` from the last time Today loaded for them, for showing times offline
+ * (M7-1).
+ */
+export function lastTimezone(username: string | undefined): string | undefined {
+  if (username === undefined) return undefined;
   try {
-    return localStorage.getItem(TIMEZONE_KEY) ?? undefined;
+    return localStorage.getItem(timezoneKey(username)) ?? undefined;
   } catch {
     return undefined;
   }
 }
 
-export function rememberTimezone(timezone: string): void {
+export function rememberTimezone(username: string | undefined, timezone: string): void {
+  if (username === undefined) return;
   try {
-    localStorage.setItem(TIMEZONE_KEY, timezone);
+    localStorage.setItem(timezoneKey(username), timezone);
   } catch {
     // Offline times then fall back to the device's timezone.
   }

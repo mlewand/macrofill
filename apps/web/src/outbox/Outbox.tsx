@@ -197,6 +197,15 @@ export function usePending(
   return outbox.pending.filter((item) => isOwnedBy(item.username, user));
 }
 
+/**
+ * Whether the server has confirmed who's logged in, and whether it couldn't be asked (offline).
+ * Confirmed outside an `OutboxProvider`.
+ */
+export function useUserStatus(): { ready: boolean; offline: boolean } {
+  const outbox = useContext(OutboxContext);
+  return { ready: outbox?.ready ?? true, offline: outbox?.offline ?? false };
+}
+
 /** How long a save waits for the server before it reports the meal as pending. */
 export const SAVE_WAIT_MS = 8000;
 

@@ -9,17 +9,25 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { formatGrams, formatKcal, formatTime } from '../format';
-import { usePending, useRemovePending } from '../outbox/Outbox';
-import { lastTimezone, rememberTimezone } from '../session';
+import { usePending, useRemovePending, useUserStatus } from '../outbox/Outbox';
+import { lastTimezone, lastUser, rememberTimezone } from '../session';
 import type { OutboxItem } from '../outbox/store';
 
 /**
  * Today (M7-1 to M7-4): totals against targets and the day's meals, newest first, with the meals
  * still waiting to be sent marked pending and counted (M5-9).
  */
-export function TodayView() {
+export function TodayView(props: {
+  /** Asks the server again who's logged in: Try again, while it hasn't confirmed the user. */
+  recheckUser?: () => void;
+}) {
+  const { recheckUser } = props;
   const { t } = useTranslation();
   const api = useApi();
+  // The server's day is loaded only once the server has confirmed the user (M4-1): the session
+  // cookie may be someone else's than the remembered user's. A day already shown stays while the
+  // user is checked again; a different answer starts over (App).
+  const { ready, offline: unreachable } = useUserStatus();
   // Next to the server's day only once the server has confirmed the user (M5-9); offline, when the
   // day can't load, the remembered user's are shown on their own.
   const { pending, refused } = split(usePending());
@@ -40,12 +48,13 @@ export function TodayView() {
   }
 
   useEffect(() => {
+    if (!ready) return;
     let current = true;
     api.today().then(
       (loaded) => {
         if (!current) return;
         // For showing times in the user's timezone offline too.
-        rememberTimezone(loaded.timezone);
+        rememberTimezone(lastUser(), loaded.timezone);
         setToday(loaded);
       },
       () => current && setFailed(true),
@@ -53,14 +62,15 @@ export function TodayView() {
     return () => {
       current = false;
     };
-  }, [api, attempt]);
+  }, [api, attempt, ready]);
 
   const reload = () => {
     setFailed(false);
     setAttempt((n) => n + 1);
+    if (!ready) recheckUser?.();
   };
 
-  if (failed) {
+  if (failed || (today === undefined && !ready && unreachable)) {
     return (
       <section aria-labelledby="today-title">
         <h2 id="today-title">{t('today.title')}</h2>
@@ -202,9 +212,11 @@ function split(items: OutboxItem[]) {
   };
 }
 
-/** Offline: the user's timezone from the last time Today loaded, else the device's (M7-1). */
+/**
+ * Offline: the user's timezone from the last time Today loaded for them, else the device's (M7-1).
+ */
 function offlineTimeZone(): string {
-  return lastTimezone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return lastTimezone(lastUser()) ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
 function Entry(props: { entry: TodayListEntry; timezone: string; onDeleted: () => void }) {
