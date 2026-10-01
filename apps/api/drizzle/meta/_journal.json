@@ -15,6 +15,13 @@
       "when": 1790809923411,
       "tag": "0001_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790848830216,
+      "tag": "0002_scale_recordings",
+      "breakpoints": true
     }
   ]
 }

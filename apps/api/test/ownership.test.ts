@@ -103,6 +103,33 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
     expect(ofA.entries).toHaveLength(1);
   },
 
+  'GET /api/meals/:id/recording': async ({ a, b }) => {
+    // A's meal weighed with the scale, with its recording (M4-7).
+    const id = '2f7e4d0a-8b6c-4e5d-9c3f-4a5b6c7d8e9f';
+    const weighed: SaveMealRequest = {
+      meal: { ...mealOfA.meal, id, inputMethod: 'scale' },
+      consumptionEntry: { ...mealOfA.consumptionEntry, id: '3a8f5e1b-9c7d-4f6e-8d4a-5b6c7d8e9f0a' },
+      recording: {
+        captureSessionId: id,
+        driverId: 'huajun',
+        trackerConfig: {
+          stabilityToleranceGrams: 1,
+          stabilityWindowMs: 1000,
+          stableWaitMs: 1500,
+          negativeToleranceGrams: 0.3,
+        },
+        frames: [{ timestamp: 1, receivedAt: 2, raw: 'AQI=', reading: { grams: 3 } }],
+        droppedFrames: 0,
+        events: [],
+      },
+    };
+    expect((await a.request('/api/meals', json(weighed))).status).toBe(201);
+    const ofB = await b.request(`/api/meals/${id}/recording`);
+    expect(ofB.status).toBe(404);
+    expect(await ofB.json()).toEqual({ error: 'not_found' });
+    expect((await a.request(`/api/meals/${id}/recording`)).status).toBe(200);
+  },
+
   'POST /api/meals': async ({ b, db }) => {
     const meals = await count(db, 'prepared_meals');
     // A's meal ids, with only a seed product: not found, as for any of A's resources. With A's
@@ -150,6 +177,7 @@ const reviewedHandlers: Record<string, number> = {
   'ALL /api/*': 2,
   'GET /api/catalog': 1,
   'POST /api/meals': 2,
+  'GET /api/meals/:id/recording': 2,
   'GET /api/today': 1,
   'DELETE /api/consumption-entries/:id': 2,
 };

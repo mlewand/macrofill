@@ -1,6 +1,7 @@
 import {
   createTracker,
   defaultTrackerConfig,
+  MAX_RECORDED_FRAMES,
   scaleRecordingSchema,
   track,
   type ScaleRecording,
@@ -117,6 +118,22 @@ describe('SessionRecorder (M3-11)', () => {
     expect(recording.frames.map((f) => f.timestamp)).toEqual([0, 1, 2]);
     // A replay of it is known to be incomplete.
     expect(recording.droppedFrames).toBe(2);
+  });
+
+  it("M3-11: a frame limit above the schema's is held to it, so the recording still saves (regression: #43)", () => {
+    const recorder = new SessionRecorder({
+      captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      driverId: 'mock',
+      trackerConfig: defaultTrackerConfig,
+      maxFrames: MAX_RECORDED_FRAMES + 5,
+    });
+    for (let t = 0; t < MAX_RECORDED_FRAMES + 1; t++) {
+      recorder.frame({ grams: 1, timestamp: t, receivedAt: t, raw: new Uint8Array(0) });
+    }
+    const recording = recorder.recording();
+    expect(recording.frames).toHaveLength(MAX_RECORDED_FRAMES);
+    expect(recording.droppedFrames).toBe(1);
+    expect(scaleRecordingSchema.safeParse(recording).success).toBe(true);
   });
 
   it('M3-11: records the frames the parser rejects too, with their receive times (regression: #38)', async () => {

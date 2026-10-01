@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { idSchema, timestampSchema } from './common.js';
+import { scaleRecordingSchema } from './recording.js';
 
 export const skippedItemSchema = z.object({
   stepId: idSchema.optional(),
@@ -53,6 +54,8 @@ export type ConsumptionEntry = z.infer<typeof consumptionEntrySchema>;
 export const saveMealRequestSchema = z.object({
   meal: preparedMealSchema,
   consumptionEntry: consumptionEntrySchema.omit({ preparedMealId: true }),
+  /** M6-7: a meal weighed with the scale comes with its recording (M3-11), stored with it (M4-7). */
+  recording: scaleRecordingSchema.optional(),
 });
 
 export type SaveMealRequest = z.infer<typeof saveMealRequestSchema>;
