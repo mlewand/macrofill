@@ -1,3 +1,4 @@
+import type { SaveMealRequest } from '@macrofill/domain';
 import { scaleScript } from '@macrofill/scale';
 import { expect, test, type Page } from '@playwright/test';
 import en from '../src/i18n/en.json' with { type: 'json' };
@@ -72,8 +73,18 @@ test('M6-8: a full meal with skip, undo, a manual correction and a negative step
   await expect(
     page.getByRole('textbox', { name: 'Grams of Polmlek Twaróg półtłusty' }),
   ).toHaveValue('200');
+  const sent = page.waitForRequest(
+    (request) => request.method() === 'POST' && request.url().endsWith('/api/meals'),
+  );
   await page.getByRole('button', { name: en.summary.save }).click();
   await expect(page.getByRole('status')).toHaveText(en.saved.title);
+
+  // M6-7, M4-7: the meal's recording was saved with it, and downloads as sent.
+  const body = (await sent).postDataJSON() as SaveMealRequest;
+  expect(body.recording?.events.map((e) => e.type)).toContain('correct');
+  const recording = await page.request.get(`/api/meals/${body.meal.id}/recording`);
+  expect(recording.status()).toBe(200);
+  expect(await recording.json()).toEqual(body.recording);
 });
 
 test('M6-8, M3-4: an unstable reading at Next is proposed, and confirmed', async ({ page }) => {

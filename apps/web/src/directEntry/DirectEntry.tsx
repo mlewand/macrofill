@@ -6,6 +6,7 @@ import {
   type NutritionValues,
   type Recipe,
   type SaveMealRequest,
+  type ScaleRecording,
 } from '@macrofill/domain';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -366,6 +367,8 @@ export function Summary(props: {
   sent?: SaveMealRequest | undefined;
   /** Resolves once the request is kept, with whether it may be sent now. */
   onSend?: (request: SaveMealRequest) => Promise<boolean>;
+  /** Scale Mode: the session's recording, saved with the meal (M6-7). */
+  recording?: () => ScaleRecording;
 }) {
   const { t } = useTranslation();
   const saveMeal = useSaveMeal();
@@ -390,8 +393,14 @@ export function Summary(props: {
   const inFlight = useRef(false);
   const save = async () => {
     const made = saveRequest(state, new Date().toISOString());
+    // Built once: a retry resends it as it is, recording included (M4-6).
     const body =
-      sent ?? (made && (props.owner === undefined ? made : { ...made, username: props.owner }));
+      sent ??
+      (made && {
+        ...made,
+        ...(props.owner === undefined ? {} : { username: props.owner }),
+        ...(props.recording ? { recording: props.recording() } : {}),
+      });
     if (!body || inFlight.current) return;
     inFlight.current = true;
     setSaving(true);

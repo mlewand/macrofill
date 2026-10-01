@@ -5,7 +5,7 @@ import {
   type Recipe,
   type TrackerConfig,
 } from '@macrofill/domain';
-import type { ScaleDriver } from '@macrofill/scale';
+import { SessionRecorder, type ScaleDriver, type UserEvent } from '@macrofill/scale';
 import { useCallback, useEffect, useId, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -101,6 +101,31 @@ function Session(props: {
       tracker: props.tracker,
     }),
   );
+  // M3-11, M6-7: every frame from the scale and every tap the tracker takes, saved with the meal.
+  const [recorder] = useState(
+    () =>
+      new SessionRecorder({
+        captureSessionId: state.flow.mealId,
+        driverId: driver.id,
+        trackerConfig: state.tracker.config,
+      }),
+  );
+  // The state as last rendered: what the user saw when tapping.
+  const shown = useRef(state);
+  useEffect(() => {
+    shown.current = state;
+  });
+  /**
+   * A tap: recorded if it reaches the tracker, as it would in a replay. Taps the app's gates hold
+   * back, or that go to the flow only (after finishing by hand), change nothing there.
+   */
+  const tap = (action: ScaleModeAction) => {
+    const event = trackerEvent(action);
+    if (event && scaleMode(shown.current, action).tracker !== shown.current.tracker) {
+      recorder.event(event, performance.now());
+    }
+    dispatch(action);
+  };
   const [connection, setConnection] = useState<Connection>('idle');
   const [reconnectConfig] = useState(props.reconnect);
   // Who the meal belongs to, fixed when the session starts (see Summary).
@@ -120,6 +145,9 @@ function Session(props: {
     setConnection('dropped');
     dispatch({ type: 'finishByHand' });
   }, []);
+
+  // Subscribed before the reducer, so a tap counts the frame that came with it.
+  useEffect(() => recorder.record(driver), [driver, recorder]);
 
   useEffect(() => {
     const offReading = driver.onReading((reading) => dispatch({ type: 'reading', reading }));
@@ -183,9 +211,10 @@ function Session(props: {
           state={state.flow}
           catalog={catalog}
           dispatch={(action) => {
-            if (action.type === 'undo' || action.type === 'editGrams') dispatch(action);
+            if (action.type === 'undo' || action.type === 'editGrams') tap(action);
           }}
           onSaved={props.onSaved}
+          recording={() => recorder.recording()}
           owner={owner}
           // Sent only for a known owner who's still logged in (another tab may have changed it).
           onSend={() => Promise.resolve(owner !== undefined && belongsTo(owner, lastUser()))}
@@ -236,7 +265,7 @@ function Session(props: {
           type="button"
           className="primary"
           disabled={!canStart(state)}
-          onClick={() => dispatch({ type: 'start' })}
+          onClick={() => tap({ type: 'start' })}
         >
           {t('scale.start')}
         </button>
@@ -245,11 +274,29 @@ function Session(props: {
   }
 
   return (
-    <StepScreen key={state.flow.current} state={state} catalog={catalog} dispatch={dispatch}>
+    <StepScreen key={state.flow.current} state={state} catalog={catalog} dispatch={tap}>
       {status}
       {notice}
     </StepScreen>
   );
+}
+
+/** The tracker event of a tap, if it is one (M3-11). */
+function trackerEvent(action: ScaleModeAction): UserEvent | undefined {
+  switch (action.type) {
+    case 'start':
+    case 'next':
+    case 'confirm':
+    case 'skip':
+    case 'undo':
+      return { type: action.type };
+    case 'correct': {
+      const grams = parseGrams(action.grams);
+      return grams.ok ? { type: 'correct', grams: grams.grams } : undefined;
+    }
+    default:
+      return undefined;
+  }
 }
 
 /** M6-6: the scale is reconnecting; the user can stop waiting and type the grams instead. */
