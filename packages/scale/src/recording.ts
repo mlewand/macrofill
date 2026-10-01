@@ -41,7 +41,8 @@ export class SessionRecorder {
     this.captureSessionId = options.captureSessionId;
     this.driverId = options.driverId;
     this.trackerConfig = { ...options.trackerConfig };
-    this.maxFrames = options.maxFrames ?? MAX_RECORDED_FRAMES;
+    // Never above the schema's limit: the recording must still save.
+    this.maxFrames = Math.min(options.maxFrames ?? MAX_RECORDED_FRAMES, MAX_RECORDED_FRAMES);
   }
 
   /**
