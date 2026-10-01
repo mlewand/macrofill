@@ -50,11 +50,13 @@ export function TodayView(props: {
   useEffect(() => {
     if (!ready) return;
     let current = true;
+    // Whose day this is: the user confirmed now, not whoever is remembered when it arrives.
+    const askedFor = lastUser();
     api.today().then(
       (loaded) => {
         if (!current) return;
         // For showing times in the user's timezone offline too.
-        rememberTimezone(lastUser(), loaded.timezone);
+        if (lastUser() === askedFor) rememberTimezone(askedFor, loaded.timezone);
         setToday(loaded);
       },
       () => current && setFailed(true),
@@ -70,7 +72,9 @@ export function TodayView(props: {
     if (!ready) recheckUser?.();
   };
 
-  if (failed || (today === undefined && !ready && unreachable)) {
+  // Offline with the user unconfirmed, an earlier day isn't shown: the remembered user's queued
+  // meals are, on their own.
+  if (failed || (!ready && unreachable)) {
     return (
       <section aria-labelledby="today-title">
         <h2 id="today-title">{t('today.title')}</h2>

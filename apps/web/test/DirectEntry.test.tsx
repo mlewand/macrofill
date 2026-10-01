@@ -1516,6 +1516,52 @@ describe('saving through the outbox (M5-9)', () => {
     }
   });
 
+  it('M5-9: back on the tab and offline, queued meals show again, without the earlier day (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, new Date().toISOString()));
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockRejectedValue(new TypeError('offline'));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), { today: todayNow, me }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      // Offline: the remembered user's queued meals, on their own.
+      expect(await screen.findByText(en.today.pendingTitle)).toBeInTheDocument();
+      expect(screen.getByText(en.today.pending)).toBeInTheDocument();
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M7-1: the timezone is kept for the user Today was asked for, not one who logged in meanwhile (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      let answer!: (today: Today) => void;
+      const today = vi.fn(() => new Promise<Today>((resolve) => (answer = resolve)));
+      renderWithOutbox(fakeApi(undefined, { today }), indexedDbOutbox(new IDBFactory()));
+      await vi.waitFor(() => expect(today).toHaveBeenCalled());
+      // Another tab logs in as someone else; this tab hasn't seen the storage event yet.
+      localStorage.setItem('macrofill.user', 'other');
+      await act(async () => {
+        answer({ ...emptyToday, day: localDay(new Date(), emptyToday.timezone) });
+        await Promise.resolve();
+      });
+      expect(localStorage.getItem('macrofill.timezone:other')).toBeNull();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-9: coming back to the tab hides queued meals until the server confirms the user again (regression: #41)', async () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {

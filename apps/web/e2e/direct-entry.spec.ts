@@ -122,6 +122,10 @@ test('M5-9: a meal saved offline waits on the device, survives a restart and is 
   await page.getByRole('button', { name: en.step.next }).click();
   for (let i = 0; i < 4; i++) await page.getByRole('button', { name: en.step.skip }).click();
 
+  // The reload below must come from the service worker: wait until it controls the page.
+  await expect
+    .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+    .toBe(true);
   await context.setOffline(true);
   await page.getByRole('button', { name: en.summary.save }).click();
   await expect(page.getByText(en.saved.pending)).toBeVisible();
