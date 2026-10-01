@@ -26,8 +26,16 @@ export function seedPasswordsFromEnv(
   data = seedData,
 ): Record<string, string> {
   const passwords: Record<string, string> = {};
+  const owners = new Map<string, string>();
   for (const { user } of data.users) {
-    const password = env[seedPasswordVariable(user.username)];
+    const variable = seedPasswordVariable(user.username);
+    const other = owners.get(variable);
+    // Two users must never share an initial password by accident.
+    if (other !== undefined) {
+      throw new Error(`Users ${other} and ${user.username} would both use ${variable}.`);
+    }
+    owners.set(variable, user.username);
+    const password = env[variable];
     if (password !== undefined && password !== '') passwords[user.username] = password;
   }
   return passwords;

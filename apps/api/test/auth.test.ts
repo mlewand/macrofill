@@ -198,6 +198,19 @@ describe('seed passwords (M4-1, M4-5)', () => {
     expect(seedPasswordsFromEnv({ SEED_PASSWORD_MLEWAND: '' })).toEqual({});
   });
 
+  it('M4-1: seed users whose password variables would collide are refused (regression: #34)', () => {
+    const data = {
+      ...seedData,
+      users: [
+        seedData.users[0]!,
+        { ...seedData.users[0]!, user: { ...seedData.users[0]!.user, username: 'MLEWAND' } },
+      ],
+    };
+    expect(() => seedPasswordsFromEnv({ SEED_PASSWORD_MLEWAND: 'secret-1' }, data)).toThrow(
+      'SEED_PASSWORD_MLEWAND',
+    );
+  });
+
   it('M4-1: the seed stores only an argon2id hash of the initial password', async () => {
     const result = await seed(database.db, undefined, { [seedUsername]: TEST_PASSWORD });
     expect(result.withoutPassword).toEqual([]);
