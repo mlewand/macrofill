@@ -5,7 +5,7 @@ import { ApiContext, guardApi, useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
 import { Login } from './Login';
 import { ScaleMode } from './scaleMode/ScaleMode';
-import { belongsToCurrentUser, lastUser } from './session';
+import { belongsToCurrentUser, lastUser, onUserChangedElsewhere } from './session';
 import { useDraftStore, type Draft } from './storage/drafts';
 import { TodayView } from './today/TodayView';
 
@@ -22,10 +22,9 @@ export function App() {
   const api = useMemo(() => guardApi(baseApi, () => setNeedsLogin(true)), [baseApi]);
   const drafts = useDraftStore();
   const [user, setUser] = useState(lastUser);
-  const loggedIn = (username: string) => {
-    setNeedsLogin(false);
-    setLogins((n) => n + 1);
-    // Someone else now, or nobody was known: what was open may be another user's (M5-8).
+  const [resume, setResume] = useState<Draft>();
+  /** Someone else now, or nobody was known: what was open may be another user's (M5-8). */
+  const userIs = (username: string) => {
     if (username !== user) {
       void drafts.clear();
       setResume(undefined);
@@ -33,8 +32,25 @@ export function App() {
     }
     setUser(username);
   };
+  const loggedIn = (username: string) => {
+    setNeedsLogin(false);
+    setLogins((n) => n + 1);
+    userIs(username);
+  };
+  // A login in another tab shares this tab's cookie: the same applies.
+  useEffect(
+    () =>
+      onUserChangedElsewhere((username) => {
+        if (username !== user) {
+          void drafts.clear();
+          setResume(undefined);
+          setScreen('home');
+        }
+        setUser(username);
+      }),
+    [user, drafts],
+  );
   // M5-8: a Direct Entry session kept from before a reload opens again.
-  const [resume, setResume] = useState<Draft>();
   // Nothing is shown until it's known whether there's a kept session: a meal started meanwhile
   // would overwrite it. IndexedDB answers in milliseconds.
   const [draftLoaded, setDraftLoaded] = useState(false);

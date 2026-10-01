@@ -1,5 +1,5 @@
 import type { Catalog, SaveMealRequest } from '@macrofill/domain';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiContext, ApiError, type Api } from '../src/api/api';
 import { App } from '../src/App';
@@ -517,6 +517,51 @@ describe('Direct Entry across a reload (M5-8)', () => {
     expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
     expect(drafts.kept()).toBeUndefined();
     localStorage.clear();
+  });
+
+  it('M5-8: a login in another tab as someone else drops the open session (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      renderWithDrafts(drafts.store);
+      await screen.findByText('Step 2 of 2');
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key: 'macrofill.user',
+            oldValue: 'mlewand',
+            newValue: 'other',
+          }),
+        );
+      });
+      expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+      expect(drafts.kept()).toBeUndefined();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: an open session keeps the owner it started with (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      renderWithDrafts(drafts.store);
+      fireEvent.click(await screen.findByRole('button', { name: en.home.logMeal }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+      // Changed elsewhere, before this tab heard of it.
+      localStorage.setItem('macrofill.user', 'other');
+      typeGrams('100');
+      await vi.waitFor(() =>
+        expect(vi.mocked(drafts.store.save).mock.calls.at(-1)![0].state.steps[0]!.grams).toBe(
+          '100',
+        ),
+      );
+      expect(vi.mocked(drafts.store.save).mock.calls.at(-1)![0].username).toBe('mlewand');
+    } finally {
+      localStorage.clear();
+    }
   });
 
   it('M5-8: drafts are stamped with the user who last logged in', async () => {

@@ -45,6 +45,8 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
   );
   const [state, setState] = useState<DirectEntryState | undefined>(resumed);
   const [sent, setSent] = useState(resumed && resume?.sent);
+  // The user this session belongs to, fixed when it starts: another tab may change who's logged in.
+  const [owner] = useState(() => resume?.username ?? lastUser());
   const dispatch = (action: DirectEntryAction) =>
     setState((current) => (current ? directEntry(current, action) : current));
 
@@ -54,24 +56,22 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
   }, [resume, resumed, drafts]);
 
   useEffect(() => {
-    const username = lastUser();
     if (state) {
       void drafts.save({
         state,
         ...(sent ? { sent } : {}),
-        ...(username === undefined ? {} : { username }),
+        ...(owner === undefined ? {} : { username: owner }),
       });
     }
-  }, [state, sent, drafts]);
+  }, [state, sent, owner, drafts]);
 
   const keepSent = async (request: SaveMealRequest) => {
     setSent(request);
-    const username = lastUser();
     if (state) {
       await drafts.save({
         state,
         sent: request,
-        ...(username === undefined ? {} : { username }),
+        ...(owner === undefined ? {} : { username: owner }),
       });
     }
   };
