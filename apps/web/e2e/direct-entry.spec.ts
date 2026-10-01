@@ -67,8 +67,10 @@ test('M5-8: a page reload resumes Direct Entry at the same step, with what was e
   // Kept once IndexedDB has it; a reload within milliseconds of typing may lose the last change.
   await expect
     .poll(async () => {
-      const draft = (await keptDraft(page)) as { current: number; steps: { grams: string }[] };
-      return [draft?.current, draft?.steps[1]?.grams];
+      const draft = (await keptDraft(page)) as {
+        state: { current: number; steps: { grams: string }[] };
+      };
+      return [draft?.state.current, draft?.state.steps[1]?.grams];
     })
     .toEqual([1, '50,5']);
 
