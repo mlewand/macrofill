@@ -268,10 +268,13 @@ export function createRepositories(db: Db, ownerId: string) {
     },
 
     usageEvents: {
-      /** Stores the events as the user's. An id already stored (a retry) is left as it is. */
-      async insert(events: readonly UsageEvent[]): Promise<void> {
-        if (events.length === 0) return;
-        await db
+      /**
+       * Stores the events as the user's. An id the user already has (a retry) is left as it is.
+       * Returns false if an id is someone else's (M4-3); the caller rolls back.
+       */
+      async insert(events: readonly UsageEvent[]): Promise<boolean> {
+        if (events.length === 0) return true;
+        const inserted = await db
           .insert(usageEvents)
           .values(
             events.map((e) => ({
@@ -284,7 +287,16 @@ export function createRepositories(db: Db, ownerId: string) {
               appVersion: e.appVersion,
             })),
           )
-          .onConflictDoNothing({ target: usageEvents.id });
+          .onConflictDoNothing({ target: usageEvents.id })
+          .returning({ id: usageEvents.id });
+        const insertedIds = new Set(inserted.map((row) => row.id));
+        const kept = [...new Set(events.map((e) => e.id))].filter((id) => !insertedIds.has(id));
+        if (kept.length === 0) return true;
+        const own = await db
+          .select({ id: usageEvents.id })
+          .from(usageEvents)
+          .where(and(inArray(usageEvents.id, kept), eq(usageEvents.ownerId, ownerId)));
+        return own.length === kept.length;
       },
     },
 

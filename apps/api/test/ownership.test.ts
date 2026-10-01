@@ -131,7 +131,8 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
   },
 
   'POST /api/events': async ({ a, b, db }) => {
-    // A's event; nothing reads events back, so B can only try to overwrite it with the same id.
+    // A's event; nothing reads events back, so B can only send one with the same id: not found,
+    // as for any of A's resources (regression: #46).
     const event = {
       id: '4b9a6f2c-0d8e-4a7f-9e5b-6c7d8e9f0a1b',
       clientSessionId: '5c0b7a3d-1e9f-4b8a-8f6c-7d8e9f0a1b2c',
@@ -142,7 +143,11 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
     };
     expect((await a.request('/api/events', json({ events: [event] }))).status).toBe(204);
     const asB = { ...event, props: { inputMethod: 'direct' } };
-    expect((await b.request('/api/events', json({ events: [asB] }))).status).toBe(204);
+    // With one of B's own: the batch is refused whole, nothing of it stored.
+    const ofB = { ...event, id: '6d1c8b4e-2f0a-4c9b-9a7d-8e9f0a1b2c3d' };
+    const res = await b.request('/api/events', json({ events: [ofB, asB] }));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not_found' });
     const rows = await queryRows<{ owner_id: string; props: unknown }>(
       db,
       sql`select owner_id, props from usage_events`,
