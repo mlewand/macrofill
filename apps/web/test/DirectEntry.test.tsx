@@ -660,6 +660,27 @@ describe('Direct Entry across a reload (M5-8)', () => {
     localStorage.clear();
   });
 
+  it('M5-8: without local storage, the user the server names still owns the saves (regression: #37)', async () => {
+    const blocked = () => {
+      throw new DOMException('blocked', 'SecurityError');
+    };
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
+    try {
+      const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithDrafts(drafts.store, fakeApi(saveMeal));
+      const save = await screen.findByRole('button', { name: en.summary.save });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      fireEvent.click(save);
+      await screen.findByText(en.saved.title);
+      expect(saveMeal.mock.calls[0]![0].username).toBe('mlewand');
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+    }
+  });
+
   it('M5-8: a save whose user is unknown is not sent (regression: #37)', async () => {
     localStorage.clear();
     const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
