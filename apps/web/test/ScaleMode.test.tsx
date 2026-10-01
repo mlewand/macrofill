@@ -349,6 +349,19 @@ describe('Scale Mode', () => {
     });
   });
 
+  it('M7-8: a page kept in the back-forward cache has not abandoned its meal (regression: #52)', async () => {
+    const s = await started();
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+    });
+    expect(s.track).not.toHaveBeenCalledWith('flow_abandoned', expect.anything());
+    // Back from the cache, then really left.
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    });
+    expect(s.track).toHaveBeenLastCalledWith('flow_abandoned', expect.anything());
+  });
+
   it('M7-8: leaving the page after the meal is saved tracks nothing more', async () => {
     const s = await started();
     await s.play(s.script.add(214).stable({ forMs: 0 }));
@@ -594,5 +607,27 @@ describe('Home', () => {
     fireEvent.click(await screen.findByRole('button', { name: en.home.weighMeal }));
     const recipes = await screen.findByRole('heading', { name: en.recipes.title });
     expect(within(recipes.parentElement!).getByRole('button', { name: 'Curd bowl' })).toBeVisible();
+  });
+
+  it('M7-8: leaving the page mid Scale Mode meal sends flow abandoned with the last batch (regression: #52)', async () => {
+    const api: Api = fakeApi({ catalog: () => Promise.resolve(catalog) });
+    const driver = new MockScaleDriver();
+    render(
+      <ApiContext value={api}>
+        <ScaleContext value={() => driver}>
+          <App />
+        </ScaleContext>
+      </ApiContext>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: en.home.weighMeal }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    await vi.waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    expect(vi.mocked(api.sendEvents).mock.calls[0]![0].map((e) => e.name)).toEqual([
+      'flow_started',
+      'flow_abandoned',
+    ]);
   });
 });

@@ -148,13 +148,16 @@ function Session(props: {
   const finished = useRef(false);
   // A Scale Mode meal isn't kept across a reload: leaving the page abandons it (M7-8).
   useEffect(() => {
-    const leaving = () => {
-      if (finished.current) return;
+    const leaving = (event: PageTransitionEvent) => {
+      // Kept in the back-forward cache, the page (and the meal) may come back.
+      if (event.persisted || finished.current) return;
       finished.current = true;
       track('flow_abandoned', { inputMethod: 'scale', durationMs: sinceStart(startedAt) });
     };
-    window.addEventListener('pagehide', leaving);
-    return () => window.removeEventListener('pagehide', leaving);
+    // In the capture phase: before App's own pagehide listener sends the last batch, so this
+    // event is in it.
+    window.addEventListener('pagehide', leaving, { capture: true });
+    return () => window.removeEventListener('pagehide', leaving, { capture: true });
   }, [track, startedAt]);
   /** When the scale dropped, for how long reconnecting took (M7-8). */
   const droppedAt = useRef<number | undefined>(undefined);
