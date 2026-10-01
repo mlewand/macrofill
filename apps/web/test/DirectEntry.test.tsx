@@ -815,6 +815,39 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: a waiting unstamped session dropped by a login leaves Home, not a new meal (regression: #37)', async () => {
+    localStorage.clear();
+    try {
+      const drafts = memoryDrafts(draftAtMilk);
+      const me = vi
+        .fn<Api['me']>()
+        .mockRejectedValueOnce(new ApiError(401))
+        .mockResolvedValue('someone');
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          me,
+          login: () => Promise.resolve('ok'),
+        }),
+      );
+      const dialog = await screen.findByRole('dialog', { name: en.login.title });
+      fireEvent.change(within(dialog).getByLabelText(en.login.username), {
+        target: { value: 'someone' },
+      });
+      fireEvent.change(within(dialog).getByLabelText(en.login.password), {
+        target: { value: 'pw' },
+      });
+      fireEvent.click(within(dialog).getByRole('button', { name: en.login.submit }));
+      expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(screen.getByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+      expect(drafts.kept()).toBeUndefined();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: a 401 for a question asked before a login does not ask to log in again (regression: #37)', async () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {

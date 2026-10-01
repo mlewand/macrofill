@@ -165,7 +165,8 @@ export function App() {
   const [resumeWaiting, setResumeWaiting] = useState(false);
   if (resumeWaiting && user !== undefined) {
     setResumeWaiting(false);
-    setScreen('directEntry');
+    // Unless a login as someone else dropped it meanwhile.
+    if (resume) setScreen('directEntry');
   }
   useEffect(() => {
     let current = true;
