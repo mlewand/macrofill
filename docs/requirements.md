@@ -165,6 +165,7 @@ interface ScaleDriver {
   disconnect(): Promise<void>;
   onReading(cb: (r: ScaleReading) => void): () => void;
   onConnectionChange(cb: (state: 'connected' | 'disconnected') => void): () => void;
+  onRejectedFrame?(cb: (f: { raw: Uint8Array; timestamp: number; receivedAt: number }) => void): () => void;  // payloads the parser rejects, for the recording (M3-11)
   tare?(): Promise<void>;
 }
 ```
@@ -177,7 +178,8 @@ interface ScaleDriver {
 - Recording
   - Every capture session is recorded, also during normal use: raw payloads, parsed readings, user events.
   - Stored with the prepared meal on the backend; can be dumped/exported for investigation.
-  - Raw payloads are kept so parser bugs can be reproduced, not only weight-tracking bugs.
+  - Raw payloads are kept so parser bugs can be reproduced, not only weight-tracking bugs. That includes the payloads the parser rejects, which a parser bug affects most.
+  - A recording holds at most 20 000 frames (about 75 minutes at the Huajun scale's 225 ms) and counts the frames past that it leaves out.
   - Full rate: the whole stream of every capture session. Sampling would drop the transients (tare, lift, auto-off) worth investigating, and the volume is small (roughly 100 KB per session).
 
 # Macro tracking
