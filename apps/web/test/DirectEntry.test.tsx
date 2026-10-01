@@ -6,6 +6,7 @@ import { App } from '../src/App';
 import type { DirectEntryState } from '../src/directEntry/state';
 import { DraftContext, type Draft, type DraftStore } from '../src/storage/drafts';
 import en from '../src/i18n/en.json';
+import { rememberUser } from '../src/session';
 import { emptyToday, fakeApi as baseFakeApi, stored } from './support/api';
 
 const nutrition = (protein: number, fibre: number | null = null) => ({
@@ -678,6 +679,9 @@ describe('Direct Entry across a reload (M5-8)', () => {
     } finally {
       get.mockRestore();
       set.mockRestore();
+      // Storage works again: a save brings it up to date, then the next test starts empty.
+      rememberUser('mlewand');
+      localStorage.clear();
     }
   });
 

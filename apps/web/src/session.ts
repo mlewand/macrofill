@@ -6,8 +6,11 @@ const KEY = 'macrofill.user';
 
 /** This tab's copy, for when local storage is unavailable (blocked, private mode). */
 let remembered: string | undefined;
+/** Whether this tab's last write failed: storage then holds an older user than `remembered`. */
+let unsaved = false;
 
 export function lastUser(): string | undefined {
+  if (unsaved) return remembered;
   try {
     return localStorage.getItem(KEY) ?? undefined;
   } catch {
@@ -18,7 +21,11 @@ export function lastUser(): string | undefined {
 /** Calls `cb` when another tab logs in as someone (it changes the remembered user). */
 export function onUserChangedElsewhere(cb: (username: string) => void): () => void {
   const listener = (event: StorageEvent) => {
-    if (event.key === KEY && event.newValue !== null) cb(event.newValue);
+    if (event.key !== KEY || event.newValue === null) return;
+    // Another tab saved a newer user: storage is current again.
+    remembered = event.newValue;
+    unsaved = false;
+    cb(event.newValue);
   };
   window.addEventListener('storage', listener);
   return () => window.removeEventListener('storage', listener);
@@ -28,7 +35,9 @@ export function rememberUser(username: string): void {
   remembered = username;
   try {
     localStorage.setItem(KEY, username);
+    unsaved = false;
   } catch {
+    unsaved = true;
     // Without storage, kept data just isn't tied to a user.
   }
 }
