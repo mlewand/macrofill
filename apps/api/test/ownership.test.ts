@@ -102,15 +102,15 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
 
   'POST /api/meals': async ({ b, db }) => {
     const meals = await count(db, 'prepared_meals');
-    // A's meal ids, with only a seed product: never a success, never A's data back (M4-6
-    // answers 409). With A's private product it's refused before that, as unknown (400).
+    // A's meal ids, with only a seed product: not found, as for any of A's resources. With A's
+    // private product it's refused before that, as unknown (400).
     expect((await b.request('/api/meals', json(mealOfA))).status).toBe(400);
     const retry = await b.request(
       '/api/meals',
       json({ ...mealOfA, meal: { ...mealOfA.meal, items: mealOfA.meal.items.slice(0, 1) } }),
     );
-    expect(retry.status).toBe(409);
-    expect(await retry.json()).toEqual({ error: 'conflict' });
+    expect(retry.status).toBe(404);
+    expect(await retry.json()).toEqual({ error: 'not_found' });
     // A new meal of B's with A's private product: as if it didn't exist.
     const own = await b.request(
       '/api/meals',
@@ -129,6 +129,9 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
 
 /** Routes with nothing owned by a user, and why. */
 const exempt: Record<string, string> = {
+  // Hono lists middleware as ALL routes too: here the session check (M4-2) and the JSON 404 for
+  // unknown /api paths. Neither reads user data.
+  'ALL /api/*': 'session middleware and the not-found fallback; no user data',
   'GET /api/health': 'checks the database; no user data, and no session (M4-2)',
   'POST /api/login': 'opens a session for whoever has the password; no user data',
 };
@@ -159,9 +162,14 @@ describe('M4-3: ownership over the full route table', () => {
     await database.close();
   });
 
-  const routes = createApp({ db: {} as Db })
-    .routes.filter((r) => r.method !== 'ALL' && r.path.startsWith('/api/'))
-    .map((r) => `${r.method} ${r.path}`);
+  // Every handler under /api, whatever its method, ALL included.
+  const routes = [
+    ...new Set(
+      createApp({ db: {} as Db })
+        .routes.filter((r) => r.path.startsWith('/api/'))
+        .map((r) => `${r.method} ${r.path}`),
+    ),
+  ];
 
   it('M4-3: every route has an ownership fixture or a stated exemption', () => {
     expect(routes.length).toBeGreaterThan(Object.keys(exempt).length);
