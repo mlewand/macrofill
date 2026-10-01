@@ -1992,6 +1992,47 @@ describe('saving through the outbox (M5-9)', () => {
     }
   });
 
+  it('M5-9: a sync in flight stops the moment the user is checked again, before any re-render (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      // In memory: it answers within microtasks, as IndexedDB may, so nothing else runs between
+      // the first request and the second.
+      let items = [outboxItem(1), outboxItem(2)];
+      const outbox: OutboxStore = {
+        add: (item) => {
+          items = [...items.filter((i) => i.request.meal.id !== item.request.meal.id), item];
+          return Promise.resolve();
+        },
+        all: () => Promise.resolve(items),
+        remove: (id) => {
+          items = items.filter((i) => i.request.meal.id !== id);
+          return Promise.resolve();
+        },
+      };
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      let release!: () => void;
+      const saveMeal = vi
+        .fn<Api['saveMeal']>()
+        .mockImplementationOnce(
+          (r) => new Promise((resolve) => (release = () => resolve(stored(r)))),
+        )
+        .mockImplementation((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(fakeApi(saveMeal, { today: todayNow, me }), outbox);
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledTimes(1));
+      // Back on the tab, and the first request finishes, before React has re-rendered.
+      document.dispatchEvent(new Event('visibilitychange'));
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // The second waits for the server's answer about the user.
+      expect(saveMeal).toHaveBeenCalledTimes(1);
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-9: offline, Today still lists what waits on the device', async () => {
     onFixtureDay();
     const outbox = indexedDbOutbox(new IDBFactory());

@@ -44,11 +44,15 @@ export function App() {
   // Whether the server has confirmed who's logged in (/api/me, or a login here). Until then the
   // remembered user may be stale: their queued meals wait (M5-9).
   const [confirmed, setConfirmed] = useState(false);
+  // The same, set the moment it changes: a sync in flight reads it before each request, so it
+  // stops at once, not after the next render (M5-9).
+  const confirmedNow = useRef(false);
   // /api/me couldn't reach the server: offline, the remembered user's queued meals may be listed
   // on their own, where no server data can mix with them (M5-9).
   const [unreachable, setUnreachable] = useState(false);
   /** Asks the server again who's logged in; until it answers, nobody is trusted (M5-9). */
   const recheckUser = useCallback(() => {
+    confirmedNow.current = false;
     setConfirmed(false);
     setUnreachable(false);
     setMeAttempt((n) => n + 1);
@@ -64,6 +68,7 @@ export function App() {
   };
   const loggedIn = (username: string) => {
     generation.current++;
+    confirmedNow.current = true;
     setConfirmed(true);
     setNeedsLogin(false);
     setLogins((n) => n + 1);
@@ -84,6 +89,7 @@ export function App() {
         setMeSettled(true);
         // A login since makes this answer stale: the cookie is someone else's now.
         if (asked !== generation.current) return;
+        confirmedNow.current = true;
         setConfirmed(true);
         setUnreachable(false);
         rememberUser(username);
@@ -229,7 +235,7 @@ export function App() {
 
   return (
     <ApiContext value={api}>
-      <OutboxProvider ready={confirmed} offline={unreachable}>
+      <OutboxProvider ready={confirmed} readyNow={confirmedNow} offline={unreachable}>
         <SyncAfterLogin logins={logins} user={user} confirmed={confirmed} />
         <main hidden={needsLogin}>
           {screen === 'home' && (

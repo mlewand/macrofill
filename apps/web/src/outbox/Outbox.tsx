@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from 'react';
 import { useApi } from '../api/api';
 import { isOwnedBy, lastUser } from '../session';
@@ -45,6 +46,7 @@ const OutboxContext = createContext<Outbox | undefined>(undefined);
 export function OutboxProvider({
   children,
   ready = true,
+  readyNow,
   offline = false,
 }: {
   children: React.ReactNode;
@@ -53,6 +55,11 @@ export function OutboxProvider({
    * no queued meal shows next to the server's day, and the startup sync waits.
    */
   ready?: boolean;
+  /**
+   * `ready` as it is this moment, set by whoever un-confirms the user, before any re-render: a sync
+   * in flight reads it before each request. Without it, `ready` as last rendered.
+   */
+  readyNow?: RefObject<boolean>;
   /**
    * The server couldn't be asked who's logged in (offline): the remembered user's queued meals
    * may be listed on their own, where no server data is shown (`usePending({ unconfirmed })`).
@@ -96,7 +103,7 @@ export function OutboxProvider({
         await refresh();
         // A failed read stops the sync, and nothing waiting is taken for gone.
         const result = await syncOutbox(store, api, () =>
-          readyRef.current ? lastUser() : undefined,
+          (readyNow ?? readyRef).current ? lastUser() : undefined,
         ).catch(() => undefined);
         for (const id of result?.synced ?? []) outcomes.current.set(id, 'synced');
         for (const id of result?.dropped ?? []) outcomes.current.set(id, 'dropped');
@@ -108,7 +115,7 @@ export function OutboxProvider({
     } finally {
       running.current = undefined;
     }
-  }, [store, api, refresh]);
+  }, [store, api, refresh, readyNow]);
 
   // What waits is listed from the start; it's sent once the server has confirmed the user.
   useEffect(() => {
