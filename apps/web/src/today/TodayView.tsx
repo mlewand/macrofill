@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { formatGrams, formatKcal, formatTime } from '../format';
 import { usePending, useRemovePending } from '../outbox/Outbox';
+import { lastTimezone, rememberTimezone } from '../session';
 import type { OutboxItem } from '../outbox/store';
 
 /**
@@ -41,7 +42,12 @@ export function TodayView() {
   useEffect(() => {
     let current = true;
     api.today().then(
-      (loaded) => current && setToday(loaded),
+      (loaded) => {
+        if (!current) return;
+        // For showing times in the user's timezone offline too.
+        rememberTimezone(loaded.timezone);
+        setToday(loaded);
+      },
       () => current && setFailed(true),
     );
     return () => {
@@ -64,7 +70,7 @@ export function TodayView() {
         <button type="button" className="secondary" onClick={reload}>
           {t('app.retry')}
         </button>
-        <Refused items={offline.refused} timezone={deviceTimeZone()} />
+        <Refused items={offline.refused} timezone={offlineTimeZone()} />
         {/* Offline, the day can't load, but what's waiting on this device can be shown. */}
         {offline.pending.length > 0 && (
           <>
@@ -74,7 +80,7 @@ export function TodayView() {
                 <Entry
                   key={entry.id}
                   entry={{ ...entry, pending: true }}
-                  timezone={deviceTimeZone()}
+                  timezone={offlineTimeZone()}
                   onDeleted={reload}
                 />
               ))}
@@ -196,8 +202,9 @@ function split(items: OutboxItem[]) {
   };
 }
 
-function deviceTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+/** Offline: the user's timezone from the last time Today loaded, else the device's (M7-1). */
+function offlineTimeZone(): string {
+  return lastTimezone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
 function Entry(props: { entry: TodayListEntry; timezone: string; onDeleted: () => void }) {

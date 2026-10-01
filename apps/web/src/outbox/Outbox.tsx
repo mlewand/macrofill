@@ -24,6 +24,8 @@ interface Outbox {
   pending: OutboxItem[];
   /** Whether the server has confirmed who's logged in. */
   ready: boolean;
+  /** Whether the server couldn't be asked (offline). */
+  offline: boolean;
   save: (request: SaveMealRequest, entry: TodayEntry) => Promise<SaveResult>;
   /** Sends what's waiting, e.g. after logging in. */
   sync: () => Promise<void>;
@@ -43,6 +45,7 @@ const OutboxContext = createContext<Outbox | undefined>(undefined);
 export function OutboxProvider({
   children,
   ready = true,
+  offline = false,
 }: {
   children: React.ReactNode;
   /**
@@ -50,12 +53,22 @@ export function OutboxProvider({
    * no queued meal shows next to the server's day, and the startup sync waits.
    */
   ready?: boolean;
+  /**
+   * The server couldn't be asked who's logged in (offline): the remembered user's queued meals
+   * may be listed on their own, where no server data is shown (`usePending({ unconfirmed })`).
+   */
+  offline?: boolean;
 }) {
   const store = useContext(OutboxStoreContext);
   const api = useApi();
   const [pending, setPending] = useState<OutboxItem[]>([]);
   const running = useRef<Promise<void> | undefined>(undefined);
   const again = useRef(false);
+  // Read by a sync in flight before each request: once unconfirmed, the rest waits.
+  const readyRef = useRef(ready);
+  useEffect(() => {
+    readyRef.current = ready;
+  }, [ready]);
   /** What became of each meal sent this session: saved, or refused for good. */
   const outcomes = useRef(new Map<string, 'synced' | 'dropped'>());
 
@@ -82,7 +95,9 @@ export function OutboxProvider({
         // Shown before they're sent, so Today sees them leave and loads the day again.
         await refresh();
         // A failed read stops the sync, and nothing waiting is taken for gone.
-        const result = await syncOutbox(store, api, lastUser).catch(() => undefined);
+        const result = await syncOutbox(store, api, () =>
+          readyRef.current ? lastUser() : undefined,
+        ).catch(() => undefined);
         for (const id of result?.synced ?? []) outcomes.current.set(id, 'synced');
         for (const id of result?.dropped ?? []) outcomes.current.set(id, 'dropped');
         await refresh();
@@ -154,8 +169,8 @@ export function OutboxProvider({
   );
 
   const value = useMemo(
-    () => ({ pending, ready, save, sync, remove }),
-    [pending, ready, save, sync, remove],
+    () => ({ pending, ready, offline, save, sync, remove }),
+    [pending, ready, offline, save, sync, remove],
   );
   return <OutboxContext value={value}>{children}</OutboxContext>;
 }
@@ -175,7 +190,9 @@ export function usePending(
   } = {},
 ): OutboxItem[] {
   const outbox = useContext(OutboxContext);
-  if (!outbox || (!outbox.ready && !options.unconfirmed)) return [];
+  if (!outbox) return [];
+  // Unconfirmed, only when the server couldn't even be asked: never while it's being asked.
+  if (!outbox.ready && !(options.unconfirmed && outbox.offline)) return [];
   const user = lastUser();
   return outbox.pending.filter((item) => isOwnedBy(item.username, user));
 }

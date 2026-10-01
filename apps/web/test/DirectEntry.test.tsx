@@ -1455,6 +1455,116 @@ describe('saving through the outbox (M5-9)', () => {
     }
   });
 
+  it('M5-9: coming back to the tab hides queued meals until the server confirms the user again (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, new Date().toISOString()));
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), { today: todayNow, me }),
+        outbox,
+      );
+      // Confirmed: the queued meal is in the day.
+      expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+      // Another tab may have logged in as someone else, with no storage event; back on this tab:
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      // Until the server answers again, it's out of the day.
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it("M5-9: offline, queued meals show in the user's timezone from the last time Today loaded (regression: #41)", async () => {
+    localStorage.setItem('macrofill.timezone', 'Europe/Warsaw');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      // 07:00 UTC: 08:00 in Warsaw; 23:00 the day before on this device (Los Angeles).
+      await outbox.add(outboxItem(1, '2026-01-15T07:00:00.000Z'));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      await screen.findByText(en.today.pendingTitle);
+      expect(screen.getByText(/08:00/)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: Today remembers the user timezone for when it is offline', async () => {
+    localStorage.clear();
+    const outbox = indexedDbOutbox(new IDBFactory());
+    renderWithOutbox(fakeApi(undefined, { today: todayNow }), outbox);
+    await screen.findByRole('heading', { name: en.today.title });
+    await vi.waitFor(() =>
+      expect(localStorage.getItem('macrofill.timezone')).toBe('Europe/Warsaw'),
+    );
+    localStorage.clear();
+  });
+
+  it("M5-9: while the server is being asked who's logged in, Today's offline view lists nothing (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1));
+      let refuse!: () => void;
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me: () =>
+            new Promise<string>((_, reject) => (refuse = () => reject(new TypeError('offline')))),
+        }),
+        outbox,
+      );
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+      // The server can't be reached: offline, the remembered user's list shows.
+      act(() => refuse());
+      expect(await screen.findByText(en.today.pending)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: a user change seen in another tab sends nothing until the server confirms it (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1), username: 'other' });
+      let confirm!: (username: string) => void;
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>((resolve) => (confirm = resolve)));
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(fakeApi(saveMeal, { today: todayNow, me }), outbox);
+      await screen.findByRole('button', { name: en.home.logMeal });
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(saveMeal).not.toHaveBeenCalled();
+      act(() => confirm('other'));
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-9: offline, Today still lists what waits on the device', async () => {
     const outbox = indexedDbOutbox(new IDBFactory());
     await outbox.add(outboxItem(1));

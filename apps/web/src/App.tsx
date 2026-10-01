@@ -44,6 +44,9 @@ export function App() {
   // Whether the server has confirmed who's logged in (/api/me, or a login here). Until then the
   // remembered user may be stale: their queued meals wait (M5-9).
   const [confirmed, setConfirmed] = useState(false);
+  // /api/me couldn't reach the server: offline, the remembered user's queued meals may be listed
+  // on their own, where no server data can mix with them (M5-9).
+  const [unreachable, setUnreachable] = useState(false);
   /** Someone else now, or nobody was known: what was open may be another user's (M5-8). */
   const userIs = (username: string) => {
     if (username !== user) {
@@ -76,6 +79,7 @@ export function App() {
         // A login since makes this answer stale: the cookie is someone else's now.
         if (asked !== generation.current) return;
         setConfirmed(true);
+        setUnreachable(false);
         rememberUser(username);
         setUser((known) => {
           if (known !== undefined && known !== username) {
@@ -99,6 +103,8 @@ export function App() {
         setMeSettled(true);
         // A login since makes this failure stale too.
         if (asked !== generation.current) return;
+        // Not an answer from the server (offline, or no answer in time).
+        setUnreachable(!(error instanceof ApiError));
         // No session: the login form settles who it is.
         if (error instanceof ApiError && error.status === 401) setNeedsLogin(true);
       },
@@ -111,7 +117,11 @@ export function App() {
   // says so (local storage blocked), so ask again.
   useEffect(() => {
     const visible = () => {
-      if (document.visibilityState === 'visible') setMeAttempt((n) => n + 1);
+      if (document.visibilityState !== 'visible') return;
+      // Not trusted again until the server answers (M5-9).
+      setConfirmed(false);
+      setUnreachable(false);
+      setMeAttempt((n) => n + 1);
     };
     document.addEventListener('visibilitychange', visible);
     return () => document.removeEventListener('visibilitychange', visible);
@@ -213,8 +223,8 @@ export function App() {
 
   return (
     <ApiContext value={api}>
-      <OutboxProvider ready={confirmed}>
-        <SyncAfterLogin logins={logins} user={user} />
+      <OutboxProvider ready={confirmed} offline={unreachable}>
+        <SyncAfterLogin logins={logins} user={user} confirmed={confirmed} />
         <main hidden={needsLogin}>
           {screen === 'home' && (
             // Keyed by logins, so what failed without a session loads again after one.
@@ -310,17 +320,18 @@ export function App() {
  * M5-9: meals that waited for a session, or for their user, are sent once that user is logged in:
  * after a login, and whenever the known user is established or changes (e.g. /api/me corrects it).
  */
-function SyncAfterLogin({ logins, user }: { logins: number; user: string | undefined }) {
+function SyncAfterLogin(props: { logins: number; user: string | undefined; confirmed: boolean }) {
+  const { logins, user, confirmed } = props;
   const sync = useSync();
   const first = useRef(true);
   useEffect(() => {
-    // The provider syncs on start by itself.
+    // The provider syncs on start by itself; nothing goes before the server confirms the user.
     if (first.current) {
       first.current = false;
       return;
     }
-    void sync();
-  }, [logins, user, sync]);
+    if (confirmed) void sync();
+  }, [logins, user, confirmed, sync]);
   return null;
 }
 

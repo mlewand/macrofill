@@ -50,3 +50,22 @@ export function belongsToCurrentUser(owner: string | undefined): boolean {
 export function isOwnedBy(owner: string | undefined, user: string | undefined): boolean {
   return owner !== undefined && owner === user;
 }
+
+const TIMEZONE_KEY = 'macrofill.timezone';
+
+/** The user's timezone from the last time Today loaded, for showing times offline (M7-1). */
+export function lastTimezone(): string | undefined {
+  try {
+    return localStorage.getItem(TIMEZONE_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function rememberTimezone(timezone: string): void {
+  try {
+    localStorage.setItem(TIMEZONE_KEY, timezone);
+  } catch {
+    // Offline times then fall back to the device's timezone.
+  }
+}
