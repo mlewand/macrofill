@@ -5,10 +5,23 @@ import type { ScaleReading } from '../src/index.js';
 
 const capacitor = vi.hoisted(() => ({ options: [] as unknown[] }));
 vi.mock('@mlewand/huajun-ble-scale/capacitor', () => ({
+  // Connects to the device it's given, or to `scale-1` as if picked in the chooser.
   CapacitorTransport: class {
-    constructor(options: unknown) {
+    deviceId: string | undefined;
+    constructor(readonly options: { deviceId?: string }) {
       capacitor.options.push(options);
     }
+    connect() {
+      this.deviceId = this.options.deviceId ?? 'scale-1';
+      return Promise.resolve();
+    }
+    disconnect() {
+      return Promise.resolve();
+    }
+    subscribe() {
+      return Promise.resolve();
+    }
+    onDisconnect() {}
   },
 }));
 
@@ -57,11 +70,18 @@ describe('toScaleReading', () => {
 
 /** A BLE transport that the test drives: frames in, drops out. */
 class FakeTransport implements ScaleTransport {
+  /** Set on connect, like the Capacitor transport's. */
+  deviceId: string | undefined;
+  constructor(readonly device = 'dev-1') {}
   onData: ((data: Uint8Array) => void) | undefined;
   #onDisconnect: (() => void)[] = [];
   failConnect = false;
-  connect() {
-    return this.failConnect ? Promise.reject(new Error('no device')) : Promise.resolve();
+  /** Holds connect() until it settles, for overlapping attempts. */
+  gate: Promise<void> | undefined;
+  async connect() {
+    await this.gate;
+    if (this.failConnect) throw new Error('no device');
+    this.deviceId = this.device;
   }
   disconnects = 0;
   disconnect() {
@@ -81,10 +101,13 @@ class FakeTransport implements ScaleTransport {
   }
 }
 
-function driverWith(transports: FakeTransport[]) {
+function driverWith(transports: FakeTransport[], deviceIds: (string | undefined)[] = []) {
   let clock = 0;
   const driver = new HuajunDriver({
-    transport: () => transports.shift()!,
+    transport: (deviceId) => {
+      deviceIds.push(deviceId);
+      return transports.shift()!;
+    },
     monotonicNow: () => (clock += 225),
   });
   const readings: ScaleReading[] = [];
@@ -220,7 +243,72 @@ describe('HuajunDriver', () => {
     expect(states).toEqual([]);
   });
 
+  it('M6-6: after a drop, connect() reconnects to the device picked first, without the chooser', async () => {
+    const first = new FakeTransport('dev-1');
+    const second = new FakeTransport('dev-1');
+    const deviceIds: (string | undefined)[] = [];
+    const { driver, states } = driverWith([first, second], deviceIds);
+    await driver.connect();
+    first.drop();
+    await driver.connect();
+    expect(deviceIds).toEqual([undefined, 'dev-1']);
+    expect(states).toEqual(['connected', 'disconnected', 'connected']);
+  });
+
+  it('M6-6: only the connection that stays active is remembered (regression: #36)', async () => {
+    let openA!: () => void;
+    let openB!: () => void;
+    const a = new FakeTransport('dev-A');
+    a.gate = new Promise((resolve) => (openA = resolve));
+    const b = new FakeTransport('dev-B');
+    b.gate = new Promise((resolve) => (openB = resolve));
+    const deviceIds: (string | undefined)[] = [];
+    const { driver } = driverWith([a, b, new FakeTransport('dev-B')], deviceIds);
+    const first = driver.connect();
+    const second = driver.connect();
+    // The replaced attempt finishes first.
+    openA();
+    await first;
+    openB();
+    await second;
+    b.drop();
+    await driver.connect();
+    expect(deviceIds).toEqual([undefined, undefined, 'dev-B']);
+  });
+
+  it('M6-6: a failed reconnect keeps the device for the next attempt', async () => {
+    const first = new FakeTransport('dev-1');
+    const failing = new FakeTransport('dev-1');
+    failing.failConnect = true;
+    const deviceIds: (string | undefined)[] = [];
+    const { driver } = driverWith([first, failing, new FakeTransport('dev-1')], deviceIds);
+    await driver.connect();
+    first.drop();
+    await expect(driver.connect()).rejects.toThrow('no device');
+    await driver.connect();
+    expect(deviceIds).toEqual([undefined, 'dev-1', 'dev-1']);
+  });
+
+  it('M6-6: a failed first connect remembers no device, so the next one opens the chooser', async () => {
+    const failing = new FakeTransport();
+    failing.failConnect = true;
+    const deviceIds: (string | undefined)[] = [];
+    const { driver } = driverWith([failing, new FakeTransport()], deviceIds);
+    await expect(driver.connect()).rejects.toThrow();
+    await driver.connect();
+    expect(deviceIds).toEqual([undefined, undefined]);
+  });
+
+  it('M6-6: by default a reconnect passes the picked device to a new Capacitor transport', async () => {
+    capacitor.options.length = 0;
+    const driver = new HuajunDriver();
+    await driver.connect();
+    await driver.connect();
+    expect(capacitor.options).toEqual([{ showAllDevices: true }, { deviceId: 'scale-1' }]);
+  });
+
   it('M6-1: by default the device chooser lists all devices, since Chrome can’t filter this scale by name', () => {
+    capacitor.options.length = 0;
     const driver = new HuajunDriver();
     expect(driver.capabilities).toEqual({
       hasStableFlag: true,

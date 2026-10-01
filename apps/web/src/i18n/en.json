@@ -42,6 +42,7 @@
       "idle": "Scale not connected",
       "connecting": "Connecting to the scale…",
       "connected": "Scale connected",
+      "reconnecting": "Reconnecting to the scale…",
       "dropped": "Scale disconnected"
     },
     "connect": "Connect scale",
@@ -61,6 +62,8 @@
     "useGrams": "Use these grams",
     "correctionNeedsStable": "Hold still: the grams can be used once the weight settles.",
     "recorded": "{{product}}: {{grams}} g recorded",
+    "reconnectingHint": "The scale disconnected. The meal goes on once it's back. If it switched itself off: take the bowl off, turn the scale on, then put the bowl back.",
+    "finishByHand": "Enter the remaining weights by hand",
     "dropped": "The scale disconnected. Enter the remaining weights by hand.",
     "smallAmounts": "The scale can miss a few grams added slowly: add small, calorie-dense items in one go, or enter them by hand."
   },

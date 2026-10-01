@@ -36,6 +36,8 @@ export class MockScaleDriver implements ScaleDriver {
   /** The last reading played: when, and its script timestamp. */
   #last: { at: number; scriptTime: number } | undefined;
   readonly #readingListeners = new Set<(r: ScaleReading) => void>();
+  /** While false, `connect()` fails, like a scale that is off or out of range (M6-6). */
+  available = true;
   readonly #connectionListeners = new Set<(state: ConnectionState) => void>();
 
   constructor(options: MockScaleOptions = {}) {
@@ -50,6 +52,7 @@ export class MockScaleDriver implements ScaleDriver {
   }
 
   connect(): Promise<void> {
+    if (!this.available) return Promise.reject(new Error('The mock scale is unavailable.'));
     this.#setState('connected');
     if (this.#initial) void this.play(this.#initial);
     return Promise.resolve();

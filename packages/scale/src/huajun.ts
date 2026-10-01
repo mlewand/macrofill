@@ -12,8 +12,11 @@ import { toScaleReading } from './reading.js';
 export { toScaleReading };
 
 export interface HuajunDriverOptions {
-  /** A new BLE transport per connection. Default: the Capacitor transport, which on the web uses Web Bluetooth. */
-  transport?: () => ScaleTransport;
+  /**
+   * A new BLE transport per connection, for `deviceId` if one was connected before, else through
+   * the device chooser. Default: the Capacitor transport, which on the web uses Web Bluetooth.
+   */
+  transport?: (deviceId: string | undefined) => ScaleTransport;
   /** Monotonic clock for reading timestamps. Default: the library's, `performance.now()`. */
   monotonicNow?: () => number;
 }
@@ -27,7 +30,9 @@ export class HuajunDriver implements ScaleDriver {
     canTare: false,
     resolutionGrams: 0.1,
   };
-  readonly #transport: () => ScaleTransport;
+  readonly #transport: (deviceId: string | undefined) => ScaleTransport;
+  /** The device picked on the first successful connect (M6-6). */
+  #deviceId: string | undefined;
   readonly #monotonicNow: (() => number) | undefined;
   #scale: Scale | undefined;
   #state: ConnectionState = 'disconnected';
@@ -37,15 +42,23 @@ export class HuajunDriver implements ScaleDriver {
 
   constructor(options: HuajunDriverOptions = {}) {
     // M6-1: Chrome's name filter doesn't match this scale, so the chooser lists all devices.
-    this.#transport = options.transport ?? (() => new CapacitorTransport({ showAllDevices: true }));
+    // M6-6: later connections go to the device picked first, without the chooser.
+    this.#transport =
+      options.transport ??
+      ((deviceId) =>
+        new CapacitorTransport(deviceId === undefined ? { showAllDevices: true } : { deviceId }));
     this.#monotonicNow = options.monotonicNow;
   }
 
-  /** Must be called from a user gesture: the transport opens the device chooser first thing. */
+  /**
+   * The first call must come from a user gesture: the transport opens the device chooser first
+   * thing. Once a device was connected, later calls reconnect to it without the chooser (M6-6).
+   */
   async connect(): Promise<void> {
     // One `Scale` per connection, as the library requires.
+    const transport = this.#transport(this.#deviceId);
     const monotonicNow = this.#monotonicNow ?? (() => performance.now());
-    const scale: Scale = new Scale(this.#transport(), {
+    const scale: Scale = new Scale(transport, {
       ...(this.#monotonicNow ? { monotonicNow: this.#monotonicNow } : {}),
       // M3-11: kept for the recording, stamped like the library stamps a reading.
       onRejected: (raw) => {
@@ -78,6 +91,8 @@ export class HuajunDriver implements ScaleDriver {
     }
     // A newer connect() replaced this one meanwhile: let that one report, and don't leak this one.
     if (this.#scale !== scale) return scale.disconnect();
+    // Only the connection that stays active names the device to reconnect to (M6-6).
+    this.#deviceId ??= deviceIdOf(transport);
     this.#setState('connected');
   }
 
@@ -115,4 +130,10 @@ export class HuajunDriver implements ScaleDriver {
     this.#state = state;
     for (const cb of this.#connectionListeners) cb(state);
   }
+}
+
+/** The connected device's ID, for transports that have one (the Capacitor transport does). */
+function deviceIdOf(transport: ScaleTransport): string | undefined {
+  const id = (transport as { deviceId?: unknown }).deviceId;
+  return typeof id === 'string' ? id : undefined;
 }
