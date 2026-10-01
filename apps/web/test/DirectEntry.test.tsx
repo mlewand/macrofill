@@ -1965,6 +1965,51 @@ describe('saving through the outbox (M5-9)', () => {
     }
   });
 
+  it('M7-1: a stored timezone that is not one falls back to the device timezone (regression: #41)', async () => {
+    onFixtureDay();
+    localStorage.setItem('macrofill.user', 'mlewand');
+    localStorage.setItem('macrofill.timezone:mlewand', 'Not/AZone');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add(outboxItem(1, '2026-01-15T07:00:00.000Z'));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      await screen.findByText(en.today.pendingTitle);
+      // 07:00 UTC on this device (Los Angeles).
+      expect(screen.getByText(/23:00/)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it("M7-1: while the user is checked again, an earlier load failure isn't shown (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithOutbox(
+        fakeApi(undefined, { today: () => Promise.reject(new TypeError('offline')), me }),
+        indexedDbOutbox(new IDBFactory()),
+      );
+      expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      expect(screen.queryByText(en.today.loadFailed)).not.toBeInTheDocument();
+      expect(screen.getByText(en.app.loading)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-9: Today remembers the user timezone for when it is offline', async () => {
     localStorage.clear();
     const outbox = indexedDbOutbox(new IDBFactory());

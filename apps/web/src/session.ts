@@ -69,10 +69,22 @@ const timezoneKey = (username: string) => `macrofill.timezone:${username}`;
  */
 export function lastTimezone(username: string | undefined): string | undefined {
   if (username === undefined) return undefined;
+  let timezone: string | null;
   try {
-    return localStorage.getItem(timezoneKey(username)) ?? undefined;
+    timezone = localStorage.getItem(timezoneKey(username));
   } catch {
     return undefined;
+  }
+  // A damaged value isn't a timezone: times would fail to format.
+  return timezone !== null && isTimeZone(timezone) ? timezone : undefined;
+}
+
+function isTimeZone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
   }
 }
 

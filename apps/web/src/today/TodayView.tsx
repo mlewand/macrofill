@@ -75,9 +75,12 @@ export function TodayView(props: {
     if (!ready) recheckUser?.();
   };
 
+  // While the server checks the user again (back on the tab), nothing from before shows: neither
+  // the day loaded then (another tab may have logged in as someone else, M4-1) nor its failure.
+  if (!ready && !unreachable) return <p role="status">{t('app.loading')}</p>;
   // Offline with the user unconfirmed, an earlier day isn't shown: the remembered user's queued
   // meals are, on their own.
-  if (failed || (!ready && unreachable)) {
+  if (failed || !ready) {
     // Today's only (M7-1), in the user's timezone: a meal queued before midnight isn't today's.
     const timezone = offlineTimeZone();
     const day = localDay(new Date(), timezone);
@@ -113,9 +116,7 @@ export function TodayView(props: {
       </section>
     );
   }
-  // While the server checks the user again (back on the tab), nothing of the day loaded before
-  // shows: another tab may have logged in as someone else (M4-1).
-  if (today === undefined || !ready) return <p role="status">{t('app.loading')}</p>;
+  if (today === undefined) return <p role="status">{t('app.loading')}</p>;
 
   const { entries, totals } = withPending(today, pending);
   return (
