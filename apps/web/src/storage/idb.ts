@@ -1,0 +1,50 @@
+// The app's IndexedDB database: the Direct Entry draft (M5-8) and the save outbox (M5-9).
+
+const DB_NAME = 'macrofill';
+/** 1: drafts. 2: outbox. Upgrades add the stores a database doesn't have yet. */
+const DB_VERSION = 2;
+export const STORES = ['drafts', 'outbox'] as const;
+export type StoreName = (typeof STORES)[number];
+
+export type Run = <T>(
+  store: StoreName,
+  mode: IDBTransactionMode,
+  request: (store: IDBObjectStore) => IDBRequest<T>,
+) => Promise<T>;
+
+/**
+ * Runs one request per transaction on the app's database, opened on first use. Rejects when
+ * IndexedDB fails (blocked, full, unavailable); the next call tries to open it again.
+ */
+export function idb(factory: IDBFactory): Run {
+  let db: Promise<IDBDatabase> | undefined;
+  const open = () =>
+    (db ??= new Promise<IDBDatabase>((resolve, reject) => {
+      const request = factory.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        for (const name of STORES) {
+          if (!request.result.objectStoreNames.contains(name)) {
+            request.result.createObjectStore(name);
+          }
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error('IndexedDB failed to open'));
+    }));
+
+  return async (name, mode, request) => {
+    try {
+      const database = await open();
+      return await new Promise((resolve, reject) => {
+        const transaction = database.transaction(name, mode);
+        const done = request(transaction.objectStore(name));
+        transaction.oncomplete = () => resolve(done.result);
+        transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB failed'));
+        transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB aborted'));
+      });
+    } catch (error) {
+      db = undefined;
+      throw error;
+    }
+  };
+}

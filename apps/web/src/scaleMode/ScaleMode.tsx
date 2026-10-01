@@ -17,6 +17,7 @@ import {
 } from '../directEntry/DirectEntry';
 import { isSummary, stepProblem } from '../directEntry/state';
 import { formatGrams } from '../format';
+import type { SaveResult } from '../outbox/Outbox';
 import { useCreateScaleDriver } from '../scale';
 import { trackerSettings } from './settings';
 import {
@@ -32,7 +33,7 @@ import { useWakeLock } from './wakeLock';
 
 interface Props {
   catalog: Catalog;
-  onSaved: () => void;
+  onSaved: (result: SaveResult) => void;
   onCancel: () => void;
   /** Default: `trackerSettings`. */
   tracker?: Partial<TrackerConfig>;
@@ -53,7 +54,7 @@ function Session(props: {
   recipe: Recipe;
   catalog: Catalog;
   tracker: Partial<TrackerConfig>;
-  onSaved: () => void;
+  onSaved: (result: SaveResult) => void;
 }) {
   const { t } = useTranslation();
   const { recipe, catalog } = props;

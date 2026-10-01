@@ -1,12 +1,16 @@
-import type { Catalog, SaveMealRequest } from '@macrofill/domain';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { localDay, type Catalog, type SaveMealRequest, type Today } from '@macrofill/domain';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it, vi } from 'vitest';
-import { ApiContext, type Api } from '../src/api/api';
+import { ApiContext, ApiError, type Api } from '../src/api/api';
+import { OutboxStoreContext } from '../src/outbox/Outbox';
+import { indexedDbOutbox, type OutboxStore } from '../src/outbox/store';
 import { App } from '../src/App';
 import type { DirectEntryState } from '../src/directEntry/state';
 import { DraftContext, type Draft, type DraftStore } from '../src/storage/drafts';
 import en from '../src/i18n/en.json';
-import { fakeApi as baseFakeApi, stored } from './support/api';
+import { emptyToday, fakeApi as baseFakeApi, stored } from './support/api';
+import { outboxItem } from './support/outbox';
 
 const nutrition = (protein: number, fibre: number | null = null) => ({
   kcal: 100,
@@ -75,10 +79,11 @@ const catalog: Catalog = {
   ],
 };
 
-function fakeApi(saveMeal?: Api['saveMeal']): Api {
+function fakeApi(saveMeal?: Api['saveMeal'], overrides: Partial<Api> = {}): Api {
   return baseFakeApi({
     catalog: () => Promise.resolve(catalog),
     ...(saveMeal ? { saveMeal } : {}),
+    ...overrides,
   });
 }
 
@@ -489,5 +494,118 @@ describe('Direct Entry across a reload (M5-8)', () => {
     renderWithDrafts(drafts.store);
     await screen.findByText('Step 1 of 2');
     expect(checkedProduct()).toEqual([]);
+  });
+});
+
+describe('saving through the outbox (M5-9)', () => {
+  /** Today for the real current day, so a meal saved now counts toward it. */
+  const todayNow = (): Promise<Today> =>
+    Promise.resolve({ ...emptyToday, day: localDay(new Date(), emptyToday.timezone) });
+
+  function renderWithOutbox(api: Api, outbox: OutboxStore, draft?: DirectEntryState) {
+    const drafts = memoryDrafts(draft);
+    render(
+      <ApiContext value={api}>
+        <OutboxStoreContext value={outbox}>
+          <DraftContext value={drafts.store}>
+            <App />
+          </DraftContext>
+        </OutboxStoreContext>
+      </ApiContext>,
+    );
+    return drafts;
+  }
+
+  const atSummary = { ...draftAtMilk, current: 2 };
+
+  it('M5-9: a meal saved offline is kept, pending in Today and counted, and sent once back online', async () => {
+    let online = false;
+    const saveMeal = vi.fn<Api['saveMeal']>((r) =>
+      online ? Promise.resolve(stored(r)) : Promise.reject(new TypeError('Failed to fetch')),
+    );
+    const today = vi.fn(todayNow);
+    const outbox = indexedDbOutbox(new IDBFactory());
+    const drafts = renderWithOutbox(fakeApi(saveMeal, { today }), outbox, atSummary);
+
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    expect(await screen.findByText(en.saved.pending)).toBeInTheDocument();
+    expect(drafts.kept()).toBeUndefined();
+    expect(await outbox.all()).toHaveLength(1);
+
+    click(en.saved.done);
+    const entry = await screen.findByText(en.today.pending);
+    expect(entry.closest('li')).toHaveTextContent('Curd bowl');
+    // Counted: 150 g and 3.5 g at 100 kcal per 100 g.
+    expect(screen.getByRole('row', { name: new RegExp(`^${en.nutrient.kcal}`) })).toHaveTextContent('154 kcal');
+    expect(within(entry.closest('li')!).queryByRole('button')).not.toBeInTheDocument();
+
+    online = true;
+    act(() => void window.dispatchEvent(new Event('online')));
+    await vi.waitFor(() => expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument());
+    expect(await outbox.all()).toEqual([]);
+    // The same request both times: no duplicate (M4-6).
+    expect(saveMeal.mock.calls[1]![0]).toEqual(saveMeal.mock.calls[0]![0]);
+    expect(today.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('M5-9: online, a save is sent at once and nothing is left pending', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    renderWithOutbox(fakeApi(undefined, { today: todayNow }), outbox, atSummary);
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(screen.queryByText(en.saved.pending)).not.toBeInTheDocument();
+    expect(await outbox.all()).toEqual([]);
+  });
+
+  it('M5-9: meals left from before are sent when the app starts', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1));
+    const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+    renderWithOutbox(fakeApi(saveMeal, { today: todayNow }), outbox);
+    await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    await vi.waitFor(async () => expect(await outbox.all()).toEqual([]));
+  });
+
+  it('M5-9, M4-2: a meal waiting for a session is sent after logging in', async () => {
+    let session = false;
+    const saveMeal = vi.fn<Api['saveMeal']>((r) =>
+      session ? Promise.resolve(stored(r)) : Promise.reject(new ApiError(401)),
+    );
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1));
+    renderWithOutbox(
+      fakeApi(saveMeal, {
+        today: todayNow,
+        login: () => {
+          session = true;
+          return Promise.resolve('ok');
+        },
+      }),
+      outbox,
+    );
+    const dialog = await screen.findByRole('dialog', { name: en.login.title });
+    fireEvent.change(within(dialog).getByLabelText(en.login.username), {
+      target: { value: 'mlewand' },
+    });
+    fireEvent.change(within(dialog).getByLabelText(en.login.password), {
+      target: { value: 'the password' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: en.login.submit }));
+    await vi.waitFor(async () => expect(await outbox.all()).toEqual([]));
+    expect(saveMeal).toHaveBeenCalledTimes(2);
+  });
+
+  it('M5-9: offline, Today still lists what waits on the device', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add(outboxItem(1));
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new TypeError('offline')), {
+        today: () => Promise.reject(new TypeError('offline')),
+      }),
+      outbox,
+    );
+    expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+    expect(await screen.findByText(en.today.pendingTitle)).toBeInTheDocument();
+    expect(screen.getByText(en.today.pending)).toBeInTheDocument();
   });
 });

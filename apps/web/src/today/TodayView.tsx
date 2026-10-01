@@ -1,21 +1,35 @@
 import {
   targetProgress,
+  withPending,
   type NutrientProgress,
   type Today,
-  type TodayEntry,
+  type TodayListEntry,
 } from '@macrofill/domain';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { formatGrams, formatKcal, formatTime } from '../format';
+import { usePending } from '../outbox/Outbox';
 
-/** Today (M7-1 to M7-4): totals against targets and the day's meals, newest first. */
+/**
+ * Today (M7-1 to M7-4): totals against targets and the day's meals, newest first, with the meals
+ * still waiting to be sent marked pending and counted (M5-9).
+ */
 export function TodayView() {
   const { t } = useTranslation();
   const api = useApi();
+  const pending = usePending().map((item) => item.entry);
   const [today, setToday] = useState<Today>();
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // A meal leaving the outbox is on the server now: load the day again.
+  const pendingIds = pending.map((e) => e.id).join();
+  const [lastPendingIds, setLastPendingIds] = useState(pendingIds);
+  if (pendingIds !== lastPendingIds) {
+    setLastPendingIds(pendingIds);
+    setFailed(false);
+    setAttempt((n) => n + 1);
+  }
 
   useEffect(() => {
     let current = true;
@@ -43,21 +57,38 @@ export function TodayView() {
         <button type="button" className="secondary" onClick={reload}>
           {t('app.retry')}
         </button>
+        {/* Offline, the day can't load, but what's waiting on this device can be shown. */}
+        {pending.length > 0 && (
+          <>
+            <h3>{t('today.pendingTitle')}</h3>
+            <ul className="entries">
+              {pending.map((entry) => (
+                <Entry
+                  key={entry.id}
+                  entry={{ ...entry, pending: true }}
+                  timezone={deviceTimeZone()}
+                  onDeleted={reload}
+                />
+              ))}
+            </ul>
+          </>
+        )}
       </section>
     );
   }
   if (today === undefined) return <p role="status">{t('app.loading')}</p>;
 
+  const { entries, totals } = withPending(today, pending);
   return (
     <section aria-labelledby="today-title">
       <h2 id="today-title">{t('today.title')}</h2>
-      <ProgressTable progress={targetProgress(today.totals, today.targets)} />
+      <ProgressTable progress={targetProgress(totals, today.targets)} />
       <h3>{t('today.meals')}</h3>
-      {today.entries.length === 0 ? (
+      {entries.length === 0 ? (
         <p className="muted">{t('today.empty')}</p>
       ) : (
         <ul className="entries">
-          {today.entries.map((entry) => (
+          {entries.map((entry) => (
             <Entry key={entry.id} entry={entry} timezone={today.timezone} onDeleted={reload} />
           ))}
         </ul>
@@ -106,7 +137,11 @@ function ProgressTable({ progress }: { progress: NutrientProgress[] }) {
   );
 }
 
-function Entry(props: { entry: TodayEntry; timezone: string; onDeleted: () => void }) {
+function deviceTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function Entry(props: { entry: TodayListEntry; timezone: string; onDeleted: () => void }) {
   const { t } = useTranslation();
   const api = useApi();
   const format = useFormatValue();
@@ -135,6 +170,7 @@ function Entry(props: { entry: TodayEntry; timezone: string; onDeleted: () => vo
         <strong>{name}</strong>
         <time dateTime={entry.eatenAt}>{time}</time>
       </div>
+      {entry.pending && <p className="pending">{t('today.pending')}</p>}
       <p className="entry-macros">
         {(['kcal', 'protein', 'fat', 'carbs'] as const).map((nutrient) => (
           <span key={nutrient}>
@@ -142,7 +178,8 @@ function Entry(props: { entry: TodayEntry; timezone: string; onDeleted: () => vo
           </span>
         ))}
       </p>
-      {confirming ? (
+      {/* A pending meal isn't on the server yet, so there's nothing to delete there. */}
+      {entry.pending ? null : confirming ? (
         <div className="confirm" role="group" aria-label={t('today.confirmDelete')}>
           <p>{t('today.confirmDelete')}</p>
           <div className="row">

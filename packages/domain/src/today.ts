@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { idSchema, localizedTextSchema, timestampSchema } from './common.js';
 import { dailyTargetsSchema, type DailyTargets } from './meal.js';
 import { nutritionValuesSchema, type NutritionValues } from './nutrition.js';
-import { timeZoneSchema } from './time.js';
+import { sumNutrition } from './macros.js';
+import { localDay, timeZoneSchema } from './time.js';
 
 /** The nutrients tracked against daily targets, in display order. */
 export const TRACKED_NUTRIENTS = ['protein', 'fat', 'carbs', 'fibre', 'kcal'] as const;
@@ -59,3 +60,26 @@ export const todaySchema = z.object({
 });
 
 export type Today = z.infer<typeof todaySchema>;
+
+/** A Today entry, marked when it's only on this device, waiting to be saved (M5-9). */
+export type TodayListEntry = TodayEntry & { pending: boolean };
+
+/**
+ * M5-9: the day with the meals still waiting in the outbox: those of the same day in the user's
+ * timezone are listed (newest first) and counted in the totals. One the server already lists
+ * (synced since) counts once.
+ */
+export function withPending(
+  today: Today,
+  pending: readonly TodayEntry[],
+): { entries: TodayListEntry[]; totals: NutritionValues } {
+  const onServer = new Set(today.entries.map((e) => e.id));
+  const extra = pending.filter(
+    (e) => !onServer.has(e.id) && localDay(e.eatenAt, today.timezone) === today.day,
+  );
+  const entries = [
+    ...today.entries.map((e) => ({ ...e, pending: false })),
+    ...extra.map((e) => ({ ...e, pending: true })),
+  ].sort((a, b) => Date.parse(b.eatenAt) - Date.parse(a.eatenAt));
+  return { entries, totals: sumNutrition([today.totals, ...extra.map((e) => e.nutrition)]) };
+}

@@ -9,8 +9,8 @@ import {
 } from '@macrofill/domain';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApi } from '../api/api';
 import { NutritionTable } from '../NutritionTable';
+import { useSaveMeal, type SaveResult } from '../outbox/Outbox';
 import { useDraftStore, type Draft } from '../storage/drafts';
 import {
   directEntry,
@@ -25,7 +25,7 @@ import {
 
 interface Props {
   catalog: Catalog;
-  onSaved: () => void;
+  onSaved: (result: SaveResult) => void;
   /** Leaving: from the recipe list, or discarding the meal. */
   onCancel: () => void;
   /** A session kept from before a reload (M5-8). */
@@ -53,7 +53,7 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
     if (state) void drafts.save({ state, ...(sent ? { sent } : {}) });
   }, [state, sent, drafts]);
 
-  const saved = () => void drafts.clear().then(onSaved);
+  const saved = (result: SaveResult) => void drafts.clear().then(() => onSaved(result));
   const discard = () => void drafts.clear().then(onCancel);
 
   if (state === undefined) {
@@ -309,7 +309,8 @@ export function Summary(props: {
   state: DirectEntryState;
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
-  onSaved: () => void;
+  /** Saved: the server has it, or it waits in the outbox (M5-9). */
+  onSaved: (result: SaveResult) => void;
   /** Direct Entry only (M5-8). */
   onDiscard?: () => void;
   /** Direct Entry keeps the first request sent across a reload (M5-8); else the summary does. */
@@ -317,7 +318,7 @@ export function Summary(props: {
   onSend?: (request: SaveMealRequest) => void;
 }) {
   const { t } = useTranslation();
-  const api = useApi();
+  const saveMeal = useSaveMeal();
   const { state, catalog, dispatch } = props;
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -344,8 +345,15 @@ export function Summary(props: {
     setSaving(true);
     setFailed(false);
     try {
-      await api.saveMeal(body);
-      props.onSaved();
+      // How Today shows it while it waits to be sent (M5-9).
+      const entry = {
+        id: body.consumptionEntry.id,
+        preparedMealId: body.meal.id,
+        eatenAt: body.consumptionEntry.eatenAt,
+        recipeName: state.recipe.name,
+        nutrition: total!,
+      };
+      props.onSaved(await saveMeal(body, entry));
     } catch {
       setFailed(true);
       setSaving(false);

@@ -211,3 +211,10 @@ button.danger {
   font-size: 0.9rem;
   opacity: 0.8;
 }
+
+/* M5-9: a meal kept on the device until the server has it. */
+.pending {
+  margin: 0;
+  font-weight: 600;
+  color: var(--accent);
+}

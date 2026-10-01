@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiContext, guardApi, useApi } from './api/api';
 import { DirectEntry } from './directEntry/DirectEntry';
 import { Login } from './Login';
+import { OutboxProvider, useSync, type SaveResult } from './outbox/Outbox';
 import { ScaleMode } from './scaleMode/ScaleMode';
 import { useDraftStore, type Draft } from './storage/drafts';
 import { TodayView } from './today/TodayView';
@@ -13,6 +14,11 @@ type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
 export function App() {
   const { t } = useTranslation();
   const [screen, setScreen] = useState<Screen>('home');
+  const [savedResult, setSavedResult] = useState<SaveResult>('synced');
+  const showSaved = (result: SaveResult) => {
+    setSavedResult(result);
+    setScreen('saved');
+  };
   // M4-2: any request refused for want of a session opens the login form over the app. The screen
   // underneath stays mounted, so a meal in progress survives a login.
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -56,55 +62,72 @@ export function App() {
 
   return (
     <ApiContext value={api}>
-      <main hidden={needsLogin}>
-        {screen === 'home' && (
-          // Keyed by logins, so what failed without a session loads again after one.
-          <section key={logins}>
-            <h1>{t('app.name')}</h1>
-            <button type="button" className="primary" onClick={() => setScreen('scaleMode')}>
-              {t('home.weighMeal')}
-            </button>
-            <button type="button" className="primary" onClick={() => setScreen('directEntry')}>
-              {t('home.logMeal')}
-            </button>
-            <TodayView />
-          </section>
-        )}
-        {screen === 'scaleMode' && (
-          <WithCatalog>
-            {(catalog) => (
-              <ScaleMode
-                catalog={catalog}
-                onSaved={() => setScreen('saved')}
-                onCancel={() => setScreen('home')}
-              />
-            )}
-          </WithCatalog>
-        )}
-        {screen === 'directEntry' && (
-          <WithCatalog>
-            {(catalog) => (
-              <DirectEntry
-                catalog={catalog}
-                onSaved={() => leaveDirectEntry('saved')}
-                onCancel={() => leaveDirectEntry('home')}
-                {...(resume ? { resume } : {})}
-              />
-            )}
-          </WithCatalog>
-        )}
-        {screen === 'saved' && (
-          <section>
-            <h1 role="status">{t('saved.title')}</h1>
-            <button type="button" className="primary" onClick={() => setScreen('home')}>
-              {t('saved.done')}
-            </button>
-          </section>
-        )}
-      </main>
-      {needsLogin && <Login onLoggedIn={loggedIn} />}
+      <OutboxProvider>
+        <SyncAfterLogin logins={logins} />
+        <main hidden={needsLogin}>
+          {screen === 'home' && (
+            // Keyed by logins, so what failed without a session loads again after one.
+            <section key={logins}>
+              <h1>{t('app.name')}</h1>
+              <button type="button" className="primary" onClick={() => setScreen('scaleMode')}>
+                {t('home.weighMeal')}
+              </button>
+              <button type="button" className="primary" onClick={() => setScreen('directEntry')}>
+                {t('home.logMeal')}
+              </button>
+              <TodayView />
+            </section>
+          )}
+          {screen === 'scaleMode' && (
+            <WithCatalog>
+              {(catalog) => (
+                <ScaleMode
+                  catalog={catalog}
+                  onSaved={showSaved}
+                  onCancel={() => setScreen('home')}
+                />
+              )}
+            </WithCatalog>
+          )}
+          {screen === 'directEntry' && (
+            <WithCatalog>
+              {(catalog) => (
+                <DirectEntry
+                  catalog={catalog}
+                  onSaved={(result) => {
+                    setResume(undefined);
+                    showSaved(result);
+                  }}
+                  onCancel={() => leaveDirectEntry('home')}
+                  {...(resume ? { resume } : {})}
+                />
+              )}
+            </WithCatalog>
+          )}
+          {screen === 'saved' && (
+            <section>
+              <h1 role="status">{t('saved.title')}</h1>
+              {/* M5-9: kept on the device until the server has it. */}
+              {savedResult === 'pending' && <p>{t('saved.pending')}</p>}
+              <button type="button" className="primary" onClick={() => setScreen('home')}>
+                {t('saved.done')}
+              </button>
+            </section>
+          )}
+        </main>
+        {needsLogin && <Login onLoggedIn={loggedIn} />}
+      </OutboxProvider>
     </ApiContext>
   );
+}
+
+/** M5-9: meals that waited for a session are sent once logged in. */
+function SyncAfterLogin({ logins }: { logins: number }) {
+  const sync = useSync();
+  useEffect(() => {
+    if (logins > 0) void sync();
+  }, [logins, sync]);
+  return null;
 }
 
 /** Loads the catalog fresh (with the latest last-use times) before rendering its children. */

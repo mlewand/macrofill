@@ -8,6 +8,7 @@ import {
 import { createContext, useContext } from 'react';
 import { z } from 'zod';
 import type { DirectEntryState } from '../directEntry/state';
+import { idb } from './idb';
 
 /**
  * M5-8: the in-progress Direct Entry session, kept on the device so a page reload resumes it.
@@ -76,48 +77,26 @@ function parseState(state: z.infer<typeof draftSchema>): DirectEntryState {
   };
 }
 
-const DB_NAME = 'macrofill';
-const DB_VERSION = 1;
-const DRAFTS = 'drafts';
 const KEY = 'directEntry';
 
 /** The draft store on IndexedDB. Storage failures are swallowed: a draft is a convenience. */
 export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore {
-  let db: Promise<IDBDatabase> | undefined;
-  const open = () =>
-    (db ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const request = factory.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = () => request.result.createObjectStore(DRAFTS);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error('IndexedDB failed to open'));
-    }));
-
-  const run = async <T>(
-    mode: IDBTransactionMode,
-    request: (store: IDBObjectStore) => IDBRequest<T>,
-  ): Promise<T | undefined> => {
+  const run = idb(factory);
+  const quietly = async <T>(work: () => Promise<T>): Promise<T | undefined> => {
     try {
-      const database = await open();
-      return await new Promise<T>((resolve, reject) => {
-        const transaction = database.transaction(DRAFTS, mode);
-        const done = request(transaction.objectStore(DRAFTS));
-        transaction.oncomplete = () => resolve(done.result);
-        transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB failed'));
-        transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB aborted'));
-      });
+      return await work();
     } catch {
-      db = undefined;
       return undefined;
     }
   };
-
   return {
-    load: async () => parseDraft(await run('readonly', (store) => store.get(KEY))),
+    load: async () =>
+      parseDraft(await quietly(() => run('drafts', 'readonly', (store) => store.get(KEY)))),
     save: async (draft) => {
-      await run('readwrite', (store) => store.put(draft, KEY));
+      await quietly(() => run('drafts', 'readwrite', (store) => store.put(draft, KEY)));
     },
     clear: async () => {
-      await run('readwrite', (store) => store.delete(KEY));
+      await quietly(() => run('drafts', 'readwrite', (store) => store.delete(KEY)));
     },
   };
 }

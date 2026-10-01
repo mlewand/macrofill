@@ -79,7 +79,8 @@
   },
   "saved": {
     "title": "Meal saved",
-    "done": "Done"
+    "done": "Done",
+    "pending": "It's kept on this device and sent to your account as soon as there's a connection."
   },
   "nutrient": {
     "protein": "Protein",
@@ -108,6 +109,8 @@
     "confirmDelete": "Delete this meal from today?",
     "confirm": "Delete",
     "keep": "Keep",
-    "deleteFailed": "Couldn't delete the meal. Try again."
+    "deleteFailed": "Couldn't delete the meal. Try again.",
+    "pending": "Pending",
+    "pendingTitle": "Waiting to be sent"
   }
 }
