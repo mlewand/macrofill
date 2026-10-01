@@ -20,7 +20,7 @@ apps/api ──────────────────────► p
 - `domain` has no I/O, no clock and no randomness. Time and IDs come in as arguments. Its tsconfig sets `"lib": ["ES2022"]` and `"types": []`, so any DOM or Node API fails typecheck.
 - Byte decoding lives in `@mlewand/huajun-ble-scale`. `packages/scale` maps the library's readings to domain types and never parses frames itself; parser fixes go to the library.
 - `web` imports from `api` with `import type` only. `api` never imports `scale`.
-- HTTP handlers are thin: validate with `domain` zod schemas, resolve the user, call a service. All database access goes through repositories scoped by `ownerId`.
+- HTTP handlers are thin: validate with `domain` zod schemas, resolve the user, call a service. All database access goes through repositories scoped by `ownerId`, except the auth repository, which finds the user by username or session before there is one.
 - ESLint `no-restricted-imports` enforces the import rules per package; CI fails on violations.
 
 ## Tests
