@@ -139,6 +139,21 @@ const exempt: Record<string, string> = {
   'POST /api/login': 'opens a session for whoever has the password; no user data',
 };
 
+/**
+ * The route table as reviewed for ownership: each route with its number of handlers (Hono lists
+ * validators and middleware as handlers too). A handler added anywhere, also under an exempt route,
+ * changes it and fails the test until someone has checked it and updated this.
+ */
+const reviewedHandlers: Record<string, number> = {
+  'GET /api/health': 1,
+  'POST /api/login': 2,
+  'ALL /api/*': 2,
+  'GET /api/catalog': 1,
+  'POST /api/meals': 2,
+  'GET /api/today': 1,
+  'DELETE /api/consumption-entries/:id': 2,
+};
+
 describe('M4-3: ownership over the full route table', () => {
   let database: Database;
   let ctx: Context;
@@ -165,19 +180,21 @@ describe('M4-3: ownership over the full route table', () => {
     await database.close();
   });
 
-  // Every handler at /api or under it, whatever its method, ALL included.
-  const routes = [
-    ...new Set(
-      createApp({ db: {} as Db })
-        .routes.filter((r) => r.path === '/api' || r.path.startsWith('/api/'))
-        .map((r) => `${r.method} ${r.path}`),
-    ),
-  ];
+  // Every handler at /api or under it, whatever its method, ALL included; duplicates kept.
+  const handlers = createApp({ db: {} as Db })
+    .routes.filter((r) => r.path === '/api' || r.path.startsWith('/api/'))
+    .map((r) => `${r.method} ${r.path}`);
+  const routes = [...new Set(handlers)];
+  const count = (route: string) => handlers.filter((h) => h === route).length;
 
   it('M4-3: every route has an ownership fixture or a stated exemption', () => {
     expect(routes.length).toBeGreaterThan(Object.keys(exempt).length);
     const missing = routes.filter((route) => !(route in fixtures) && !(route in exempt));
     expect(missing, 'routes without an ownership fixture').toEqual([]);
+    // Duplicates too: a second handler under a covered or exempt route needs a look as well.
+    expect(Object.fromEntries(routes.map((route) => [route, count(route)]))).toEqual(
+      reviewedHandlers,
+    );
     // And no fixture for a route that's gone.
     expect(Object.keys(fixtures).filter((route) => !routes.includes(route))).toEqual([]);
   });
