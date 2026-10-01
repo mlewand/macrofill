@@ -64,7 +64,7 @@ describe('outbox store (M5-9)', () => {
       },
     } as unknown as IDBFactory;
     const store = indexedDbOutbox(broken);
-    await expect(store.add(outboxItem(1))).rejects.toThrow('blocked');
+    await expect(store.add(outboxItem(1))).rejects.toThrow('unavailable');
     await expect(store.all()).resolves.toEqual([]);
   });
 });

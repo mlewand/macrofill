@@ -16,11 +16,23 @@ export type Run = <T>(
  * Runs one request per transaction on the app's database, opened on first use. Rejects when
  * IndexedDB fails (blocked, full, unavailable); the next call tries to open it again.
  */
+/**
+ * IndexedDB can't be used at all here (no global, or opening is refused outright, as in some
+ * private modes). Unlike a failed or blocked open, nothing can have been kept, or come back.
+ */
+export class IndexedDbUnavailable extends Error {}
+
 export function idb(factory: IDBFactory): Run {
   let db: Promise<IDBDatabase> | undefined;
   const open = () =>
     (db ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const request = factory.open(DB_NAME, DB_VERSION);
+      let request: IDBOpenDBRequest;
+      try {
+        request = factory.open(DB_NAME, DB_VERSION);
+      } catch (error) {
+        reject(new IndexedDbUnavailable('IndexedDB is unavailable', { cause: error }));
+        return;
+      }
       request.onupgradeneeded = () => {
         for (const name of STORES) {
           if (!request.result.objectStoreNames.contains(name)) {

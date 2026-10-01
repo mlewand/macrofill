@@ -8,7 +8,7 @@ import {
 import { createContext, useContext } from 'react';
 import { z } from 'zod';
 import type { DirectEntryState } from '../directEntry/state';
-import { idb } from './idb';
+import { IndexedDbUnavailable, idb } from './idb';
 
 /**
  * M5-8: the in-progress Direct Entry session, kept on the device so a page reload resumes it.
@@ -99,8 +99,9 @@ export function indexedDbDraftStore(factory: IDBFactory = indexedDB): DraftStore
     try {
       await work();
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      // Unavailable: nothing is kept, and nothing can come back after a reload either.
+      return error instanceof IndexedDbUnavailable;
     }
   };
   return {

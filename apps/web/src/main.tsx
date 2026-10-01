@@ -5,11 +5,12 @@ import { HuajunDriver } from '@macrofill/scale/huajun';
 import { App } from './App';
 import './i18n';
 import { OutboxStoreContext } from './outbox/Outbox';
-import { indexedDbOutbox } from './outbox/store';
 import { ScaleContext, scaleDriverFactory } from './scale';
-import { DraftContext, indexedDbDraftStore } from './storage/drafts';
+import { deviceStores } from './storage/device';
+import { DraftContext } from './storage/drafts';
 import './styles.css';
 
+const stores = deviceStores();
 const container = document.getElementById('root');
 if (container === null) throw new Error('Missing #root element');
 
@@ -17,8 +18,8 @@ void scaleDriverFactory(() => new HuajunDriver()).then((createScaleDriver) =>
   createRoot(container).render(
     <StrictMode>
       <ApiContext value={createHttpApi()}>
-        <DraftContext value={indexedDbDraftStore()}>
-          <OutboxStoreContext value={indexedDbOutbox()}>
+        <DraftContext value={stores.drafts}>
+          <OutboxStoreContext value={stores.outbox}>
             <ScaleContext value={createScaleDriver}>
               <App />
             </ScaleContext>
