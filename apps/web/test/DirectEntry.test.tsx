@@ -1,7 +1,7 @@
 import { localDay, type Catalog, type SaveMealRequest, type Today } from '@macrofill/domain';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { IDBFactory } from 'fake-indexeddb';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiContext, ApiError, type Api } from '../src/api/api';
 import { OutboxProvider, OutboxStoreContext, useSaveMeal } from '../src/outbox/Outbox';
 import { indexedDbOutbox, type OutboxStore } from '../src/outbox/store';
@@ -1133,6 +1133,16 @@ describe('saving through the outbox (M5-9)', () => {
   const todayNow = (): Promise<Today> =>
     Promise.resolve({ ...emptyToday, day: localDay(new Date(), emptyToday.timezone) });
 
+  /**
+   * The fixture meals' day, for the offline list (today's only): 2026-01-15, 07:30 UTC. Only `Date`
+   * is faked; it's still the 14th in Los Angeles (this device) and the 15th in Warsaw (the user).
+   */
+  const onFixtureDay = () =>
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-01-15T07:30:00.000Z') });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function renderWithOutbox(api: Api, outbox: OutboxStore, draft?: DirectEntryState) {
     const drafts = memoryDrafts(draft);
     render(
@@ -1268,6 +1278,7 @@ describe('saving through the outbox (M5-9)', () => {
   });
 
   it("M5-9: another user's waiting meals never show, also right after a switch (regression: #41)", async () => {
+    onFixtureDay();
     localStorage.setItem('macrofill.user', 'mlewand');
     try {
       const outbox = indexedDbOutbox(new IDBFactory());
@@ -1450,9 +1461,10 @@ describe('saving through the outbox (M5-9)', () => {
   });
 
   it('M5-9: offline, the waiting meals show newest first (regression: #41)', async () => {
+    onFixtureDay();
     const outbox = indexedDbOutbox(new IDBFactory());
     await outbox.add(outboxItem(1, '2026-01-15T07:00:00.000Z'));
-    await outbox.add(outboxItem(2, '2026-01-15T09:00:00.000Z'));
+    await outbox.add(outboxItem(2, '2026-01-15T07:20:00.000Z'));
     renderWithOutbox(
       fakeApi(() => Promise.reject(new TypeError('offline')), {
         today: () => Promise.reject(new TypeError('offline')),
@@ -1461,7 +1473,7 @@ describe('saving through the outbox (M5-9)', () => {
     );
     await screen.findByText(en.today.pendingTitle);
     const times = screen.getAllByRole('listitem').map((li) => li.querySelector('time')?.dateTime);
-    expect(times).toEqual(['2026-01-15T09:00:00.000Z', '2026-01-15T07:00:00.000Z']);
+    expect(times).toEqual(['2026-01-15T07:20:00.000Z', '2026-01-15T07:00:00.000Z']);
   });
 
   it("M5-9: if the server can't confirm the remembered user, their meals stay out of the server's day (regression: #41)", async () => {
@@ -1488,6 +1500,7 @@ describe('saving through the outbox (M5-9)', () => {
   });
 
   it('M5-9: offline, with the user remembered, what waits on the device still shows', async () => {
+    onFixtureDay();
     localStorage.setItem('macrofill.user', 'mlewand');
     try {
       const outbox = indexedDbOutbox(new IDBFactory());
@@ -1608,6 +1621,51 @@ describe('saving through the outbox (M5-9)', () => {
     }
   });
 
+  it('M4-1: coming back to the tab hides the day loaded before until the server confirms the user (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const me = vi
+        .fn<Api['me']>()
+        .mockResolvedValueOnce('mlewand')
+        .mockImplementation(() => new Promise<string>(() => undefined));
+      renderWithOutbox(
+        fakeApi(undefined, { today: todayNow, me }),
+        indexedDbOutbox(new IDBFactory()),
+      );
+      expect(await screen.findByRole('table')).toBeInTheDocument();
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(2));
+      // Another tab may have logged in as someone else: nothing of the earlier day shows meanwhile.
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(screen.getByText(en.app.loading)).toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it("M7-1: offline, only today's queued meals are listed under Today (regression: #41)", async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      const now = Date.now();
+      await outbox.add(outboxItem(1, new Date(now).toISOString()));
+      await outbox.add(outboxItem(2, new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString()));
+      renderWithOutbox(
+        fakeApi(() => Promise.reject(new TypeError('offline')), {
+          today: () => Promise.reject(new TypeError('offline')),
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+        outbox,
+      );
+      await screen.findByText(en.today.pendingTitle);
+      expect(screen.getAllByText(en.today.pending)).toHaveLength(1);
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-9: coming back to the tab hides queued meals until the server confirms the user again (regression: #41)', async () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {
@@ -1636,6 +1694,7 @@ describe('saving through the outbox (M5-9)', () => {
   });
 
   it("M5-9: offline, queued meals show in the user's timezone from the last time Today loaded (regression: #41)", async () => {
+    onFixtureDay();
     localStorage.setItem('macrofill.timezone:mlewand', 'Europe/Warsaw');
     try {
       const outbox = indexedDbOutbox(new IDBFactory());
@@ -1655,6 +1714,7 @@ describe('saving through the outbox (M5-9)', () => {
   });
 
   it("M5-9: offline, another user's remembered timezone is not used (regression: #41)", async () => {
+    onFixtureDay();
     localStorage.clear();
     try {
       // Someone else used Today on this device (Warsaw)...
@@ -1751,6 +1811,7 @@ describe('saving through the outbox (M5-9)', () => {
   });
 
   it("M5-9: while the server is being asked who's logged in, Today's offline view lists nothing (regression: #41)", async () => {
+    onFixtureDay();
     localStorage.setItem('macrofill.user', 'mlewand');
     try {
       const outbox = indexedDbOutbox(new IDBFactory());
@@ -1804,6 +1865,7 @@ describe('saving through the outbox (M5-9)', () => {
   });
 
   it('M5-9: offline, Today still lists what waits on the device', async () => {
+    onFixtureDay();
     const outbox = indexedDbOutbox(new IDBFactory());
     await outbox.add(outboxItem(1));
     renderWithOutbox(

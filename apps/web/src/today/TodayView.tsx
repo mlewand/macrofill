@@ -1,4 +1,5 @@
 import {
+  localDay,
   targetProgress,
   withPending,
   type NutrientProgress,
@@ -75,6 +76,12 @@ export function TodayView(props: {
   // Offline with the user unconfirmed, an earlier day isn't shown: the remembered user's queued
   // meals are, on their own.
   if (failed || (!ready && unreachable)) {
+    // Today's only (M7-1), in the user's timezone: a meal queued before midnight isn't today's.
+    const timezone = offlineTimeZone();
+    const day = localDay(new Date(), timezone);
+    const pendingToday = offline.pending.filter(
+      (entry) => localDay(entry.eatenAt, timezone) === day,
+    );
     return (
       <section aria-labelledby="today-title">
         <h2 id="today-title">{t('today.title')}</h2>
@@ -84,17 +91,17 @@ export function TodayView(props: {
         <button type="button" className="secondary" onClick={reload}>
           {t('app.retry')}
         </button>
-        <Refused items={offline.refused} timezone={offlineTimeZone()} />
+        <Refused items={offline.refused} timezone={timezone} />
         {/* Offline, the day can't load, but what's waiting on this device can be shown. */}
-        {offline.pending.length > 0 && (
+        {pendingToday.length > 0 && (
           <>
             <h3>{t('today.pendingTitle')}</h3>
             <ul className="entries">
-              {offline.pending.map((entry) => (
+              {pendingToday.map((entry) => (
                 <Entry
                   key={entry.id}
                   entry={{ ...entry, pending: true }}
-                  timezone={offlineTimeZone()}
+                  timezone={timezone}
                   onDeleted={reload}
                 />
               ))}
@@ -104,7 +111,9 @@ export function TodayView(props: {
       </section>
     );
   }
-  if (today === undefined) return <p role="status">{t('app.loading')}</p>;
+  // While the server checks the user again (back on the tab), nothing of the day loaded before
+  // shows: another tab may have logged in as someone else (M4-1).
+  if (today === undefined || !ready) return <p role="status">{t('app.loading')}</p>;
 
   const { entries, totals } = withPending(today, pending);
   return (
