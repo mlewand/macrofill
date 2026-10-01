@@ -751,6 +751,26 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: coming back to the tab checks who is logged in again (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      const me = vi.fn<Api['me']>().mockResolvedValueOnce('mlewand').mockResolvedValue('other');
+      renderWithDrafts(drafts.store, baseFakeApi({ catalog: () => Promise.resolve(catalog), me }));
+      await screen.findByText('Step 2 of 2');
+      await vi.waitFor(() => expect(me).toHaveBeenCalledTimes(1));
+      // Another tab logged in as someone else, with no storage event to say so.
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
+      expect(drafts.kept()).toBeUndefined();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: an answer about the user that a login made stale is ignored (regression: #37)', async () => {
     localStorage.clear();
     try {
