@@ -80,7 +80,9 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
       });
       if (!kept && !(await drafts.clear())) return false;
     }
-    return belongsTo(owner, lastUser());
+    // Sent only for a known user, and only while that's still who's logged in.
+    const now = lastUser();
+    return (owner ?? now) !== undefined && belongsTo(owner, now);
   };
   // Saved: the kept session goes, tried twice. If it still came back after a reload, it's frozen on
   // the request just saved, and resending that is harmless (M4-6).
@@ -110,7 +112,7 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
       catalog={catalog}
       dispatch={dispatch}
       onSaved={() => void saved()}
-      owner={owner}
+      owner={owner ?? lastUser()}
       onDiscard={discard}
       sent={sent}
       onSend={keepSent}

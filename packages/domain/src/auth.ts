@@ -13,3 +13,8 @@ export const loginRequestSchema = z.object({
 });
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+/** `GET /me`: who the session belongs to. */
+export const meSchema = z.object({ username: z.string().min(1) });
+
+export type Me = z.infer<typeof meSchema>;

@@ -180,7 +180,7 @@ function Session(props: {
             if (action.type === 'undo' || action.type === 'editGrams') dispatch(action);
           }}
           onSaved={props.onSaved}
-          owner={owner}
+          owner={owner ?? lastUser()}
         />
       </>
     );

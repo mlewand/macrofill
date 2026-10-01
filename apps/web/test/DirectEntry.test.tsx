@@ -445,7 +445,13 @@ describe('Direct Entry across a reload (M5-8)', () => {
     try {
       const drafts = memoryDrafts();
       await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
-      renderWithDrafts(drafts.store);
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          me: () => Promise.resolve('other'),
+        }),
+      );
       expect(await screen.findByRole('button', { name: en.home.logMeal })).toBeInTheDocument();
       expect(drafts.kept()).toBeUndefined();
     } finally {
@@ -640,6 +646,35 @@ describe('Direct Entry across a reload (M5-8)', () => {
     await screen.findByText(en.saved.title);
     expect(drafts.store.clear).toHaveBeenCalledTimes(2);
     expect(drafts.kept()).toBeUndefined();
+  });
+
+  it('M5-8: the app learns from the server who is logged in, and saves name them (regression: #37)', async () => {
+    localStorage.clear();
+    const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+    const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+    renderWithDrafts(drafts.store, fakeApi(saveMeal));
+    await vi.waitFor(() => expect(localStorage.getItem('macrofill.user')).toBe('mlewand'));
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    await screen.findByText(en.saved.title);
+    expect(saveMeal.mock.calls[0]![0].username).toBe('mlewand');
+    localStorage.clear();
+  });
+
+  it('M5-8: a save whose user is unknown is not sent (regression: #37)', async () => {
+    localStorage.clear();
+    const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+    const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+    renderWithDrafts(
+      drafts.store,
+      baseFakeApi({
+        catalog: () => Promise.resolve(catalog),
+        saveMeal,
+        me: () => Promise.reject(new TypeError('offline')),
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+    expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
+    expect(saveMeal).not.toHaveBeenCalled();
   });
 
   it('M5-8: drafts are stamped with the user who last logged in', async () => {

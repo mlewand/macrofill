@@ -83,6 +83,11 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
     expect(ofA.products.map((p) => p.id)).toContain(privateProductId);
   },
 
+  'GET /api/me': async ({ a, b }) => {
+    expect(await (await b.request('/api/me')).json()).toEqual({ username: userB.username });
+    expect(await (await a.request('/api/me')).json()).toEqual({ username: userA.username });
+  },
+
   'GET /api/today': async ({ a, b }) => {
     const ofB = todaySchema.parse(await (await b.request('/api/today')).json());
     expect(ofB.entries).toEqual([]);
@@ -152,6 +157,7 @@ const reviewedHandlers: Record<string, number> = {
   'POST /api/meals': 2,
   'GET /api/today': 1,
   'DELETE /api/consumption-entries/:id': 2,
+  'GET /api/me': 1,
 };
 
 describe('M4-3: ownership over the full route table', () => {

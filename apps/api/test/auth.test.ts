@@ -328,3 +328,25 @@ describe('password command (M4-1)', () => {
     expect(await hashPassword(TEST_PASSWORD)).not.toBe(await hashPassword(TEST_PASSWORD));
   });
 });
+
+describe('GET /api/me (M4-1)', () => {
+  let database: Database;
+
+  beforeEach(async () => {
+    database = await createMigratedTestDatabase();
+    await seed(database.db);
+  });
+
+  afterEach(async () => {
+    await database.close();
+  });
+
+  it('M4-1: says who the session belongs to, so the app can bind its saves to them (regression: #37)', async () => {
+    const app = createApp({ db: database.db });
+    const authed = withCookie(app, await logIn(app, database.db));
+    const res = await authed.request('/api/me');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ username: seedUsername });
+    expect((await app.request('/api/me')).status).toBe(401);
+  });
+});
