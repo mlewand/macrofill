@@ -131,7 +131,9 @@ export function App() {
   const [draftLoaded, setDraftLoaded] = useState(false);
   // A kept session waiting for the user to be known before it opens (see the draft load).
   const [resumeWaiting, setResumeWaiting] = useState(false);
-  if (resumeWaiting && user !== undefined) {
+  // Once /api/me has answered (it drops a session stamped for someone else) or can't be reached
+  // (offline, the remembered user's stamp decides), and someone is known.
+  if (resumeWaiting && meSettled && user !== undefined) {
     setResumeWaiting(false);
     // Unless a login as someone else dropped it meanwhile.
     if (resume) setScreen('directEntry');
@@ -147,13 +149,9 @@ export function App() {
         return;
       }
       setResume(draft);
-      // With nobody known yet, it waits: whoever turns out to be logged in may not be its owner.
-      // Once known, a session stamped for someone else is dropped (see /api/me and userIs).
-      if (lastUser() === undefined) {
-        setResumeWaiting(true);
-        return;
-      }
-      setScreen('directEntry');
+      // It waits for the server to say who's logged in: the remembered user may be stale (another
+      // tab may have logged in without saving it). See the check above.
+      setResumeWaiting(true);
     });
     return () => {
       current = false;
