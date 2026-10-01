@@ -87,8 +87,11 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
     const ofB = todaySchema.parse(await (await b.request('/api/today')).json());
     expect(ofB.entries).toEqual([]);
     expect(ofB.totals.kcal).toBe(0);
+    // B has no targets of their own; A's never show.
+    expect(ofB.targets).toEqual({ protein: null, fat: null, carbs: null, fibre: null, kcal: null });
     const ofA = todaySchema.parse(await (await a.request('/api/today')).json());
     expect(ofA.entries.map((e) => e.id)).toEqual([mealOfA.consumptionEntry.id]);
+    expect(Object.values(ofA.targets).some((v) => v !== null)).toBe(true);
   },
 
   'DELETE /api/consumption-entries/:id': async ({ a, b }) => {
