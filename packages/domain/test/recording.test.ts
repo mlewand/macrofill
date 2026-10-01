@@ -21,9 +21,9 @@ const recording: ScaleRecording = {
   ],
   droppedFrames: 0,
   events: [
-    { type: 'start', at: 1300 },
-    { type: 'correct', at: 1400, grams: 20.5 },
-    { type: 'next', at: 1500 },
+    { type: 'start', at: 1300, afterFrames: 1 },
+    { type: 'correct', at: 1400, afterFrames: 1, grams: 20.5 },
+    { type: 'next', at: 1500, afterFrames: 2 },
   ],
 };
 
@@ -39,10 +39,11 @@ describe('scale recordings (M3-11)', () => {
 
   it('M3-11: events are the tracker events, with typed grams only on a correction', () => {
     const bad = [
-      [{ type: 'reading', at: 1 }],
-      [{ type: 'correct', at: 1 }],
-      [{ type: 'correct', at: 1, grams: -1 }],
-      [{ type: 'next', at: 1, grams: 3 }],
+      [{ type: 'reading', at: 1, afterFrames: 0 }],
+      [{ type: 'correct', at: 1, afterFrames: 0 }],
+      [{ type: 'correct', at: 1, afterFrames: 0, grams: -1 }],
+      [{ type: 'next', at: 1, afterFrames: 0, grams: 3 }],
+      [{ type: 'next', at: 1 }],
     ];
     for (const events of bad) {
       expect(

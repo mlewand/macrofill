@@ -83,8 +83,8 @@ describe('SessionRecorder (M3-11)', () => {
       },
     ]);
     expect(recording.events).toEqual([
-      { type: 'start', at: start + 10 },
-      { type: 'correct', grams: 20.5, at: start + 300 },
+      { type: 'start', at: start + 10, afterFrames: 1 },
+      { type: 'correct', grams: 20.5, at: start + 300, afterFrames: 2 },
     ]);
   });
 
@@ -176,8 +176,8 @@ describe('replay (M3-11)', () => {
       frames: [frame(0, 312), frame(225, 310)],
       droppedFrames: 0,
       events: [
-        { type: 'start', at: 100 },
-        { type: 'next', at: 300 },
+        { type: 'start', at: 100, afterFrames: 1 },
+        { type: 'next', at: 300, afterFrames: 2 },
       ],
     };
     expect(replaySession(recording).steps).toEqual([
@@ -185,6 +185,26 @@ describe('replay (M3-11)', () => {
     ]);
     // A replay with other settings, e.g. to try a tuning, can say so.
     expect(replaySession(recording, defaultTrackerConfig).pending?.type).toBe('needsCorrection');
+  });
+
+  it('M3-11: replay keeps the order of events and frames that share a timestamp (regression: #38)', () => {
+    // Start came before the 400 g reading, at the same quantized time: the baseline is 312.
+    const recorder = new SessionRecorder({
+      captureSessionId: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
+      driverId: 'mock',
+      trackerConfig: defaultTrackerConfig,
+    });
+    const reading = (timestamp: number, grams: number): ScaleReading => ({
+      grams,
+      stable: true,
+      timestamp,
+      receivedAt: timestamp,
+      raw: new Uint8Array(0),
+    });
+    recorder.frame(reading(0, 312));
+    recorder.event({ type: 'start' }, 225);
+    recorder.frame(reading(225, 400));
+    expect(replaySession(recorder.recording()).baseline).toBe(312);
   });
 
   it('M3-11, M3-14: frames in another unit replay without grams', () => {

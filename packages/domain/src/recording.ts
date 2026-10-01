@@ -29,18 +29,22 @@ export const trackerConfigSchema = z
   })
   .strict();
 
-/** A user event given to the weight tracker, at `at` ms on the monotonic clock. */
+/**
+ * A user event given to the weight tracker, at `at` ms on the monotonic clock, after the first
+ * `afterFrames` frames: the exact order, also when an event and a frame share a timestamp.
+ */
+const eventTiming = { at: z.number(), afterFrames: z.number().int().nonnegative() };
 export const recordedEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.enum(['start', 'next', 'confirm', 'skip', 'undo']), at: z.number() }).strict(),
+  z.object({ type: z.enum(['start', 'next', 'confirm', 'skip', 'undo']), ...eventTiming }).strict(),
   z
-    .object({ type: z.literal('correct'), at: z.number(), grams: z.number().nonnegative() })
+    .object({ type: z.literal('correct'), ...eventTiming, grams: z.number().nonnegative() })
     .strict(),
 ]);
 
 /**
  * M3-11: everything a Scale Mode capture session got from the scale (frames the parser rejected
- * included, with an empty reading) and the user, so it can be
- * replayed (re-parsed with the library's current parser) and investigated.
+ * included, with an empty reading) and the user, so it can be replayed (re-parsed with the
+ * library's current parser) and investigated.
  */
 export const scaleRecordingSchema = z.object({
   /** The capture session: the prepared meal's id. */

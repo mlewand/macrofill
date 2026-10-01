@@ -86,7 +86,7 @@ export class SessionRecorder {
 
   /** A user event given to the tracker at `at` ms on the readings' monotonic clock. */
   event(event: UserEvent, at: number): void {
-    this.#events.push({ ...event, at });
+    this.#events.push({ ...event, at, afterFrames: this.#frames.length });
   }
 
   recording(): ScaleRecording {
@@ -107,34 +107,28 @@ export class SessionRecorder {
  * without bytes (from the mock) give their stored reading.
  */
 export function replayReadings(recording: ScaleRecording): ScaleReading[] {
-  return recording.frames.flatMap((frame): ScaleReading[] => {
-    const raw = fromBase64(frame.raw);
-    if (raw.length === 0) {
-      const reading: ScaleReading = {
-        timestamp: frame.timestamp,
-        receivedAt: frame.receivedAt,
-        raw,
-      };
-      if (frame.reading.grams !== undefined) reading.grams = frame.reading.grams;
-      if (frame.reading.stable !== undefined) reading.stable = frame.reading.stable;
-      return [reading];
-    }
-    const parsed = parseFrame(raw);
-    if (!parsed.ok) return [];
-    return [
-      toScaleReading(
-        toReading(parsed.frame, {
-          receivedAt: frame.receivedAt,
-          receivedAtMonotonic: frame.timestamp,
-        }),
-      ),
-    ];
-  });
+  return recording.frames.flatMap((frame) => replayFrame(frame) ?? []);
+}
+
+/** One frame re-parsed, or undefined if the parser rejects it. */
+function replayFrame(frame: RecordedFrame): ScaleReading | undefined {
+  const raw = fromBase64(frame.raw);
+  if (raw.length === 0) {
+    const reading: ScaleReading = { timestamp: frame.timestamp, receivedAt: frame.receivedAt, raw };
+    if (frame.reading.grams !== undefined) reading.grams = frame.reading.grams;
+    if (frame.reading.stable !== undefined) reading.stable = frame.reading.stable;
+    return reading;
+  }
+  const parsed = parseFrame(raw);
+  if (!parsed.ok) return undefined;
+  return toScaleReading(
+    toReading(parsed.frame, { receivedAt: frame.receivedAt, receivedAtMonotonic: frame.timestamp }),
+  );
 }
 
 /**
  * M3-11: the tracker's state after replaying a recording: its re-parsed readings and its user
- * events, in the order they happened (a reading first, when both have the same time). With the
+ * events, in the order they happened. With the
  * tracker settings the session ran with, unless `config` says otherwise (e.g. to try a tuning).
  */
 export function replaySession(
@@ -142,10 +136,12 @@ export function replaySession(
   config: Partial<TrackerConfig> = recording.trackerConfig,
 ): TrackerState {
   let state = createTracker({ ...recording.trackerConfig, ...config });
-  const events = [...recording.events].sort((a, b) => a.at - b.at);
+  // In the order they happened: each event after the frames recorded before it. Stable, so events
+  // between the same two frames keep their order.
+  const events = [...recording.events].sort((a, b) => a.afterFrames - b.afterFrames);
   let next = 0;
-  const userEventsUntil = (time: number) => {
-    while (next < events.length && events[next]!.at < time) {
+  const userEventsUntil = (frames: number) => {
+    while (next < events.length && events[next]!.afterFrames <= frames) {
       const event = events[next++]!;
       state = track(
         state,
@@ -153,10 +149,11 @@ export function replaySession(
       );
     }
   };
-  for (const reading of replayReadings(recording)) {
-    userEventsUntil(reading.timestamp);
-    state = track(state, { type: 'reading', reading });
-  }
+  recording.frames.forEach((frame, index) => {
+    userEventsUntil(index);
+    const reading = replayFrame(frame);
+    if (reading) state = track(state, { type: 'reading', reading });
+  });
   userEventsUntil(Infinity);
   return state;
 }
