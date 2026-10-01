@@ -1,5 +1,6 @@
 import { devices, expect, test, type Page } from '@playwright/test';
 import en from '../src/i18n/en.json' with { type: 'json' };
+import { expectLoggedIn, logIn } from './auth';
 
 // Uses the shared database, so it counts entries relative to what's already there. Playwright
 // runs one worker (playwright.config.ts), so no other test adds meals meanwhile.
@@ -38,11 +39,16 @@ test('M5-7, M7-1 to M7-5: a meal saved on the phone shows in Today, on the table
 
   // M7-5: a tablet sees it after loading the page.
   const { baseURL } = test.info().project.use;
+  // Its own context, logged out: the tablet logs in by itself (M4-1).
   const tablet = await browser.newContext({
     ...devices['Galaxy Tab S4'],
     ...(baseURL === undefined ? {} : { baseURL }),
+    storageState: { cookies: [], origins: [] },
   });
   const tabletPage = await tablet.newPage();
+  await tabletPage.goto('/');
+  await logIn(tabletPage);
+  await expectLoggedIn(tabletPage);
   expect(await openToday(tabletPage)).toBe(before + 1);
   await expect(entries(tabletPage).first()).toContainText('Curd');
   await expect(entries(tabletPage).first().locator('time')).toHaveText(time ?? '');
