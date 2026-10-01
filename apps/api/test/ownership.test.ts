@@ -132,7 +132,7 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
 
   'POST /api/events': async ({ a, b, db }) => {
     // A's event; nothing reads events back, so B can only send one with the same id: not found,
-    // as for any of A's resources (regression: #46).
+    // as for any of A's resources. Regression test in events.test.ts.
     const event = {
       id: '4b9a6f2c-0d8e-4a7f-9e5b-6c7d8e9f0a1b',
       clientSessionId: '5c0b7a3d-1e9f-4b8a-8f6c-7d8e9f0a1b2c',

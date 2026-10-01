@@ -104,4 +104,31 @@ describe('POST /api/events (M4-10)', () => {
     expect((await post({ events: ids.slice(1).map((id) => event(id)) })).status).toBe(204);
     expect(await rows()).toHaveLength(MAX_EVENT_BATCH);
   });
+
+  it("M4-3, M4-10: a batch naming another user's event id is not found, and nothing of it is stored (regression: #46)", async () => {
+    const first = event('f1e2d3c4-b5a6-4978-8a9b-0c1d2e3f4a51');
+    expect((await post({ events: [first] })).status).toBe(204);
+    await database.db.execute(
+      sql`insert into users (id, username, timezone) values ('6c1f0e2a-3b4d-4e5f-8a9b-0c1d2e3f4a5b', 'other', 'Europe/Warsaw')`,
+    );
+    const other = await signedIn(createApp({ db: database.db }), database.db, 'other');
+    const res = await other.request('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        events: [
+          event('f1e2d3c4-b5a6-4978-8a9b-0c1d2e3f4a52'),
+          {
+            ...first,
+            props: { inputMethod: 'direct', step: 1, durationMs: 1, weightSource: 'manual' },
+          },
+        ],
+      }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not_found' });
+    const stored = await rows();
+    expect(stored.map((r) => [r.id, r.owner_id])).toEqual([[first.id, owner.id]]);
+    expect(stored[0]!.props).toEqual(first.props);
+  });
 });
