@@ -170,6 +170,10 @@ export function App() {
   // Nothing starts before it's known whose it is: a meal must never belong to nobody (M5-8).
   if (!draftLoaded || (user === undefined && !meSettled)) return null;
 
+  // A meal must belong to someone (M5-8), and a kept one waiting for the server's answer must not
+  // be opened by hand meanwhile: it might be someone else's.
+  const noStart = user === undefined || resumeWaiting;
+
   return (
     <ApiContext value={api}>
       <main hidden={needsLogin}>
@@ -195,7 +199,7 @@ export function App() {
             <button
               type="button"
               className="primary"
-              disabled={user === undefined}
+              disabled={noStart}
               onClick={() => setScreen('scaleMode')}
             >
               {t('home.weighMeal')}
@@ -203,7 +207,7 @@ export function App() {
             <button
               type="button"
               className="primary"
-              disabled={user === undefined}
+              disabled={noStart}
               onClick={() => setScreen('directEntry')}
             >
               {t('home.logMeal')}

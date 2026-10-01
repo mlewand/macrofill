@@ -849,6 +849,22 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: while a kept session waits for the server, no meal can be started (regression: #37)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const drafts = memoryDrafts();
+      await drafts.store.save({ state: draftAtMilk, username: 'mlewand' });
+      const me = vi.fn<Api['me']>(() => new Promise<string>(() => undefined));
+      renderWithDrafts(drafts.store, baseFakeApi({ catalog: () => Promise.resolve(catalog), me }));
+      const logMeal = await screen.findByRole('button', { name: en.home.logMeal });
+      await vi.waitFor(() => expect(me).toHaveBeenCalled());
+      expect(logMeal).toBeDisabled();
+      expect(screen.getByRole('button', { name: en.home.weighMeal })).toBeDisabled();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: offline, a kept session of the remembered user still resumes', async () => {
     localStorage.setItem('macrofill.user', 'mlewand');
     try {
