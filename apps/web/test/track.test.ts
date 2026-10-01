@@ -147,4 +147,22 @@ describe('usage tracking (M7-8)', () => {
     await tracker.flush();
     expect(send.mock.calls[1]![0].map((e) => e.name)).toEqual(['step_skipped']);
   });
+
+  it("M7-8: leaving the page sends what isn't on its way yet at once, without waiting for a send in flight (regression: #52)", () => {
+    let finish!: () => void;
+    const send = vi
+      .fn<(events: UsageEvent[]) => Promise<void>>()
+      .mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+      .mockResolvedValue(undefined);
+    const { tracker } = setup(send);
+    tracker.track('flow_started', { inputMethod: 'scale' });
+    // The page is hidden: its batch is on its way.
+    void tracker.flush();
+    // Then left: the last event can't wait for that send to finish.
+    tracker.track('flow_abandoned', { inputMethod: 'scale', durationMs: 1000 });
+    tracker.leave();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]![0].map((e) => e.name)).toEqual(['flow_abandoned']);
+    finish();
+  });
 });

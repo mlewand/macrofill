@@ -51,8 +51,9 @@ export function App() {
     const hidden = () => {
       if (document.visibilityState === 'hidden') void tracker.flush();
     };
-    // Leaving the page: the last events go out too (Scale Mode's flow abandoned, for one).
-    const leaving = () => void tracker.flush();
+    // Leaving the page: the last events go out at once (Scale Mode's flow abandoned, for one),
+    // also while the batch sent when the page was hidden is still on its way.
+    const leaving = () => tracker.leave();
     document.addEventListener('visibilitychange', hidden);
     window.addEventListener('pagehide', leaving);
     return () => {

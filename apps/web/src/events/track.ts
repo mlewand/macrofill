@@ -8,6 +8,11 @@ export interface UsageTracker {
   track: Track;
   /** Sends what's waiting now (e.g. when the page is hidden). Never rejects. */
   flush: () => Promise<void>;
+  /**
+   * The page is being left: sends at once what isn't on its way yet, without waiting for a send in
+   * flight, which may never finish now.
+   */
+  leave: () => void;
 }
 
 /**
@@ -35,22 +40,35 @@ export function createUsageTracker(options: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let sending: Promise<void> | undefined;
 
+  /** Events a send has taken and not finished yet. */
+  const inFlight = new Set<UsageEvent>();
+  const sendBatch = async (batch: UsageEvent[]): Promise<void> => {
+    for (const event of batch) inFlight.add(event);
+    try {
+      await send(batch);
+      queue = queue.filter((e) => !batch.includes(e));
+    } catch (error) {
+      // Kept for the next send, unless retrying can't help.
+      if (!retryable(error)) queue = queue.filter((e) => !batch.includes(e));
+    } finally {
+      for (const event of batch) inFlight.delete(event);
+    }
+  };
+
+  const leave = () => {
+    clearTimeout(timer);
+    timer = undefined;
+    const batch = queue.filter((e) => !inFlight.has(e)).slice(0, 100);
+    if (batch.length > 0) void sendBatch(batch);
+  };
+
   const flush = async (): Promise<void> => {
     clearTimeout(timer);
     timer = undefined;
     // One send at a time: a flush meanwhile waits, then sends what's still left.
     while (sending) await sending;
     if (queue.length === 0) return;
-    const batch = queue.slice(0, 100);
-    const current = (async () => {
-      try {
-        await send(batch);
-        queue = queue.filter((e) => !batch.includes(e));
-      } catch (error) {
-        // Kept for the next send, unless retrying can't help.
-        if (!retryable(error)) queue = queue.filter((e) => !batch.includes(e));
-      }
-    })();
+    const current = sendBatch(queue.slice(0, 100));
     sending = current;
     await current;
     if (sending === current) sending = undefined;
@@ -77,7 +95,7 @@ export function createUsageTracker(options: {
     }
   };
 
-  return { track, flush };
+  return { track, flush, leave };
 }
 
 /** Tracks nothing: the default, so components work without a provider. */
