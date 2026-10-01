@@ -85,18 +85,19 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
 
 /**
  * A kept session, if it still fits the catalog: its recipe with the same steps, in the same order.
- * Products gone from the catalog since are unpicked.
+ * Products no longer in the catalog under the step's ingredient class are unpicked.
  */
 function resumable(draft: DirectEntryState, catalog: Catalog): DirectEntryState | undefined {
   const recipe = catalog.recipes.find((r) => r.id === draft.recipe.id);
   const stepKey = (r: Recipe) => r.steps.map((s) => `${s.id}:${s.ingredientClassId}`).join();
   if (!recipe || stepKey(recipe) !== stepKey(draft.recipe)) return undefined;
-  const products = new Set(catalog.products.map((p) => p.id));
+  const classOf = new Map(catalog.products.map((p) => [p.id, p.ingredientClassId]));
   return {
     ...draft,
     recipe,
-    steps: draft.steps.map((step) =>
-      step.productId === undefined || products.has(step.productId)
+    steps: draft.steps.map((step, i) =>
+      step.productId === undefined ||
+      classOf.get(step.productId) === recipe.steps[i]!.ingredientClassId
         ? step
         : { ...step, productId: undefined },
     ),

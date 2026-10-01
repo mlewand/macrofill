@@ -343,7 +343,7 @@ describe('Home', () => {
         </ScaleContext>
       </ApiContext>,
     );
-    fireEvent.click(button(en.home.weighMeal));
+    fireEvent.click(await screen.findByRole('button', { name: en.home.weighMeal }));
     const recipes = await screen.findByRole('heading', { name: en.recipes.title });
     expect(within(recipes.parentElement!).getByRole('button', { name: 'Curd bowl' })).toBeVisible();
   });

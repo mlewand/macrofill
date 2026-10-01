@@ -82,12 +82,14 @@ function fakeApi(saveMeal?: Api['saveMeal']): Api {
   });
 }
 
-function renderApp(api = fakeApi()) {
+/** Renders the app and waits for its first screen (it shows once the kept session is known). */
+async function renderApp(api = fakeApi()) {
   render(
     <ApiContext value={api}>
       <App />
     </ApiContext>,
   );
+  await screen.findByRole('button', { name: en.home.logMeal });
   return api;
 }
 
@@ -102,7 +104,7 @@ const checkedProduct = () =>
     .map((r) => r.closest('label')?.textContent);
 
 async function openCurdBowl(api?: Api) {
-  const used = renderApp(api);
+  const used = await renderApp(api);
   click(en.home.logMeal);
   fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
   return used;
@@ -121,7 +123,7 @@ describe('Direct Entry', () => {
   });
 
   it('M5-1: the user picks a recipe from the seeded list', async () => {
-    renderApp();
+    await renderApp();
     click(en.home.logMeal);
     expect(await screen.findByRole('button', { name: 'Curd bowl' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sandwich' })).toBeInTheDocument();
@@ -353,7 +355,7 @@ describe('Direct Entry across a reload (M5-8)', () => {
   it('M5-8: every change to the session is kept, from picking the recipe on', async () => {
     const drafts = memoryDrafts();
     renderWithDrafts(drafts.store);
-    click(en.home.logMeal);
+    fireEvent.click(await screen.findByRole('button', { name: en.home.logMeal }));
     fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
     await vi.waitFor(() => expect(drafts.kept()).toMatchObject({ current: 0 }));
     typeGrams('200');
@@ -420,6 +422,37 @@ describe('Direct Entry across a reload (M5-8)', () => {
     renderWithDrafts(drafts.store);
     expect(await screen.findByRole('heading', { name: en.recipes.title })).toBeInTheDocument();
     expect(drafts.kept()).toBeUndefined();
+  });
+
+  it('M5-8: nothing can be started before the kept session has loaded (regression: #37)', async () => {
+    let loaded!: (draft: DirectEntryState) => void;
+    const store: DraftStore = {
+      load: () => new Promise((resolve) => (loaded = resolve)),
+      save: vi.fn(() => Promise.resolve()),
+      clear: vi.fn(() => Promise.resolve()),
+    };
+    renderWithDrafts(store);
+    expect(screen.queryByRole('button', { name: en.home.logMeal })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: en.home.weighMeal })).not.toBeInTheDocument();
+    loaded(draftAtMilk);
+    expect(await screen.findByText('Step 2 of 2')).toBeInTheDocument();
+  });
+
+  it('M5-8: a kept product that now belongs to another ingredient class is unpicked (regression: #37)', async () => {
+    const drafts = memoryDrafts({
+      ...draftAtMilk,
+      current: 0,
+      // A milk product at the curd step.
+      steps: [
+        { productId: '2fb48689-9acc-4a8a-9b1f-f0bf8e44b474', grams: '150', skipped: false },
+        draftAtMilk.steps[1]!,
+      ],
+    });
+    renderWithDrafts(drafts.store);
+    await screen.findByText('Step 1 of 2');
+    expect(checkedProduct()).toEqual([]);
+    click(en.step.next);
+    expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
   });
 
   it('M5-8: a kept product that is gone from the catalog is unpicked', async () => {

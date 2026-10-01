@@ -16,10 +16,15 @@ export function App() {
   // M5-8: a Direct Entry session kept from before a reload opens again.
   const drafts = useDraftStore();
   const [resume, setResume] = useState<DirectEntryState>();
+  // Nothing is shown until it's known whether there's a kept session: a meal started meanwhile
+  // would overwrite it. IndexedDB answers in milliseconds.
+  const [draftLoaded, setDraftLoaded] = useState(false);
   useEffect(() => {
     let current = true;
     void drafts.load().then((draft) => {
-      if (!current || !draft) return;
+      if (!current) return;
+      setDraftLoaded(true);
+      if (!draft) return;
       setResume(draft);
       setScreen('directEntry');
     });
@@ -36,6 +41,8 @@ export function App() {
     // index.html has a static title only for the first paint.
     document.title = t('app.name');
   }, [t]);
+
+  if (!draftLoaded) return null;
 
   return (
     <main>
