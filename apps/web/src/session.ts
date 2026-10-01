@@ -4,11 +4,14 @@
 
 const KEY = 'macrofill.user';
 
+/** This tab's copy, for when local storage is unavailable (blocked, private mode). */
+let remembered: string | undefined;
+
 export function lastUser(): string | undefined {
   try {
     return localStorage.getItem(KEY) ?? undefined;
   } catch {
-    return undefined;
+    return remembered;
   }
 }
 
@@ -22,6 +25,7 @@ export function onUserChangedElsewhere(cb: (username: string) => void): () => vo
 }
 
 export function rememberUser(username: string): void {
+  remembered = username;
   try {
     localStorage.setItem(KEY, username);
   } catch {

@@ -665,6 +665,80 @@ describe('Direct Entry across a reload (M5-8)', () => {
     localStorage.clear();
   });
 
+  it('M5-8: without local storage, the user the server names still owns the saves (regression: #37)', async () => {
+    const blocked = () => {
+      throw new DOMException('blocked', 'SecurityError');
+    };
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
+    try {
+      const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithDrafts(drafts.store, fakeApi(saveMeal));
+      const save = await screen.findByRole('button', { name: en.summary.save });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      fireEvent.click(save);
+      await screen.findByText(en.saved.title);
+      expect(saveMeal.mock.calls[0]![0].username).toBe('mlewand');
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+    }
+  });
+
+  it('M5-8: an ownerless session never takes on a user who shows up later (regression: #37)', async () => {
+    localStorage.clear();
+    try {
+      const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
+      // Another tab logs in as someone while the request is being kept.
+      const keep = vi.mocked(drafts.store.save).getMockImplementation()!;
+      vi.mocked(drafts.store.save).mockImplementation((draft) => {
+        localStorage.setItem('macrofill.user', 'other');
+        return keep(draft);
+      });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithDrafts(
+        drafts.store,
+        baseFakeApi({
+          catalog: () => Promise.resolve(catalog),
+          saveMeal,
+          me: () => Promise.reject(new TypeError('offline')),
+        }),
+      );
+      fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
+      expect(await screen.findByText(en.summary.saveFailed)).toBeInTheDocument();
+      expect(saveMeal).not.toHaveBeenCalled();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-8: an answer about the user that a login made stale is ignored (regression: #37)', async () => {
+    localStorage.clear();
+    try {
+      let answer!: (username: string) => void;
+      const me = vi.fn(() => new Promise<string>((resolve) => (answer = resolve)));
+      renderWithDrafts(
+        memoryDrafts().store,
+        baseFakeApi({ catalog: () => Promise.resolve(catalog), me }),
+      );
+      await vi.waitFor(() => expect(me).toHaveBeenCalled());
+      // Another tab logs in as someone else before the answer arrives.
+      localStorage.setItem('macrofill.user', 'other');
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'macrofill.user', newValue: 'other' }),
+        );
+      });
+      await screen.findByRole('button', { name: en.home.logMeal });
+      act(() => answer('mlewand'));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(localStorage.getItem('macrofill.user')).toBe('other');
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: a save whose user is unknown is not sent (regression: #37)', async () => {
     localStorage.clear();
     const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
@@ -982,6 +1056,43 @@ describe('saving through the outbox (M5-9)', () => {
     } finally {
       localStorage.clear();
     }
+  });
+
+  it('M5-9: when the server names a different user at start, their waiting meals are sent (regression: #41)', async () => {
+    localStorage.setItem('macrofill.user', 'mlewand');
+    try {
+      const outbox = indexedDbOutbox(new IDBFactory());
+      await outbox.add({ ...outboxItem(1), username: 'other' });
+      const saveMeal = vi.fn<Api['saveMeal']>((r) => Promise.resolve(stored(r)));
+      renderWithOutbox(
+        fakeApi(saveMeal, { today: todayNow, me: () => Promise.resolve('other') }),
+        outbox,
+      );
+      await vi.waitFor(() => expect(saveMeal).toHaveBeenCalledWith(outboxItem(1).request));
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('M5-9: nothing waiting on the device shows before the user is known (regression: #41)', async () => {
+    localStorage.clear();
+    const outbox = indexedDbOutbox(new IDBFactory());
+    await outbox.add({ ...outboxItem(1), username: 'other' });
+    let answer!: (username: string) => void;
+    renderWithOutbox(
+      fakeApi(() => Promise.reject(new TypeError('offline')), {
+        today: () => Promise.reject(new TypeError('offline')),
+        me: () => new Promise<string>((resolve) => (answer = resolve)),
+      }),
+      outbox,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    act(() => answer('mlewand'));
+    // Known now, and it's someone else's meal: still not shown.
+    expect(await screen.findByText(en.today.loadFailed)).toBeInTheDocument();
+    expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
+    localStorage.clear();
   });
 
   it('M5-9: offline, Today still lists what waits on the device', async () => {

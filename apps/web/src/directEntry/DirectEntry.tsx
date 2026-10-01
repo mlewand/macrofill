@@ -31,13 +31,15 @@ interface Props {
   onCancel: () => void;
   /** A session kept from before a reload (M5-8). */
   resume?: Draft;
+  /** Who's logged in as the session starts: its owner, unless a kept session names one. */
+  owner?: string | undefined;
 }
 
 /**
  * Direct Entry (M5-1 to M5-6): pick a recipe, enter each step, review and save. The session is
  * kept on the device from the recipe pick until it's saved or discarded (M5-8).
  */
-export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
+export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Props) {
   const drafts = useDraftStore();
   // A session whose save was sent is resumed as it was: only resending that request is left.
   const [resumed] = useState(() =>
@@ -46,7 +48,7 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
   const [state, setState] = useState<DirectEntryState | undefined>(resumed);
   const [sent, setSent] = useState(resumed && resume?.sent);
   // The user this session belongs to, fixed when it starts: another tab may change who's logged in.
-  const [owner] = useState(() => resume?.username ?? lastUser());
+  const [owner] = useState(() => resume?.username ?? props.owner);
   const dispatch = (action: DirectEntryAction) =>
     setState((current) => (current ? directEntry(current, action) : current));
 
@@ -80,9 +82,9 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
       });
       if (!kept && !(await drafts.clear())) return false;
     }
-    // Sent only for a known user, and only while that's still who's logged in.
-    const now = lastUser();
-    return (owner ?? now) !== undefined && belongsTo(owner, now);
+    // Sent only for a known owner, and only while that's still who's logged in. An unknown owner
+    // stays unknown: the session never takes on a user who shows up later.
+    return owner !== undefined && belongsTo(owner, lastUser());
   };
   // Saved: the kept session goes, tried twice. If it still came back after a reload, it's frozen on
   // the request just saved, and resending that is harmless (M4-6).
@@ -112,7 +114,7 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume }: Props) {
       catalog={catalog}
       dispatch={dispatch}
       onSaved={(result) => void saved(result)}
-      owner={owner ?? lastUser()}
+      owner={owner}
       onDiscard={discard}
       sent={sent}
       onSend={keepSent}
