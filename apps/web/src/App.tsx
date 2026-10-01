@@ -97,6 +97,15 @@ export function App() {
       current = false;
     };
   }, [baseApi, drafts, meAttempt]);
+  // Back on this tab: who's logged in may have changed meanwhile, also where no storage event
+  // says so (local storage blocked), so ask again.
+  useEffect(() => {
+    const visible = () => {
+      if (document.visibilityState === 'visible') setMeAttempt((n) => n + 1);
+    };
+    document.addEventListener('visibilitychange', visible);
+    return () => document.removeEventListener('visibilitychange', visible);
+  }, []);
   useEffect(() => {
     if (user !== undefined) return;
     const online = () => setMeAttempt((n) => n + 1);
