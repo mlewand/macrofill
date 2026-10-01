@@ -757,6 +757,30 @@ describe('Direct Entry across a reload (M5-8)', () => {
     }
   });
 
+  it('M5-8: while the user is unknown, no meal can be started; trying again learns it (regression: #37)', async () => {
+    localStorage.clear();
+    try {
+      const me = vi
+        .fn<Api['me']>()
+        .mockRejectedValueOnce(new TypeError('offline'))
+        .mockResolvedValue('mlewand');
+      renderWithDrafts(
+        memoryDrafts().store,
+        baseFakeApi({ catalog: () => Promise.resolve(catalog), me }),
+      );
+      expect(await screen.findByText(en.home.userUnknown)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: en.home.logMeal })).toBeDisabled();
+      expect(screen.getByRole('button', { name: en.home.weighMeal })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: en.app.retry }));
+      await vi.waitFor(() =>
+        expect(screen.getByRole('button', { name: en.home.logMeal })).toBeEnabled(),
+      );
+      expect(screen.queryByText(en.home.userUnknown)).not.toBeInTheDocument();
+    } finally {
+      localStorage.clear();
+    }
+  });
+
   it('M5-8: a save whose user is unknown is not sent (regression: #37)', async () => {
     localStorage.clear();
     const drafts = memoryDrafts({ ...draftAtMilk, current: 2 });
