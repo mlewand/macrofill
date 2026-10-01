@@ -120,8 +120,8 @@ function Session(props: {
         // An attempt that was under way when the user chose typed grams: not needed any more.
         if (byHand.current) return void driver.disconnect().catch(() => undefined);
         reconnecting.current = undefined;
+        // Start and Next stay off until the first reading from this connection (see `stale`).
         setConnection('connected');
-        dispatch({ type: 'reconnected' });
       } else if (everConnected.current && !byHand.current && !reconnecting.current) {
         // M6-6: keep the session and reconnect to the same device, without the chooser.
         const controller = new AbortController();

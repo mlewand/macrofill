@@ -26,10 +26,11 @@ export interface ScaleModeState {
   /** M6-10: the latest reading has no grams, because the scale shows another unit. */
   wrongUnit: boolean;
   /**
-   * M6-6: the scale dropped mid-meal and the app is reconnecting to it. The session is kept, but
-   * the last reading is from before the drop, so Start, Next and corrections wait for new ones.
+   * M6-6: the scale dropped mid-meal, and no reading has come since. The session is kept while the
+   * app reconnects, but the last reading is from before the drop, so Start, Next and corrections
+   * wait for one from the new connection, even once it's connected.
    */
-  reconnecting: boolean;
+  stale: boolean;
   /**
    * Reconnecting failed, or the user chose not to wait: the rest of the meal takes typed grams
    * (M6-5), and the tracker is no longer used.
@@ -43,7 +44,6 @@ export type ScaleModeAction =
   | { type: 'reading'; reading: TimedReading }
   /** M6-6: the scale disconnected; the app reconnects. */
   | { type: 'dropped' }
-  | { type: 'reconnected' }
   /** Reconnecting failed or was given up: typed grams from here on (M6-5). */
   | { type: 'finishByHand' }
   | { type: 'start' }
@@ -73,7 +73,7 @@ export function startScaleMode(input: {
     flow: startDirectEntry({ ...input, inputMethod: 'scale' }),
     tracker: createTracker(input.tracker),
     wrongUnit: false,
-    reconnecting: false,
+    stale: false,
     manual: false,
     resolutionGrams: input.resolutionGrams,
   };
@@ -83,7 +83,7 @@ export function startScaleMode(input: {
 export function canStart(state: ScaleModeState): boolean {
   return (
     !state.manual &&
-    !state.reconnecting &&
+    !state.stale &&
     !state.wrongUnit &&
     state.tracker.baseline === undefined &&
     state.tracker.latest?.stable === true
@@ -94,7 +94,7 @@ export function canStart(state: ScaleModeState): boolean {
 export function canNext(state: ScaleModeState): boolean {
   return (
     !state.manual &&
-    !state.reconnecting &&
+    !state.stale &&
     !state.wrongUnit &&
     state.tracker.baseline !== undefined &&
     state.tracker.pending?.type !== 'waiting' &&
@@ -113,7 +113,7 @@ export function canCorrect(state: ScaleModeState): boolean {
   const captured = pending === 'confirming' || pending === 'needsCorrection';
   return (
     !state.manual &&
-    !state.reconnecting &&
+    !state.stale &&
     state.tracker.baseline !== undefined &&
     hasProduct(state) &&
     (captured || (!state.wrongUnit && state.tracker.latest?.stable === true))
@@ -146,15 +146,13 @@ export function scaleMode(state: ScaleModeState, action: ScaleModeAction): Scale
 
   switch (action.type) {
     case 'reading': {
-      const next = { ...state, wrongUnit: isWrongUnit(action.reading) };
+      const next = { ...state, wrongUnit: isWrongUnit(action.reading), stale: false };
       return tracked(next, { type: 'reading', reading: action.reading });
     }
     case 'dropped':
-      return { ...state, reconnecting: true };
-    case 'reconnected':
-      return { ...state, reconnecting: false };
+      return { ...state, stale: true };
     case 'finishByHand':
-      return { ...state, reconnecting: false, manual: true };
+      return { ...state, stale: false, manual: true };
     case 'start':
       return canStart(state) ? tracked(state, { type: 'start' }) : state;
     case 'next':

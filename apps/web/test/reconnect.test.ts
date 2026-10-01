@@ -35,16 +35,19 @@ describe('reconnect (M6-6)', () => {
     expect(times.map((t) => t - start)).toEqual([0, 500, 1500, 3500]);
   });
 
-  it('M6-6: gives up once the time is up', async () => {
-    const connect = vi.fn(() => Promise.reject(new Error('off')));
-    const result = reconnect(connect, settings, new AbortController().signal);
+  it('M6-6: gives up once the time is up, and starts no attempt after it (regression: #36)', async () => {
+    const times: number[] = [];
     const start = Date.now();
+    const connect = vi.fn(() => {
+      times.push(Date.now() - start);
+      return Promise.reject(new Error('off'));
+    });
+    const result = reconnect(connect, settings, new AbortController().signal);
     await vi.runAllTimersAsync();
     expect(await result).toBe('gaveUp');
-    // Attempts at 0, 0.5, 1.5, 3.5, 7.5, 15.5, 25.5, 35.5, 45.5, 55.5 and 65.5 s: the last one
-    // started before the minute was up, and it failed after.
-    expect(connect).toHaveBeenCalledTimes(11);
-    expect(Date.now() - start).toBe(65_500);
+    // The next attempt would be at 65.5 s: past the minute, so the wait ends at 60 s instead.
+    expect(times).toEqual([0, 500, 1500, 3500, 7500, 15_500, 25_500, 35_500, 45_500, 55_500]);
+    expect(Date.now() - start).toBe(60_000);
   });
 
   it('M6-6: counts the time attempts take', async () => {
@@ -56,8 +59,8 @@ describe('reconnect (M6-6)', () => {
     const result = reconnect(connect, settings, new AbortController().signal);
     await vi.runAllTimersAsync();
     expect(await result).toBe('gaveUp');
-    // 0–10, 10.5–20.5, 21.5–31.5, 33.5–43.5, 47.5–57.5, 65.5–75.5 s.
-    expect(connect).toHaveBeenCalledTimes(6);
+    // 0–10, 10.5–20.5, 21.5–31.5, 33.5–43.5 and 47.5–57.5 s; the next would start at 65.5 s.
+    expect(connect).toHaveBeenCalledTimes(5);
   });
 
   it('M6-6: stops when aborted, also while waiting, and makes no further attempt', async () => {

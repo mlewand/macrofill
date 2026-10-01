@@ -217,15 +217,16 @@ describe('Scale Mode state', () => {
     let state = play(start(), script.take());
     expect(canStart(state)).toBe(true);
     state = apply(state, { type: 'dropped' });
-    expect(state.reconnecting).toBe(true);
+    expect(state.stale).toBe(true);
     // The last reading is from before the drop: nothing may use it.
     expect(canStart(state)).toBe(false);
     expect(apply(state, { type: 'start' })).toEqual(state);
-    state = apply(state, { type: 'reconnected' }, { type: 'start' });
+    state = apply(play(state, script.stable({ forMs: 0 }).take()), { type: 'start' });
     expect(state.tracker.baseline).toBe(312);
 
     state = play(state, script.add(214).stable().take());
     const before = apply(state, { type: 'dropped' });
+    expect(before.stale).toBe(true);
     expect(before.manual).toBe(false);
     expect(canNext(before)).toBe(false);
     expect(canCorrect(before)).toBe(false);
@@ -233,15 +234,27 @@ describe('Scale Mode state', () => {
     expect(apply(before, { type: 'correct', grams: '5' })).toEqual(before);
   });
 
+  it('M6-6: after a drop, only a reading from the new connection opens Start, Next and corrections (regression: #36)', () => {
+    const script = scaleScript().baseline(312);
+    let state = apply(play(start(), script.take()), { type: 'start' });
+    state = play(state, script.add(214).stable().take());
+    state = apply(state, { type: 'dropped' });
+    // Connected again (the component knows), but no reading yet: still closed.
+    expect(canNext(state)).toBe(false);
+    expect(canCorrect(state)).toBe(false);
+    state = play(state, script.stable({ forMs: 0 }).take());
+    expect(canNext(state)).toBe(true);
+    expect(canCorrect(state)).toBe(true);
+  });
+
   it('M6-6: after reconnecting, the flow goes on from the new readings', () => {
     const script = scaleScript().baseline(312);
     let state = apply(play(start(), script.take()), { type: 'start' });
     state = apply(play(state, script.add(214).stable().take()), { type: 'next' });
     state = apply(state, { type: 'dropped' });
-    // Readings come again once connected; the first ones may arrive before the event.
+    // Readings come again once reconnected.
     state = play(state, script.add(50).stable().take());
-    state = apply(state, { type: 'reconnected' });
-    expect(state.reconnecting).toBe(false);
+    expect(state.stale).toBe(false);
     state = apply(state, { type: 'next' });
     expect(grams(state).slice(0, 2)).toEqual(['214', '50']);
     expectInStep(state);
@@ -251,8 +264,8 @@ describe('Scale Mode state', () => {
     const script = scaleScript().baseline(312);
     let state = apply(play(start(), script.take()), { type: 'start' });
     state = apply(state, { type: 'dropped' }, { type: 'finishByHand' });
-    expect(state).toMatchObject({ manual: true, reconnecting: false });
-    expect(apply(state, { type: 'reconnected' })).toEqual(state);
+    expect(state).toMatchObject({ manual: true, stale: false });
+    expect(play(state, script.take())).toEqual(state);
     expect(apply(state, { type: 'dropped' })).toEqual(state);
   });
 

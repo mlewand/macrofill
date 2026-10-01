@@ -11,22 +11,24 @@ export function retryDelay(n: number, settings: ReconnectSettings): number {
 /**
  * M6-6: calls `connect` until it succeeds, waiting longer between attempts, until
  * `giveUpAfterMs` have passed since the start (the time attempts take counts) or `signal` aborts.
+ * No attempt starts after that deadline; one under way then may still finish.
  */
 export async function reconnect(
   connect: () => Promise<void>,
   settings: ReconnectSettings,
   signal: AbortSignal,
 ): Promise<ReconnectResult> {
-  const start = Date.now();
+  const deadline = Date.now() + settings.giveUpAfterMs;
   for (let n = 0; ; n++) {
-    if (!(await wait(retryDelay(n, settings), signal))) return 'aborted';
+    const remaining = deadline - Date.now();
+    if (!(await wait(Math.min(retryDelay(n, settings), remaining), signal))) return 'aborted';
+    if (Date.now() >= deadline) return 'gaveUp';
     try {
       await connect();
       return signal.aborted ? 'aborted' : 'connected';
     } catch {
       if (signal.aborted) return 'aborted';
     }
-    if (Date.now() - start >= settings.giveUpAfterMs) return 'gaveUp';
   }
 }
 
