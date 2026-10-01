@@ -148,6 +148,7 @@ interface ScaleReading {
   grams?: number;       // absent while the scale shows another unit (M3-14)
   stable?: boolean;     // only when the scale reports it
   timestamp: number;    // ms, monotonic
+  receivedAt: number;   // ms since the epoch, for the recording (M3-11)
   raw: Uint8Array;      // original payload, kept for recording/replay
 }
 
@@ -160,7 +161,7 @@ interface ScaleCapabilities {
 interface ScaleDriver {
   readonly id: string;
   readonly capabilities: ScaleCapabilities;
-  connect(): Promise<void>;   // must be called from a user gesture
+  connect(): Promise<void>;   // first call from a user gesture; after a drop, reconnects to the same device without the chooser
   disconnect(): Promise<void>;
   onReading(cb: (r: ScaleReading) => void): () => void;
   onConnectionChange(cb: (state: 'connected' | 'disconnected') => void): () => void;

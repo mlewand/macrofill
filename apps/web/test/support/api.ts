@@ -21,6 +21,7 @@ export const stored = (request: SaveMealRequest): SaveMealResponse => ({
 export function fakeApi(overrides: Partial<Api> = {}): Api {
   return {
     login: vi.fn(overrides.login ?? (() => Promise.resolve('ok' as const))),
+    me: vi.fn(overrides.me ?? (() => Promise.resolve('mlewand'))),
     catalog: vi.fn(overrides.catalog ?? (() => Promise.resolve(emptyCatalog))),
     saveMeal: vi.fn(overrides.saveMeal ?? ((request) => Promise.resolve(stored(request)))),
     today: vi.fn(overrides.today ?? (() => Promise.resolve(emptyToday))),

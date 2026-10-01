@@ -6,7 +6,7 @@ import {
   type TrackerConfig,
 } from '@macrofill/domain';
 import type { ScaleDriver } from '@macrofill/scale';
-import { useEffect, useId, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   preselectedProducts,
@@ -19,8 +19,9 @@ import { isSummary, stepProblem } from '../directEntry/state';
 import { formatGrams } from '../format';
 import type { SaveResult } from '../outbox/Outbox';
 import { useCreateScaleDriver } from '../scale';
+import { reconnect } from './reconnect';
+import { reconnectSettings, trackerSettings, type ReconnectSettings } from './settings';
 import { lastUser } from '../session';
-import { trackerSettings } from './settings';
 import {
   canCorrect,
   canNext,
@@ -38,23 +39,44 @@ interface Props {
   onCancel: () => void;
   /** Default: `trackerSettings`. */
   tracker?: Partial<TrackerConfig>;
+  /** Default: `reconnectSettings`. */
+  reconnect?: ReconnectSettings;
 }
 
 /** Scale Mode (M6-1 to M6-5, M6-9, M6-10): pick a recipe, connect, Start, weigh each step, save. */
-export function ScaleMode({ catalog, onSaved, onCancel, tracker = trackerSettings }: Props) {
+export function ScaleMode({
+  catalog,
+  onSaved,
+  onCancel,
+  tracker = trackerSettings,
+  reconnect = reconnectSettings,
+}: Props) {
   const [recipe, setRecipe] = useState<Recipe>();
   if (recipe === undefined) {
     return <RecipePicker recipes={catalog.recipes} onPick={setRecipe} onCancel={onCancel} />;
   }
-  return <Session recipe={recipe} catalog={catalog} tracker={tracker} onSaved={onSaved} />;
+  return (
+    <Session
+      recipe={recipe}
+      catalog={catalog}
+      tracker={tracker}
+      reconnect={reconnect}
+      onSaved={onSaved}
+    />
+  );
 }
 
-type Connection = 'idle' | 'connecting' | 'connected' | 'failed' | 'dropped';
+/**
+ * `reconnecting`: the scale dropped mid-meal and the app reconnects (M6-6). `dropped`: that failed
+ * or the user stopped it, so the meal goes on with typed grams.
+ */
+type Connection = 'idle' | 'connecting' | 'connected' | 'failed' | 'reconnecting' | 'dropped';
 
 function Session(props: {
   recipe: Recipe;
   catalog: Catalog;
   tracker: Partial<TrackerConfig>;
+  reconnect: ReconnectSettings;
   onSaved: (result: SaveResult) => void;
 }) {
   const { t } = useTranslation();
@@ -75,29 +97,55 @@ function Session(props: {
     }),
   );
   const [connection, setConnection] = useState<Connection>('idle');
+  const [reconnectConfig] = useState(props.reconnect);
   // Who the meal belongs to, fixed when the session starts (see Summary).
   const [owner] = useState(lastUser);
   const everConnected = useRef(false);
+  /** The reconnect in progress (M6-6), to stop it. */
+  const reconnecting = useRef<AbortController | undefined>(undefined);
+  const byHand = useRef(false);
 
   useWakeLock(true);
+
+  /** No more reconnecting: the rest of the meal takes typed grams (M6-5). */
+  const finishByHand = useCallback(() => {
+    byHand.current = true;
+    reconnecting.current?.abort();
+    reconnecting.current = undefined;
+    setConnection('dropped');
+    dispatch({ type: 'finishByHand' });
+  }, []);
 
   useEffect(() => {
     const offReading = driver.onReading((reading) => dispatch({ type: 'reading', reading }));
     const offConnection = driver.onConnectionChange((change) => {
       if (change === 'connected') {
         everConnected.current = true;
+        // An attempt that was under way when the user chose typed grams: not needed any more.
+        if (byHand.current) return void driver.disconnect().catch(() => undefined);
+        reconnecting.current = undefined;
+        // Start and Next stay off until the first reading from this connection (see `stale`).
         setConnection('connected');
-      } else if (everConnected.current) {
-        // Phase B: no reconnect. The rest of the meal takes typed grams.
-        setConnection('dropped');
+      } else if (everConnected.current && !byHand.current && !reconnecting.current) {
+        // M6-6: keep the session and reconnect to the same device, without the chooser.
+        const controller = new AbortController();
+        reconnecting.current = controller;
+        setConnection('reconnecting');
         dispatch({ type: 'dropped' });
+        void reconnect(() => driver.connect(), reconnectConfig, controller.signal).then(
+          (result) => {
+            if (result === 'gaveUp' && reconnecting.current === controller) finishByHand();
+          },
+        );
       }
     });
     return () => {
       offReading();
       offConnection();
+      reconnecting.current?.abort();
+      reconnecting.current = undefined;
     };
-  }, [driver]);
+  }, [driver, reconnectConfig, finishByHand]);
 
   // Disconnect when the session ends (saved, cancelled or left). Safe before any connect.
   useEffect(() => () => void driver.disconnect().catch(() => undefined), [driver]);
@@ -133,13 +181,20 @@ function Session(props: {
             if (action.type === 'undo' || action.type === 'editGrams') dispatch(action);
           }}
           onSaved={props.onSaved}
-          owner={owner}
+          owner={owner ?? lastUser()}
         />
       </>
     );
   }
 
-  if (!state.manual && connection !== 'connected') {
+  // Until the first reading after a drop: a reconnected scale can still stay silent, and typed
+  // grams must stay one tap away.
+  const notice = (connection === 'reconnecting' || (state.stale && !state.manual)) && (
+    <ReconnectNotice onFinish={finishByHand} />
+  );
+
+  // Before the first connection; after it, a drop reconnects by itself (M6-6).
+  if (connection === 'idle' || connection === 'connecting' || connection === 'failed') {
     return (
       <section>
         {status}
@@ -166,6 +221,7 @@ function Session(props: {
     return (
       <section>
         {status}
+        {notice}
         <h1>{recipe.name.en}</h1>
         <p>{t('scale.placeBowl')}</p>
         <Weights state={state} />
@@ -184,7 +240,21 @@ function Session(props: {
   return (
     <StepScreen key={state.flow.current} state={state} catalog={catalog} dispatch={dispatch}>
       {status}
+      {notice}
     </StepScreen>
+  );
+}
+
+/** M6-6: the scale is reconnecting; the user can stop waiting and type the grams instead. */
+function ReconnectNotice({ onFinish }: { onFinish: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <p className="problem">{t('scale.reconnectingHint')}</p>
+      <button type="button" className="secondary" onClick={onFinish}>
+        {t('scale.finishByHand')}
+      </button>
+    </>
   );
 }
 

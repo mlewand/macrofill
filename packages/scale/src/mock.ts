@@ -8,6 +8,8 @@ export interface MockScaleOptions {
   capabilities?: Partial<Omit<ScaleCapabilities, 'canTare'>>;
   /** Monotonic clock in ms. Default `performance.now()`. */
   now?: () => number;
+  /** Wall clock in ms since the epoch, for `receivedAt`. Default `Date.now()`. */
+  wallNow?: () => number;
 }
 
 interface Segment {
@@ -27,12 +29,15 @@ export class MockScaleDriver implements ScaleDriver {
   readonly capabilities: ScaleCapabilities;
   readonly #initial: TimedReading[] | undefined;
   readonly #now: () => number;
+  readonly #wallNow: () => number;
   #state: ConnectionState = 'disconnected';
   #segments: Segment[] = [];
   #timer: ReturnType<typeof setTimeout> | undefined;
   /** The last reading played: when, and its script timestamp. */
   #last: { at: number; scriptTime: number } | undefined;
   readonly #readingListeners = new Set<(r: ScaleReading) => void>();
+  /** While false, `connect()` fails, like a scale that is off or out of range (M6-6). */
+  available = true;
   readonly #connectionListeners = new Set<(state: ConnectionState) => void>();
 
   constructor(options: MockScaleOptions = {}) {
@@ -43,9 +48,11 @@ export class MockScaleDriver implements ScaleDriver {
     };
     this.#initial = options.readings;
     this.#now = options.now ?? (() => performance.now());
+    this.#wallNow = options.wallNow ?? (() => Date.now());
   }
 
   connect(): Promise<void> {
+    if (!this.available) return Promise.reject(new Error('The mock scale is unavailable.'));
     this.#setState('connected');
     if (this.#initial) void this.play(this.#initial);
     return Promise.resolve();
@@ -117,7 +124,12 @@ export class MockScaleDriver implements ScaleDriver {
         return;
       }
       this.#last = { at, scriptTime: reading.timestamp };
-      const played: ScaleReading = { ...reading, timestamp: at, raw: new Uint8Array(0) };
+      const played: ScaleReading = {
+        ...reading,
+        timestamp: at,
+        receivedAt: this.#wallNow(),
+        raw: new Uint8Array(0),
+      };
       // A scale without the flag never reports it, whatever the script says (M3-5).
       if (!this.capabilities.hasStableFlag) delete played.stable;
       for (const cb of this.#readingListeners) cb(played);

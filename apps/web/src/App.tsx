@@ -6,7 +6,7 @@ import { DirectEntry } from './directEntry/DirectEntry';
 import { Login } from './Login';
 import { OutboxProvider, useSync, type SaveResult } from './outbox/Outbox';
 import { ScaleMode } from './scaleMode/ScaleMode';
-import { belongsToCurrentUser, lastUser, onUserChangedElsewhere } from './session';
+import { belongsToCurrentUser, lastUser, onUserChangedElsewhere, rememberUser } from './session';
 import { useDraftStore, type Draft } from './storage/drafts';
 import { TodayView } from './today/TodayView';
 
@@ -43,6 +43,30 @@ export function App() {
     setLogins((n) => n + 1);
     userIs(username);
   };
+  // Who the session belongs to, from the server (M4-1): a cookie from before the app remembered
+  // users has none on the device. Learning it for the first time isn't a change of user.
+  useEffect(() => {
+    let current = true;
+    baseApi.me().then(
+      (username) => {
+        if (!current) return;
+        rememberUser(username);
+        setUser((known) => {
+          if (known !== undefined && known !== username) {
+            void drafts.clear();
+            setResume(undefined);
+            setScreen('home');
+          }
+          return username;
+        });
+      },
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [baseApi, drafts]);
+
   // A login in another tab shares this tab's cookie: the same applies.
   useEffect(
     () =>

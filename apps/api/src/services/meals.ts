@@ -8,12 +8,15 @@ export type SaveMealResult =
   | { status: 'invalid'; issues: Issue[] }
   /** The meal was saved and its entry has since been deleted (M7-4); it's not brought back. */
   | { status: 'deleted' }
-  /** An id is taken by a meal or entry the user can't see; never reported as success. */
+  /** An id is taken by another of the user's meals or entries; never reported as success. */
   | { status: 'conflict' }
+  /** M4-3: an id belongs to another user's meal or entry, which this user can't see. */
+  | { status: 'not_found' }
   /** The meal was made by another user than the one logged in now. */
   | { status: 'wrong_user' };
 
 class Conflict extends Error {}
+class NotFound extends Error {}
 
 /**
  * Saves a prepared meal and its consumption entry (M5-7). Idempotent through the client-generated
@@ -40,12 +43,15 @@ export async function saveMeal(
         // Lost a race with a concurrent retry, or the id belongs to someone else.
         const raced = await existing(repos, request);
         if (raced) return raced;
-        throw new Conflict();
+        throw new NotFound();
       }
       if (
         !(await repos.consumptionEntries.insertIfAbsent(request.consumptionEntry, request.meal.id))
       ) {
-        throw new Conflict();
+        // Taken by another of the user's entries, or by someone else's.
+        throw (await repos.consumptionEntries.exists(request.consumptionEntry.id))
+          ? new Conflict()
+          : new NotFound();
       }
       const body = await stored(repos, request.meal.id);
       if (!body) throw new Error('Saved meal not found.');
@@ -54,6 +60,7 @@ export async function saveMeal(
   } catch (error) {
     // Rolled back: nothing from this request is saved.
     if (error instanceof Conflict) return { status: 'conflict' };
+    if (error instanceof NotFound) return { status: 'not_found' };
     throw error;
   }
 }

@@ -1,7 +1,7 @@
 import { scaleScript } from '@macrofill/scale';
 import { expect, test, type Page } from '@playwright/test';
 import en from '../src/i18n/en.json' with { type: 'json' };
-import { drop, play, useMockScale } from './scale';
+import { comeBack, drop, play, useMockScale } from './scale';
 
 // M6-8: Scale Mode end to end, against the production build with MockScaleDriver. Each test adds
 // a meal, so assertions don't depend on what's already there. Reconnect is Phase C.
@@ -109,6 +109,28 @@ test('M6-8, M6-10: with the scale in another unit, Start and Next are off until 
   await expect(next(page)).toBeEnabled();
 });
 
+test('M6-8, M6-6: after the scale drops, it reconnects by itself and the meal goes on', async ({
+  page,
+}) => {
+  const script = await startCurd(page);
+  await play(page, script.add(200).stable({ forMs: 0 }).take());
+  await next(page).click();
+  await drop(page);
+  await expect(page.getByText(en.scale.status.reconnecting, { exact: true })).toBeVisible();
+  await expect(page.getByText(en.scale.reconnectingHint)).toBeVisible();
+  await expect(next(page)).toBeDisabled();
+  await comeBack(page);
+  await expect(page.getByText(en.scale.status.connected, { exact: true })).toBeVisible();
+  await expect(page.getByText('Step 2 of 5')).toBeVisible();
+  for (const added of [50, 40, 30, 20]) {
+    await play(page, script.add(added).stable({ forMs: 0 }).take());
+    await next(page).click();
+  }
+  await expect(page.getByRole('heading', { name: en.summary.title })).toBeVisible();
+  await page.getByRole('button', { name: en.summary.save }).click();
+  await expect(page.getByRole('status')).toHaveText(en.saved.title);
+});
+
 test('M6-8, M6-5: after the scale drops, the meal is finished with typed grams', async ({
   page,
 }) => {
@@ -116,6 +138,8 @@ test('M6-8, M6-5: after the scale drops, the meal is finished with typed grams',
   await play(page, script.add(200).stable({ forMs: 0 }).take());
   await next(page).click();
   await drop(page);
+  // Not waiting for the reconnect to give up: the user stops it.
+  await page.getByRole('button', { name: en.scale.finishByHand }).click();
   await expect(page.getByText(en.scale.status.dropped, { exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveText(en.scale.dropped);
   for (const grams of ['50', '40', '30', '20']) {
