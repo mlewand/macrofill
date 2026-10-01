@@ -182,7 +182,11 @@ function Session(props: {
     );
   }
 
-  const notice = connection === 'reconnecting' && <ReconnectNotice onFinish={finishByHand} />;
+  // Until the first reading after a drop: a reconnected scale can still stay silent, and typed
+  // grams must stay one tap away.
+  const notice = (connection === 'reconnecting' || (state.stale && !state.manual)) && (
+    <ReconnectNotice onFinish={finishByHand} />
+  );
 
   // Before the first connection; after it, a drop reconnects by itself (M6-6).
   if (connection === 'idle' || connection === 'connecting' || connection === 'failed') {

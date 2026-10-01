@@ -242,8 +242,8 @@ describe('Scale Mode', () => {
     expect(await screen.findByText(en.scale.status.connected)).toBeVisible();
     // Without the chooser: the driver reconnects by itself (see HuajunDriver).
     expect(connect).toHaveBeenCalled();
-    expect(screen.queryByText(en.scale.reconnectingHint)).not.toBeInTheDocument();
     await s.play(s.script.add(50).stable({ forMs: 0 }));
+    expect(screen.queryByText(en.scale.reconnectingHint)).not.toBeInTheDocument();
     fireEvent.click(button(en.step.next));
     expect(screen.getByRole('heading', { name: en.summary.title })).toBeVisible();
     fireEvent.click(button(en.summary.save));
@@ -266,6 +266,25 @@ describe('Scale Mode', () => {
     await screen.findByText(en.scale.status.connected);
     await s.play(s.script.stable({ forMs: 0 }));
     expect(button(en.scale.start)).toBeEnabled();
+  });
+
+  it('M6-6: reconnected but with no reading yet, the meal can still be finished by hand (regression: #36)', async () => {
+    const s = await started();
+    act(() => s.driver.drop());
+    // The mock reconnects at once but plays nothing: a stalled stream.
+    expect(await screen.findByText(en.scale.status.connected)).toBeVisible();
+    expect(button(en.step.next)).toBeDisabled();
+    expect(screen.getByText(en.scale.reconnectingHint)).toBeVisible();
+    fireEvent.click(button(en.scale.finishByHand));
+    expect(screen.getByRole('alert')).toHaveTextContent(en.scale.dropped);
+  });
+
+  it('M6-6: the first reading after reconnecting hides the notice', async () => {
+    const s = await started();
+    act(() => s.driver.drop());
+    await screen.findByText(en.scale.status.connected);
+    await s.play(s.script.stable({ forMs: 0 }));
+    expect(screen.queryByText(en.scale.reconnectingHint)).not.toBeInTheDocument();
   });
 
   it('M6-6: Finish by hand stops reconnecting and takes typed grams', async () => {
