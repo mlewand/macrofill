@@ -64,7 +64,7 @@ export function TodayView() {
         <button type="button" className="secondary" onClick={reload}>
           {t('app.retry')}
         </button>
-        <Refused items={refused} />
+        <Refused items={refused} timezone={deviceTimeZone()} />
         {/* Offline, the day can't load, but what's waiting on this device can be shown. */}
         {pending.length > 0 && (
           <>
@@ -90,7 +90,7 @@ export function TodayView() {
   return (
     <section aria-labelledby="today-title">
       <h2 id="today-title">{t('today.title')}</h2>
-      <Refused items={refused} />
+      <Refused items={refused} timezone={today.timezone} />
       <ProgressTable progress={targetProgress(totals, today.targets)} />
       <h3>{t('today.meals')}</h3>
       {entries.length === 0 ? (
@@ -147,10 +147,11 @@ function ProgressTable({ progress }: { progress: NutrientProgress[] }) {
 }
 
 /**
- * M5-9: meals the server refused for good. They stay on the device until the user has seen them
+ * M5-9: meals the server refused for good, with times in the user's timezone (or the device's,
+ * when Today couldn't load). They stay on the device until the user has seen them
  * and removes them; nothing is lost silently.
  */
-function Refused({ items }: { items: OutboxItem[] }) {
+function Refused({ items, timezone }: { items: OutboxItem[]; timezone: string }) {
   const { t } = useTranslation();
   const remove = useRemovePending();
   if (items.length === 0) return null;
@@ -165,7 +166,7 @@ function Refused({ items }: { items: OutboxItem[] }) {
           <li key={entry.id} className="entry">
             <div className="entry-head">
               <strong>{entry.recipeName?.en ?? t('today.meal')}</strong>
-              <time dateTime={entry.eatenAt}>{formatTime(entry.eatenAt, deviceTimeZone())}</time>
+              <time dateTime={entry.eatenAt}>{formatTime(entry.eatenAt, timezone)}</time>
             </div>
             <button
               type="button"

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiContext, ApiError, type Api } from '../src/api/api';
-import { OutboxStoreContext } from '../src/outbox/Outbox';
+import { OutboxProvider, OutboxStoreContext, useSaveMeal } from '../src/outbox/Outbox';
 import { indexedDbOutbox, type OutboxStore } from '../src/outbox/store';
 import { App } from '../src/App';
 import type { DirectEntryState } from '../src/directEntry/state';
@@ -1157,6 +1157,37 @@ describe('saving through the outbox (M5-9)', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.queryByText(en.today.pending)).not.toBeInTheDocument();
     expect(screen.queryByText(en.today.pendingTitle)).not.toBeInTheDocument();
+  });
+
+  it("M5-9: a refused meal's time is shown in the user's timezone (regression: #41)", async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    // 07:00 UTC: 08:00 in Warsaw, the user's timezone; 23:00 the day before on this device.
+    await outbox.add({ ...outboxItem(1, '2026-01-15T07:00:00.000Z'), refused: 400 });
+    renderWithOutbox(fakeApi(undefined, { today: todayNow }), outbox);
+    const section = await screen.findByRole('region', { name: en.today.refusedTitle });
+    expect(within(section).getByText(/08:00/)).toBeInTheDocument();
+  });
+
+  it('M5-9: a meal with no owner is not put in the outbox (regression: #41)', async () => {
+    const outbox = indexedDbOutbox(new IDBFactory());
+    let save!: ReturnType<typeof useSaveMeal>;
+    function Grab() {
+      save = useSaveMeal();
+      return null;
+    }
+    render(
+      <ApiContext value={fakeApi()}>
+        <OutboxStoreContext value={outbox}>
+          <OutboxProvider>
+            <Grab />
+          </OutboxProvider>
+        </OutboxStoreContext>
+      </ApiContext>,
+    );
+    const { request, entry } = outboxItem(1);
+    delete request.username;
+    await expect(save(request, entry)).rejects.toThrow(/owner/);
+    expect(await outbox.all()).toEqual([]);
   });
 
   it('M5-9: offline, Today still lists what waits on the device', async () => {

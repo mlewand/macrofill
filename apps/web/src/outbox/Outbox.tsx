@@ -82,18 +82,15 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
   const save = useCallback(
     async (request: SaveMealRequest, entry: TodayEntry): Promise<SaveResult> => {
       const id = request.meal.id;
+      // Only a known owner sends and sees it (isOwnedBy): an ownerless meal would be stuck here.
+      const username = request.username;
+      if (username === undefined) throw new Error('A meal with no known owner is not saved.');
       try {
         if (!store) throw new Error('no outbox');
         // A new attempt: what became of an earlier one doesn't apply to it.
         outcomes.current.delete(id);
-        // The meal's own owner, named in the request; who's logged in may have changed meanwhile.
-        const username = request.username ?? lastUser();
-        await store.add({
-          request,
-          entry,
-          queuedAt: new Date().toISOString(),
-          ...(username === undefined ? {} : { username }),
-        });
+        // Stamped with the meal's own owner; who's logged in may have changed meanwhile.
+        await store.add({ request, entry, queuedAt: new Date().toISOString(), username });
       } catch {
         // Nowhere to keep it: send it now, and let the caller report a failure.
         await api.saveMeal(request);
