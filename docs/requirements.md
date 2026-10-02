@@ -228,7 +228,7 @@ interface ScaleDriver {
 
 The app has to be well tested with automated tests at every step, both while building it and for later development.
 
-- CI (GitHub Actions) runs everything on every push; red CI blocks merge.
+- CI (GitHub Actions) runs everything on every push to `master` and on every pull request, except for documentation-only changes; red CI blocks merge.
 - `packages/domain`: Vitest unit tests. Property-based tests (fast-check) for the weight tracker invariants, e.g. with no manual corrections and non-decreasing stable readings, the sum of step amounts equals the last Next reading minus the baseline.
 - Replay regression tests: recorded sessions stored as fixtures with expected step amounts. Every bug investigated from a dump becomes a new fixture.
 - Scale parsing is tested in `@mlewand/huajun-ble-scale`. The app tests only the mapping from the library's `Reading` to `ScaleReading`.
@@ -270,7 +270,7 @@ IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferr
 ## M1: Repository and CI skeleton
 
 - **M1-1:** The pnpm monorepo contains `packages/domain`, `packages/scale`, `apps/web` and `apps/api`. `pnpm lint`, `pnpm typecheck` and `pnpm test` work from the repo root.
-- **M1-2:** CI runs lint, typecheck, unit, API integration and e2e tests on every push. Any failure fails the pipeline.
+- **M1-2:** CI runs lint, typecheck, unit, API integration and e2e tests on every push to `master` and on every pull request. Changes to documentation only (`docs/` and Markdown files) skip it. Any failure fails the pipeline.
 - **M1-3:** CI fails if line coverage drops below 90% in `domain`, or below 70% in `scale`, `api` or `web`. Entry points, config and generated files are excluded.
 - **M1-4:** In development, web and api run on the host with `pnpm dev`; Docker Compose runs only Postgres, pinned to the host's major version.
   - The default is that local Postgres: `.env.example` points `DATABASE_URL` at it.
