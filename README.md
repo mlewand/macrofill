@@ -102,7 +102,7 @@ Running a subset:
 - one project (`domain`, `scale`, `web`, `api`, or `repo` for the root `tests/`): `pnpm test --project domain`
 - one file: `pnpm test packages/domain/test/tsconfig.test.ts`
 
-CI (GitHub Actions) runs lint, typecheck, the Vitest tests with coverage, the API tests again on Postgres 17, the e2e tests and a production image build with a smoke test (`tooling/ci/image-smoke.sh`) on every push.
+CI (GitHub Actions) runs lint, typecheck, the Vitest tests with coverage, the API tests again on Postgres 17, the e2e tests and a production image build with a smoke test (`tooling/ci/image-smoke.sh`) on every push to `master` and on every pull request. Changes to `docs/` and Markdown files only skip it.
 
 ## Production deploy
 

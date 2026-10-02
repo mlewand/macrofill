@@ -1,4 +1,5 @@
-# M1-2: lint, typecheck, unit, API integration and e2e tests on every push.
+# M1-2: lint, typecheck, unit, API integration and e2e tests on every push to master and every
+# pull request; documentation-only changes skip it.
 # M1-6: the API tests also run against the host's Postgres version.
 name: CI
 
