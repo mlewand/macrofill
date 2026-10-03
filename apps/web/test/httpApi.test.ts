@@ -1,3 +1,4 @@
+import { LOOKUP_CLIENT_TIMEOUT_MS } from '@macrofill/domain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, createHttpApi } from '../src/api/api';
 import { createApiClient } from '../src/api/client';
@@ -5,6 +6,7 @@ import { createApiClient } from '../src/api/client';
 describe('the http api', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('M7-8: sending events gives up after a while, and still goes out as the page is left (regression: #52)', async () => {
@@ -110,5 +112,28 @@ describe('the http api', () => {
       status: 409,
       code: 'conflict',
     });
+  });
+
+  it('#66-1: the lookup of an unknown barcode goes to our own server, and gives up after a while', async () => {
+    const answer = {
+      candidate: {
+        source: 'openfoodfacts',
+        sourceRef: '3017620422003',
+        name: 'Nutella',
+        nutrition: { ...product.nutrition, kcal: 539 },
+      },
+      attempts: [{ provider: 'openfoodfacts', result: 'hit' }],
+    };
+    const fetch = stub(() => json(answer, 200));
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const api = createHttpApi(createApiClient('http://localhost/api'));
+    expect(await api.lookupProduct('3017620422003')).toEqual(answer);
+    // Beyond what the server can be set to take, so its answer is never cut short (regression: #74).
+    expect(timeout).toHaveBeenCalledWith(LOOKUP_CLIENT_TIMEOUT_MS);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe('http://localhost/api/product-lookup/3017620422003');
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    stub(() => json({ error: 'x' }, 500));
+    await expect(api.lookupProduct('3017620422003')).rejects.toMatchObject({ status: 500 });
   });
 });

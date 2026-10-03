@@ -10,7 +10,47 @@ describe('api config from the environment', () => {
       port: 3000,
       databaseUrl: DATABASE_URL,
       migrationsDir: expect.stringMatching(/apps\/api\/drizzle$/) as unknown,
+      lookup: {
+        timeoutMs: 5000,
+        openFoodFactsUrl: 'https://world.openfoodfacts.org',
+        userAgent: 'Macrofill/dev (macrofill_app@mlewandowski.com)',
+      },
     });
+  });
+
+  it('#66-4: the lookup time, the Open Food Facts address, the version and the contact come from the environment', () => {
+    expect(
+      loadConfig({
+        DATABASE_URL,
+        LOOKUP_TIMEOUT_MS: '2500',
+        OPEN_FOOD_FACTS_URL: 'http://127.0.0.1:9999',
+        APP_VERSION: 'abc1234',
+        LOOKUP_CONTACT: 'me@example.com',
+      }).lookup,
+    ).toEqual({
+      timeoutMs: 2500,
+      openFoodFactsUrl: 'http://127.0.0.1:9999',
+      userAgent: 'Macrofill/abc1234 (me@example.com)',
+    });
+  });
+
+  it.each(['0', '-5', 'abc', '1.5', '20001', '60000'])(
+    'rejects LOOKUP_TIMEOUT_MS=%s (the app waits 25 s; regression: #74)',
+    (value) => {
+      expect(() => loadConfig({ DATABASE_URL, LOOKUP_TIMEOUT_MS: value })).toThrow(
+        /LOOKUP_TIMEOUT_MS/,
+      );
+    },
+  );
+
+  it('accepts the longest time the app still waits for (regression: #74)', () => {
+    expect(loadConfig({ DATABASE_URL, LOOKUP_TIMEOUT_MS: '20000' }).lookup.timeoutMs).toBe(20_000);
+  });
+
+  it('rejects an Open Food Facts address that is not a URL', () => {
+    expect(() => loadConfig({ DATABASE_URL, OPEN_FOOD_FACTS_URL: 'not a url' })).toThrow(
+      /OPEN_FOOD_FACTS_URL/,
+    );
   });
 
   it('reads API_PORT, WEB_DIST and MIGRATIONS_DIR (M1-5)', () => {
@@ -26,6 +66,7 @@ describe('api config from the environment', () => {
       databaseUrl: DATABASE_URL,
       migrationsDir: '/app/drizzle',
       webDist: '/app/public',
+      lookup: expect.any(Object) as unknown,
     });
   });
 

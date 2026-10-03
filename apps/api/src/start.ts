@@ -3,6 +3,7 @@ import { createApp } from './app';
 import type { Config } from './config';
 import type { Database } from './db/client';
 import { assertSchemaCurrent } from './db/migrations';
+import { createLookupProviders } from './lookup/providers';
 import { dummyHash } from './services/auth';
 
 /** Checks the schema, then starts listening. Rejects without listening if the schema is behind (M4-9). */
@@ -16,6 +17,7 @@ export async function startServer<S>(
   await dummyHash();
   const app = createApp({
     db: database.db,
+    lookupProviders: createLookupProviders(config.lookup),
     ...(config.webDist === undefined ? {} : { webDist: config.webDist }),
   });
   return listen({ fetch: app.fetch, port: config.port }, (info) => {

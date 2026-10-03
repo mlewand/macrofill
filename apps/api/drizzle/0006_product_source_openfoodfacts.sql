@@ -1,0 +1,2 @@
+ALTER TABLE "products" DROP CONSTRAINT "products_source_values";--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_source_values" CHECK ("products"."source" in ('seed', 'manual', 'openfoodfacts'));

@@ -142,6 +142,8 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
 
    `deploy.sh` reads `SEED_PASSWORD_*` lines itself: one `KEY=value` per line, optionally in single or double quotes, with no comment after the value.
 
+   Optional, in the same `.env`: `LOOKUP_TIMEOUT_MS` (how long a product database may take, default 5000 ms, at most 20000), `LOOKUP_CONTACT` (the contact in the User-Agent that Open Food Facts asks for; default `macrofill_app@mlewandowski.com`) and `OPEN_FOOD_FACTS_URL`. The version in the User-Agent is the commit `deploy.sh` builds.
+
 4. **Deploy:**
 
    ```sh
@@ -175,3 +177,7 @@ Deploys keep it: the seed's initial password applies only to a user without one.
 **Daily targets, recipes and ingredient classes come from the seed file:** every deploy resets them to `apps/api/src/seed/data.ts`. To change them, edit that file, commit it, and deploy. Edits made directly in the database are overwritten by the next deploy. Products are different: the seed file only fills an empty product store, so a deploy never changes a product. Logged meals are never touched.
 
 The container's healthcheck calls `/api/health`, which checks the database connection. `docker compose -f compose.prod.yml ps` shows the status, and `docker compose -f compose.prod.yml logs app` shows the logs. "Database schema is behind" means migrations haven't run; `deploy.sh` runs them. Migrations run only through that explicit step: an app that's newer than the database schema refuses to start. Include the `macrofill` database in the host's `pg_dump` backups.
+
+## Data sources and licenses
+
+- **Open Food Facts** (https://world.openfoodfacts.org) answers the barcode lookup for products the app doesn't have. Its data is under the [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/) (ODbL): the app credits it where a product from it is shown (in the product form, and next to the product in the picker) and here. A product the user saves from it is stored in our product table, which makes that table a database derived from Open Food Facts, under the same share-alike terms. That is fine for now; it goes on the list for the public launch and GDPR work.

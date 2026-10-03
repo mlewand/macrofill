@@ -1,11 +1,25 @@
 import { fileURLToPath } from 'node:url';
+import { MAX_LOOKUP_TIMEOUT_MS } from '@macrofill/domain';
 import { z } from 'zod';
+
+/** An unset variable and an empty one (`FOO=` in a .env file) both mean "use the default". */
+const optional = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema);
 
 const envSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: z.string().min(1),
   MIGRATIONS_DIR: z.string().min(1).optional(),
   WEB_DIST: z.string().min(1).optional(),
+  /** #66-4: how long one product database may take before the lookup goes on without it. */
+  LOOKUP_TIMEOUT_MS: optional(
+    z.coerce.number().int().min(1).max(MAX_LOOKUP_TIMEOUT_MS).default(5000),
+  ),
+  /** Open Food Facts; tests and e2e point it at a stub, so CI never calls the real one. */
+  OPEN_FOOD_FACTS_URL: optional(z.url().default('https://world.openfoodfacts.org')),
+  /** The build's version and a contact, for the User-Agent that Open Food Facts asks for. */
+  APP_VERSION: optional(z.string().min(1).max(64).default('dev')),
+  LOOKUP_CONTACT: optional(z.string().min(1).max(200).default('macrofill_app@mlewandowski.com')),
 });
 
 export interface Config {
@@ -15,6 +29,13 @@ export interface Config {
   migrationsDir: string;
   /** Built `apps/web` to serve (production). Unset in development, where Vite serves it. */
   webDist?: string;
+  /** Looking an unknown barcode up in public product databases (#66). */
+  lookup: {
+    /** Per provider. */
+    timeoutMs: number;
+    openFoodFactsUrl: string;
+    userAgent: string;
+  };
 }
 
 const defaultMigrationsDir = fileURLToPath(new URL('../drizzle', import.meta.url));
@@ -26,11 +47,25 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     const issues = result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
     throw new Error(`Invalid environment:\n${issues.join('\n')}`);
   }
-  const { API_PORT, DATABASE_URL, MIGRATIONS_DIR, WEB_DIST } = result.data;
+  const {
+    API_PORT,
+    DATABASE_URL,
+    MIGRATIONS_DIR,
+    WEB_DIST,
+    LOOKUP_TIMEOUT_MS,
+    OPEN_FOOD_FACTS_URL,
+    APP_VERSION,
+    LOOKUP_CONTACT,
+  } = result.data;
   return {
     port: API_PORT,
     databaseUrl: DATABASE_URL,
     migrationsDir: MIGRATIONS_DIR ?? defaultMigrationsDir,
     ...(WEB_DIST === undefined ? {} : { webDist: WEB_DIST }),
+    lookup: {
+      timeoutMs: LOOKUP_TIMEOUT_MS,
+      openFoodFactsUrl: OPEN_FOOD_FACTS_URL,
+      userAgent: `Macrofill/${APP_VERSION} (${LOOKUP_CONTACT})`,
+    },
   };
 }

@@ -5,6 +5,7 @@ export * from './common.js';
 export * from './events.js';
 export * from './format.js';
 export * from './input.js';
+export * from './lookup.js';
 export * from './macros.js';
 export * from './meal.js';
 export * from './newProduct.js';

@@ -80,3 +80,10 @@ async function admin(url: string, statement: string): Promise<void> {
     await client.end();
   }
 }
+
+/** A `Config['lookup']` for tests: never pointed at a real provider. */
+export const testLookupConfig = {
+  timeoutMs: 1000,
+  openFoodFactsUrl: 'http://127.0.0.1:9',
+  userAgent: 'Macrofill/test (test@example.com)',
+};

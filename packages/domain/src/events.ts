@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { idSchema, timestampSchema } from './common.js';
+import { lookupAttemptSchema } from './lookup.js';
 
 // M7-8: the usage event catalog. Names and props are defined here only; the web app tracks them
 // with a typed `track(name, props)` and the api validates them (M4-10). No personal data: ids,
@@ -30,6 +31,8 @@ const props = {
   scale_disconnected: z.object({}),
   /** From the drop to the connection being back (M6-6). */
   scale_reconnected: z.object({ durationMs }),
+  /** #66-6: an unknown barcode looked up in the providers, each one's result. No barcode. */
+  product_lookup: z.object({ attempts: z.array(lookupAttemptSchema).max(10) }),
 } as const;
 
 export type UsageEventName = keyof typeof props;
@@ -83,6 +86,13 @@ export const usageEventSchema = z.discriminatedUnion('name', [
       ...common,
       name: z.literal('scale_reconnected'),
       props: props.scale_reconnected.strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...common,
+      name: z.literal('product_lookup'),
+      props: props.product_lookup.strict(),
     })
     .strict(),
 ]);

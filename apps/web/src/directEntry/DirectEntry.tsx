@@ -1,9 +1,11 @@
 import {
+  lookupSourceSchema,
   mealNutrition,
   productPicker,
   type Catalog,
   type CatalogProduct,
   type NutritionValues,
+  type ProductCandidate,
   type Recipe,
   type SaveMealRequest,
   type ScaleRecording,
@@ -11,6 +13,7 @@ import {
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NutritionTable } from '../NutritionTable';
+import { candidateToForm } from '../products/labelForm';
 import { ProductDialog } from '../products/ProductForm';
 import { ScanDialog, type LookupOutcome } from '../products/ScanDialog';
 import { useApi } from '../api/api';
@@ -368,7 +371,10 @@ export function ProductChoices(props: {
   const api = useApi();
   // The screen over the step, if any: the scan view, or the product form (with the barcode it was
   // opened for). Never both: the camera is closed before the form opens (#65-4).
-  const [overlay, setOverlay] = useState<{ type: 'scan' } | { type: 'add'; barcode?: string }>();
+  const [overlay, setOverlay] = useState<
+    { type: 'scan' } | { type: 'add'; barcode?: string; candidate?: ProductCandidate }
+  >();
+  const track = useTrack();
   const step = state.recipe.steps[state.current]!;
   const draft = state.steps[state.current]!;
   const options = useMemo(
@@ -394,9 +400,10 @@ export function ProductChoices(props: {
     setOverlay(undefined);
   };
   /**
-   * #65-3, #65-4: a known barcode selects its product for the step, whatever its class (#65-5); an
-   * unknown one opens the product form with the barcode. If the store can't be asked, the scan
-   * view stays.
+   * #65-3, #65-4: a known barcode selects its product for the step, whatever its class (#65-5). An
+   * unknown one is looked up in the product databases through our server, and the form opens with
+   * the barcode, filled in from what was found (#66-2) or empty (#66-4). If the store can't be
+   * asked, the scan view stays: not knowing a product is not the same as not being able to ask.
    */
   const lookup = async (barcode: string): Promise<LookupOutcome> => {
     const mine = ++lookupId.current;
@@ -404,7 +411,18 @@ export function ProductChoices(props: {
       const product = await api.productByBarcode(barcode);
       if (mine !== lookupId.current) return 'failed';
       if (product === undefined) {
-        setOverlay({ type: 'add', barcode });
+        // The user is never stuck on the providers: whatever goes wrong, the empty form opens.
+        const answer = await api.lookupProduct(barcode).catch(() => undefined);
+        if (mine !== lookupId.current) return 'failed';
+        // What the providers said, for coverage (#66-6). Not when our own server couldn't be
+        // reached: that is no provider's result.
+        if (answer && answer.attempts.length > 0)
+          track('product_lookup', { attempts: answer.attempts });
+        setOverlay({
+          type: 'add',
+          barcode,
+          ...(answer?.candidate ? { candidate: answer.candidate } : {}),
+        });
         return 'unknown';
       }
       props.onProductAdded(product);
@@ -418,6 +436,10 @@ export function ProductChoices(props: {
   // A picked product of another class isn't among the options: it's shown anyway, checked.
   const picked = catalog.products.find((p) => p.id === draft.productId);
   const other = picked && picked.ingredientClassId !== step.ingredientClassId ? picked : undefined;
+  // #66-5: a product from a provider credits it (plain text: a link would leave the page, and in
+  // Scale Mode drop the scale). Nothing for a source this build has no name for.
+  const creditSource = lookupSourceSchema.safeParse(picked?.source);
+  const credit = creditSource.success ? t(`source.${creditSource.data}`) : undefined;
   const className = (id: string) =>
     catalog.ingredientClasses.find((c) => c.id === id)?.name.en ?? id;
   return (
@@ -437,6 +459,7 @@ export function ProductChoices(props: {
             {product.name}
           </label>
         ))}
+        {credit && <p className="muted">{t('product.credit', { source: credit })}</p>}
         {other && (
           <p className="muted">
             {t('step.otherClass', {
@@ -460,6 +483,7 @@ export function ProductChoices(props: {
           ingredientClasses={catalog.ingredientClasses}
           ingredientClassId={step.ingredientClassId}
           {...(overlay.barcode === undefined ? {} : { barcode: overlay.barcode })}
+          {...(overlay.candidate ? candidateProps(overlay.candidate) : {})}
           onCancel={() => setOverlay(undefined)}
           onSaved={(product) => {
             props.onProductAdded(product);
@@ -470,6 +494,16 @@ export function ProductChoices(props: {
       )}
     </>
   );
+}
+
+/** The form's props for a provider's candidate: its values, and where they're from. */
+function candidateProps(candidate: ProductCandidate) {
+  const source = lookupSourceSchema.safeParse(candidate.source);
+  return {
+    initial: candidateToForm(candidate),
+    // A source this build can't save as isn't claimed: the values still help, the product is manual.
+    ...(source.success ? { lookup: { source: source.data, ref: candidate.sourceRef } } : {}),
+  };
 }
 
 export function Summary(props: {

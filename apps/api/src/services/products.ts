@@ -57,7 +57,8 @@ async function existing(
   const stored = await repos.products.find(request.id);
   if (stored === undefined) return undefined;
   const same =
-    stored.source === 'manual' &&
+    stored.source === (request.lookup?.source ?? 'manual') &&
+    stored.sourceRef === (request.lookup?.ref ?? null) &&
     stored.addedByUser &&
     stored.name === request.name &&
     stored.brand === request.brand &&

@@ -82,7 +82,8 @@ export async function seed(
     const [existing] = await tx.select({ id: products.id }).from(products).limit(1);
     if (existing === undefined) {
       for (const { nutrition, brand, ...product } of data.products) {
-        const row = { ...product, brand: brand ?? null, ...nutrition };
+        // Whatever the seed file says, these are the seed's own products.
+        const row = { ...product, source: 'seed' as const, brand: brand ?? null, ...nutrition };
         await tx.insert(products).values(row);
       }
     }

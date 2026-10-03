@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '../src/db/client';
 import { assertSchemaCurrent, pendingMigrations, SchemaBehindError } from '../src/db/migrations';
 import { startServer } from '../src/start';
-import { createTestDatabase, migrationsDir } from './support/db';
+import { createTestDatabase, migrationsDir, testLookupConfig } from './support/db';
 
 /** A copy of the real migrations plus one later, unapplied migration. */
 function migrationsWithOneMore(): string {
@@ -32,7 +32,7 @@ describe('M4-9: migrations run only explicitly; the api refuses a schema that is
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
-  const config = { port: 0, databaseUrl: 'unused', migrationsDir };
+  const config = { port: 0, databaseUrl: 'unused', migrationsDir, lookup: testLookupConfig };
 
   it('a fresh database has every migration pending, and the api refuses to start', async () => {
     database = await createTestDatabase();

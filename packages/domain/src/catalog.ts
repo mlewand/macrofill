@@ -9,6 +9,9 @@ export const ingredientClassSchema = z.object({
 
 export type IngredientClass = z.infer<typeof ingredientClassSchema>;
 
+/** Every source a product can be stored with; the database checks it. Providers join as added. */
+export const PRODUCT_SOURCES = ['seed', 'manual', 'openfoodfacts'] as const;
+
 export const productSchema = z.object({
   id: idSchema,
   ingredientClassId: slugSchema,
@@ -16,8 +19,11 @@ export const productSchema = z.object({
   name: z.string().min(1),
   brand: z.string().min(1).optional(),
   nutrition: productNutritionSchema,
-  /** Where the product came from. Lookup providers join the list as they are added (Phase D). */
-  source: z.enum(['seed', 'manual']),
+  /**
+   * Where the product came from, see `PRODUCT_SOURCES`. Read tolerantly: a build that doesn't know
+   * a newer provider must still load a catalog that has its products.
+   */
+  source: z.string().min(1),
 });
 
 export type Product = z.infer<typeof productSchema>;

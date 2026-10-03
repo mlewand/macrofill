@@ -1,6 +1,6 @@
 import {
+  PRODUCT_SOURCES,
   preparedMealSchema,
-  productSchema,
   weighedItemSchema,
   type LocalizedText,
   type ScaleRecording,
@@ -25,7 +25,7 @@ import {
 
 // `text({ enum })` narrows only the TypeScript type, so the database checks the values too.
 // They come from the domain enums; changing one there needs a new migration.
-const productSources = nonEmpty(productSchema.shape.source.options);
+const productSources = nonEmpty(PRODUCT_SOURCES);
 const inputMethods = nonEmpty(preparedMealSchema.shape.inputMethod.options);
 const weightSources = nonEmpty(weighedItemSchema.shape.weightSource.options);
 

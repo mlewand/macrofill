@@ -4,6 +4,7 @@ import {
   parseLabelValue,
   type CreateProductRequest,
   type Nutrient,
+  type ProductCandidate,
   type NutritionValues,
 } from '@macrofill/domain';
 
@@ -15,13 +16,16 @@ export interface LabelFormValues {
   nutrition: Record<Nutrient, string>;
 }
 
-export type FieldProblem = 'name' | 'negative' | 'invalid' | 'tooLarge';
+export type FieldProblem = 'name' | 'negative' | 'invalid' | 'tooLarge' | 'tooLong';
+
+/** The longest name or brand the shared store takes; the inputs say it too. */
+export const MAX_TEXT = 200;
 
 export type LabelFormResult =
   | { ok: true; product: Omit<CreateProductRequest, 'id'> }
   | {
       ok: false;
-      fields: Partial<Record<'name' | Nutrient, FieldProblem>>;
+      fields: Partial<Record<'name' | 'brand' | Nutrient, FieldProblem>>;
       /** The values are fine one by one, but add up to more than 100 g per 100 g. */
       total?: true;
     };
@@ -37,9 +41,11 @@ export function emptyLabelForm(ingredientClassId: string): LabelFormValues {
 
 /** #64-1, #64-2: the typed values as a product to add, or what's wrong with them. */
 export function readLabelForm(values: LabelFormValues): LabelFormResult {
-  const fields: Partial<Record<'name' | Nutrient, FieldProblem>> = {};
+  const fields: Partial<Record<'name' | 'brand' | Nutrient, FieldProblem>> = {};
   const name = values.name.trim();
   if (name === '') fields.name = 'name';
+  else if (name.length > MAX_TEXT) fields.name = 'tooLong';
+  if (values.brand.trim().length > MAX_TEXT) fields.brand = 'tooLong';
   const nutrition = {} as { -readonly [N in Nutrient]: number | null };
   for (const nutrient of NUTRIENTS) {
     const parsed = parseLabelValue(nutrient, values.nutrition[nutrient]);
@@ -59,4 +65,26 @@ export function readLabelForm(values: LabelFormValues): LabelFormResult {
   const checked = createProductRequestSchema.safeParse({ id: crypto.randomUUID(), ...product });
   if (!checked.success) return { ok: false, fields: {}, total: true };
   return { ok: true, product };
+}
+
+/**
+ * A provider's candidate as the form's starting values (#66-2). A value the provider lacks is an
+ * empty field: unknown, never 0 (M2-3). The ingredient class is not the candidate's to give.
+ */
+export function candidateToForm(candidate: ProductCandidate): {
+  name: string;
+  brand: string;
+  nutrition: Record<Nutrient, string>;
+} {
+  return {
+    // Cut to what can be saved: the inputs' maxLength doesn't touch values set from code.
+    name: candidate.name.slice(0, MAX_TEXT),
+    brand: (candidate.brand ?? '').slice(0, MAX_TEXT),
+    nutrition: Object.fromEntries(
+      NUTRIENTS.map((n) => [
+        n,
+        candidate.nutrition[n] === null ? '' : String(candidate.nutrition[n]),
+      ]),
+    ) as Record<Nutrient, string>,
+  };
 }

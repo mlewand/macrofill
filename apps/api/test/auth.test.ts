@@ -11,7 +11,7 @@ import { seedData } from '../src/seed/data';
 import { seed, seedPasswordsFromEnv, seedPasswordVariable } from '../src/seed/seed';
 import { authReady } from '../src/services/auth';
 import { startServer } from '../src/start';
-import { createMigratedTestDatabase, migrationsDir } from './support/db';
+import { createMigratedTestDatabase, migrationsDir, testLookupConfig } from './support/db';
 import { logIn, seedUsername, TEST_PASSWORD, withCookie } from './support/session';
 
 const NOW = new Date('2026-01-15T11:00:00.000Z');
@@ -164,7 +164,11 @@ describe('startup (M4-1)', () => {
         // The dummy hash an unknown username is checked against is ready before any login.
         expect(authReady()).toBe(true);
       });
-      await startServer({ port: 0, databaseUrl: 'unused', migrationsDir }, database, listen);
+      await startServer(
+        { port: 0, databaseUrl: 'unused', migrationsDir, lookup: testLookupConfig },
+        database,
+        listen,
+      );
       expect(listen).toHaveBeenCalledOnce();
     } finally {
       await database.close();

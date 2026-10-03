@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { barcodeSchema } from './barcode.js';
 import { idSchema, slugSchema } from './common.js';
+import { lookupSourceSchema } from './lookup.js';
 import { parseGrams } from './input.js';
 import { productNutritionSchema, type Nutrient, type NutritionValues } from './nutrition.js';
 
@@ -75,6 +76,8 @@ export const createProductRequestSchema = z.object({
   /** The store's 13-digit form (#63-2), already normalized by the client (#65-2). */
   barcode: barcodeSchema.optional(),
   nutrition: newProductNutritionSchema,
+  /** The product came from a provider's candidate (#66-3): saved with that source and reference. */
+  lookup: z.object({ source: lookupSourceSchema, ref: z.string().min(1).max(100) }).optional(),
 });
 
 export type CreateProductRequest = z.infer<typeof createProductRequestSchema>;
