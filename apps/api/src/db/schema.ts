@@ -20,7 +20,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-// Every user-owned table has `ownerId`; curated content (classes, recipes, seed products) is global.
+// Every user-owned table has `ownerId`; global content (classes, recipes, products) has none.
 // Nutrient and target columns are nullable: null means unknown / not tracked, never 0.
 
 // `text({ enum })` narrows only the TypeScript type, so the database checks the values too.
@@ -81,14 +81,21 @@ export const products = pgTable(
   'products',
   {
     id: uuid().primaryKey(),
-    /** Null for seed products, which everyone sees. */
-    ownerId: uuid().references(() => users.id, { onDelete: 'cascade' }),
     ingredientClassId: text()
       .notNull()
       .references(() => ingredientClasses.id),
     name: text().notNull(),
     brand: text(),
     source: text({ enum: productSources }).notNull(),
+    /** The provider's own reference, when the product came from one. */
+    sourceRef: text(),
+    /** One 13-digit form: EAN-13 as is, UPC-A and EAN-8 left-padded with zeros (#63-2). */
+    barcode: text().unique(),
+    /**
+     * Who added the product. Kept for the maintainer only: no response shows it. It is not an
+     * ownership scope: products are global, so the user's deletion clears it and the product stays.
+     */
+    createdBy: uuid().references(() => users.id, { onDelete: 'set null' }),
     kcal: doublePrecision(),
     fat: doublePrecision(),
     saturates: doublePrecision(),
@@ -100,7 +107,7 @@ export const products = pgTable(
   },
   (t) => [
     check('products_source_values', oneOf(t.source, productSources)),
-    check('products_owner_matches_source', sql`(${t.source} = 'seed') = (${t.ownerId} is null)`),
+    check('products_barcode_form', sql`${t.barcode} ~ '^[0-9]{13}$'`),
   ],
 );
 

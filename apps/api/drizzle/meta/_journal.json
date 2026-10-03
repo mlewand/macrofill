@@ -29,6 +29,20 @@
       "when": 1790849607445,
       "tag": "0003_usage_events",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791026510428,
+      "tag": "0004_shared_products_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791026525102,
+      "tag": "0005_shared_products_drop_owner",
+      "breakpoints": true
     }
   ]
 }

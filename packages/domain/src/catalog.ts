@@ -16,7 +16,8 @@ export const productSchema = z.object({
   name: z.string().min(1),
   brand: z.string().min(1).optional(),
   nutrition: productNutritionSchema,
-  source: z.enum(['seed', 'user']),
+  /** Where the product came from. Lookup providers join the list as they are added (Phase D). */
+  source: z.enum(['seed', 'manual']),
 });
 
 export type Product = z.infer<typeof productSchema>;

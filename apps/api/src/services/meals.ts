@@ -99,7 +99,7 @@ async function stored(repos: Repositories, mealId: string): Promise<SaveMealResp
 }
 
 /**
- * Recipe and products must exist and be visible to the user. A recording (M6-7) must be of this
+ * Recipe and products must exist (products are shared by all users). A recording (M6-7) must be of this
  * meal, weighed with the scale.
  */
 async function references(
@@ -122,9 +122,9 @@ async function references(
     issues.push({ path: 'meal.recipeId', message: 'Unknown recipe.' });
   }
   const productIds = meal.items.flatMap((item) => (item.skipped ? [] : [item.productId]));
-  const visible = await repos.products.visibleIds(productIds);
+  const known = await repos.products.existingIds(productIds);
   meal.items.forEach((item, index) => {
-    if (!item.skipped && !visible.has(item.productId)) {
+    if (!item.skipped && !known.has(item.productId)) {
       issues.push({ path: `meal.items.${index}.productId`, message: 'Unknown product.' });
     }
   });
