@@ -592,6 +592,65 @@ describe('an unknown barcode looked up in Open Food Facts (#66)', () => {
     expect(credit.querySelector('a')).toBeNull();
   });
 
+  it('#67-3: a hit from USDA FoodData Central fills the form like one from Open Food Facts, and credits it', async () => {
+    const usda: LookupResponse = {
+      candidate: {
+        source: 'usda-fdc',
+        sourceRef: '1636115',
+        name: 'Frosted Corn Puffs',
+        brand: 'Cocoa Puffs',
+        nutrition: { ...answer.candidate!.nutrition, kcal: 370, salt: null },
+      },
+      attempts: [
+        { provider: 'openfoodfacts', result: 'miss' },
+        { provider: 'usda-fdc', result: 'hit' },
+      ],
+    };
+    const { api } = await scanUnknown(() => Promise.resolve(usda));
+    await form();
+    expect(value(en.product.name)).toBe('Frosted Corn Puffs');
+    expect(value(en.product.brand)).toBe('Cocoa Puffs');
+    expect(value(f.kcal)).toBe('370');
+    // USDA has no salt: unknown, never 0.
+    expect(value(f.salt)).toBe('');
+    expect(
+      screen.getByText(en.product.prefilled.replace('{{source}}', 'USDA FoodData Central')),
+    ).toBeVisible();
+    // Fixed for the kcal check (370 does not match these macros) before saving.
+    type(f.kcal, '300');
+    click(en.product.save);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(vi.mocked(api.createProduct).mock.calls[0]![0]).toMatchObject({
+      lookup: { source: 'usda-fdc', ref: '1636115' },
+      barcode: EAN13,
+    });
+    expect(
+      screen.getByText(en.product.credit.replace('{{source}}', 'USDA FoodData Central')),
+    ).toBeVisible();
+  });
+
+  it('#67-4: every provider asked is recorded, in the order asked', async () => {
+    const response: LookupResponse = {
+      attempts: [
+        { provider: 'openfoodfacts', result: 'error' },
+        { provider: 'usda-fdc', result: 'miss' },
+      ],
+    };
+    const { api } = await scanUnknown(() => Promise.resolve(response));
+    await form();
+    act(() => {
+      const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      visibility.mockRestore();
+    });
+    await waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    const lookups = vi
+      .mocked(api.sendEvents)
+      .mock.calls.flatMap(([events]) => events)
+      .filter((e) => e.name === 'product_lookup');
+    expect(lookups.map((e) => e.props)).toEqual([{ attempts: response.attempts }]);
+  });
+
   it('#66-5: a product typed in, or from the seed, credits nobody', async () => {
     await atFirstStep();
     expect(screen.queryByText(/Nutrition data/)).toBeNull();

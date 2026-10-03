@@ -6,7 +6,10 @@ import { invalidRequest, params } from '../http/validation';
 import type { ProductLookupProvider } from '../lookup/provider';
 import { lookupBarcode } from '../services/lookup';
 
-export function lookupRoutes(providers: readonly ProductLookupProvider[]) {
+export function lookupRoutes(
+  providers: readonly ProductLookupProvider[],
+  totalTimeoutMs: number | undefined,
+) {
   return new Hono<AuthEnv>().get(
     '/product-lookup/:code',
     params(z.object({ code: z.string() })),
@@ -22,7 +25,10 @@ export function lookupRoutes(providers: readonly ProductLookupProvider[]) {
             : 'Not an EAN-13, EAN-8 or UPC-A code.';
         return invalidRequest(c, [{ path: 'code', message }]);
       }
-      return c.json((await lookupBarcode(providers, parsed.barcode)) satisfies LookupResponse, 200);
+      const answer = await lookupBarcode(providers, parsed.barcode, {
+        ...(totalTimeoutMs === undefined ? {} : { totalTimeoutMs }),
+      });
+      return c.json(answer satisfies LookupResponse, 200);
     },
   );
 }

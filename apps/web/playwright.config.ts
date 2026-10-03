@@ -5,8 +5,8 @@ import { parseEnv } from 'node:util';
 import { E2E_PASSWORD, STORAGE_STATE } from './e2e/auth';
 
 const port = 4173;
-/** The stand-in for Open Food Facts (e2e/offStub.js): the lookup never calls the real one. */
-const offStubPort = 4174;
+/** The stand-ins for the product databases (e2e/lookupStub.js): the lookup never calls the real ones. */
+const lookupStubPort = 4174;
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 /**
@@ -57,10 +57,10 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'node apps/web/e2e/offStub.js',
+      command: 'node apps/web/e2e/lookupStub.js',
       cwd: repoRoot,
-      url: `http://127.0.0.1:${offStubPort}/ping`,
-      env: { OFF_STUB_PORT: String(offStubPort) },
+      url: `http://127.0.0.1:${lookupStubPort}/ping`,
+      env: { LOOKUP_STUB_PORT: String(lookupStubPort) },
       reuseExistingServer: false,
       timeout: 30_000,
     },
@@ -79,7 +79,10 @@ export default defineConfig({
         // The seed user's initial password (M4-1), for logging in.
         SEED_PASSWORD_MLEWAND: E2E_PASSWORD,
         // #66: the lookup of an unknown barcode asks the stub, not the real Open Food Facts.
-        OPEN_FOOD_FACTS_URL: `http://127.0.0.1:${offStubPort}`,
+        OPEN_FOOD_FACTS_URL: `http://127.0.0.1:${lookupStubPort}`,
+        // #67: the second provider, with a key (it's left out without one, #67-5).
+        USDA_API_URL: `http://127.0.0.1:${lookupStubPort}`,
+        USDA_API_KEY: 'e2e-usda-key',
       },
       // Never reuse a running server: the reset above must run every time, and a stale server could
       // even be connected to the dev database. A busy port fails the run instead.

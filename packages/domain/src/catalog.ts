@@ -10,7 +10,7 @@ export const ingredientClassSchema = z.object({
 export type IngredientClass = z.infer<typeof ingredientClassSchema>;
 
 /** Every source a product can be stored with; the database checks it. Providers join as added. */
-export const PRODUCT_SOURCES = ['seed', 'manual', 'openfoodfacts'] as const;
+export const PRODUCT_SOURCES = ['seed', 'manual', 'openfoodfacts', 'usda-fdc'] as const;
 
 export const productSchema = z.object({
   id: idSchema,

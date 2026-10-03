@@ -184,6 +184,7 @@
     "cancel": "Cancel"
   },
   "source": {
-    "openfoodfacts": "Open Food Facts"
+    "openfoodfacts": "Open Food Facts",
+    "usda-fdc": "USDA FoodData Central"
   }
 }

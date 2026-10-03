@@ -1,0 +1,25 @@
+{
+ "totalHits": 0,
+ "currentPage": 1,
+ "totalPages": 0,
+ "pageList": [],
+ "foodSearchCriteria": {
+  "dataType": [
+   "Branded"
+  ],
+  "query": "049000028911",
+  "generalSearchInput": "049000028911",
+  "pageNumber": 1,
+  "numberOfResultsPerPage": 50,
+  "pageSize": 5,
+  "requireAllWords": false,
+  "foodTypes": [
+   "Branded"
+  ]
+ },
+ "foods": [],
+ "aggregations": {
+  "dataType": {},
+  "nutrients": {}
+ }
+}

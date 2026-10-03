@@ -24,9 +24,16 @@ export interface AppOptions {
    * ones are wired in `startServer`, so tests and tools can never reach the network by accident.
    */
   lookupProviders?: readonly ProductLookupProvider[];
+  /** How long the whole lookup may take (#67-2); default 10 s. */
+  lookupTotalTimeoutMs?: number;
 }
 
-function createApiRoutes(db: Db, now: () => Date, providers: readonly ProductLookupProvider[]) {
+function createApiRoutes(
+  db: Db,
+  now: () => Date,
+  providers: readonly ProductLookupProvider[],
+  totalTimeoutMs: number | undefined,
+) {
   // M4-2: login comes first and answers itself; everything after it needs a session.
   return new Hono<AuthEnv>()
     .route('/', loginRoutes(db, now))
@@ -34,7 +41,7 @@ function createApiRoutes(db: Db, now: () => Date, providers: readonly ProductLoo
     .route('/', catalogRoutes(db))
     .route('/', mealRoutes(db))
     .route('/', productRoutes(db))
-    .route('/', lookupRoutes(providers))
+    .route('/', lookupRoutes(providers, totalTimeoutMs))
     .route('/', meRoutes(db))
     .route('/', eventRoutes(db))
     .route('/', todayRoutes(db, now));
@@ -67,7 +74,12 @@ export function createApp(options: AppOptions) {
 
   app.route(
     '/api',
-    createApiRoutes(options.db, options.now ?? (() => new Date()), options.lookupProviders ?? []),
+    createApiRoutes(
+      options.db,
+      options.now ?? (() => new Date()),
+      options.lookupProviders ?? [],
+      options.lookupTotalTimeoutMs,
+    ),
   );
   app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
 
