@@ -2,7 +2,7 @@
 
 Working code name: **Diet Tracking App** (Macrofill)
 
-Status: MVP0 is done (Phases A to C). Phase D is in progress (see Phases). Future stages are listed so the design leaves room for them. Don't implement them before a phase takes them in.
+Status: MVP0 is done (Phases A to C), and so is Phase D (see Phases). Future stages are listed so the design leaves room for them. Don't implement them before a phase takes them in.
 
 # Problem
 
