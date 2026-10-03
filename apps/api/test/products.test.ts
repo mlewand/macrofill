@@ -156,6 +156,32 @@ describe('POST /api/products (#64-1, #64-4, #64-8)', () => {
     expect(await rows()).toEqual([]);
   });
 
+  it('#69-1: sugars above carbs and saturates above fat are refused, naming the field', async () => {
+    const res = await post(app, {
+      ...request,
+      nutrition: { ...request.nutrition, carbs: 10, sugars: 12, fat: 3, saturates: 4 },
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { issues: { path: string }[] };
+    expect(body.issues.map((i) => i.path).sort()).toEqual([
+      'nutrition.saturates',
+      'nutrition.sugars',
+    ]);
+    expect(await rows()).toEqual([]);
+  });
+
+  it('#69-1: a product already stored with sugars above carbs still loads in the catalog (reads stay tolerant)', async () => {
+    await database.db.execute(
+      sql`insert into products (id, ingredient_class_id, name, source, carbs, sugars)
+          values (${request.id}, 'curd', 'Old typo', 'manual', 5, 9)`,
+    );
+    const catalog = catalogSchema.parse(await (await app.request('/api/catalog')).json());
+    expect(catalog.products.find((p) => p.id === request.id)?.nutrition).toMatchObject({
+      carbs: 5,
+      sugars: 9,
+    });
+  });
+
   it('refuses a request without a session', async () => {
     const res = await createApp({ db: database.db }).request('/api/products', {
       method: 'POST',

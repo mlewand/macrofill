@@ -57,13 +57,39 @@ export function kcalMismatch(nutrition: NutritionValues): { expected: number } |
   return Math.abs(kcal - expected) > Math.max(0.15 * expected, 10) ? { expected } : undefined;
 }
 
-/** #64-2: the values a product can be written with. */
+/**
+ * #69-1: on a label, sugars are part of the carbs and saturates part of the fat, so a part above
+ * its whole is a typo. Returns the fields that are wrong, the parts (`sugars`, `saturates`), in
+ * that order. Comparing with an unknown value is skipped; a known 0 is a value.
+ */
+export function partOfWholeProblems(nutrition: NutritionValues): ('sugars' | 'saturates')[] {
+  const problems: ('sugars' | 'saturates')[] = [];
+  const { sugars, carbs, saturates, fat } = nutrition;
+  if (sugars !== null && carbs !== null && sugars > carbs + EPSILON) problems.push('sugars');
+  if (saturates !== null && fat !== null && saturates > fat + EPSILON) problems.push('saturates');
+  return problems;
+}
+
+/** #64-2, #69-1: the values a product can be written with. */
 const newProductNutritionSchema = productNutritionSchema
   .refine((n) => GRAM_NUTRIENTS.every((nutrient) => (n[nutrient] ?? 0) <= 100 + EPSILON), {
     message: 'A value is above 100 g per 100 g.',
   })
   .refine((n) => (n.carbs ?? 0) + (n.protein ?? 0) + (n.fat ?? 0) <= 100 + EPSILON, {
     message: 'Carbs, protein and fat add up to more than 100 g per 100 g.',
+  })
+  .superRefine((n, ctx) => {
+    // Each part is reported on its own field, so a client can show it there.
+    for (const part of partOfWholeProblems(n)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [part],
+        message:
+          part === 'sugars'
+            ? 'Sugars are part of the carbs and can’t be more than them.'
+            : 'Saturates are part of the fat and can’t be more than it.',
+      });
+    }
   });
 
 /** `POST /api/products` (#64-1, #64-8). The id is the client's, so a retry is safe. */

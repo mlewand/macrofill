@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createProductRequestSchema,
   kcalMismatch,
+  partOfWholeProblems,
   parseLabelValue,
   type NutritionValues,
 } from '../src/index.js';
@@ -159,5 +160,67 @@ describe('#64-1, #64-2: the create product request', () => {
     expect(with_({ carbs: 50, protein: 30, fat: 20 })).toBe(true);
     expect(with_({ carbs: 50, protein: 30, fat: 20.1 })).toBe(false);
     expect(with_({ carbs: 50, protein: 30, fat: 19, fibre: 1, salt: 0.5 })).toBe(false);
+  });
+});
+
+describe('#69-1: sugars are part of the carbs, saturates part of the fat', () => {
+  const values = (change: Partial<NutritionValues>): NutritionValues => ({ ...unknown, ...change });
+
+  it('finds sugars above carbs and saturates above fat, each by the field that is the part', () => {
+    expect(partOfWholeProblems(values({ carbs: 10, sugars: 10.5 }))).toEqual(['sugars']);
+    expect(partOfWholeProblems(values({ fat: 4, saturates: 4.1 }))).toEqual(['saturates']);
+    expect(partOfWholeProblems(values({ carbs: 1, sugars: 2, fat: 3, saturates: 4 }))).toEqual([
+      'sugars',
+      'saturates',
+    ]);
+  });
+
+  it('accepts a part equal to or below its whole', () => {
+    expect(partOfWholeProblems(values({ carbs: 10, sugars: 10, fat: 4, saturates: 0 }))).toEqual(
+      [],
+    );
+    expect(
+      partOfWholeProblems(values({ carbs: 57.5, sugars: 56.3, fat: 30.9, saturates: 10.6 })),
+    ).toEqual([]);
+  });
+
+  it('#69-1: comparing with an unknown value is skipped, in either direction', () => {
+    expect(partOfWholeProblems(values({ sugars: 50 }))).toEqual([]);
+    expect(partOfWholeProblems(values({ carbs: 5 }))).toEqual([]);
+    expect(partOfWholeProblems(values({ saturates: 50 }))).toEqual([]);
+    expect(partOfWholeProblems(values({ fat: 5 }))).toEqual([]);
+    // Known zero is a value: sugars above a carbs of 0 is a typo.
+    expect(partOfWholeProblems(values({ carbs: 0, sugars: 1 }))).toEqual(['sugars']);
+  });
+
+  it('absorbs floating point error in decimal label values', () => {
+    expect(partOfWholeProblems(values({ carbs: 0.1 + 0.2, sugars: 0.3 }))).toEqual([]);
+  });
+
+  const request = {
+    id: '4f0c7a3e-3b8e-4d7a-9a51-6c1f2d9e8b01',
+    ingredientClassId: 'curd',
+    name: 'x',
+  };
+
+  it('#69-1: the shared store takes no such product, and the issue is on the part’s field', () => {
+    const wrong = createProductRequestSchema.safeParse({
+      ...request,
+      nutrition: values({ carbs: 10, sugars: 12, fat: 1, saturates: 2 }),
+    });
+    expect(wrong.success).toBe(false);
+    expect(wrong.error?.issues.map((i) => i.path.join('.')).sort()).toEqual([
+      'nutrition.saturates',
+      'nutrition.sugars',
+    ]);
+    expect(
+      createProductRequestSchema.safeParse({
+        ...request,
+        nutrition: values({ carbs: 10, sugars: 10, fat: 1, saturates: 1 }),
+      }).success,
+    ).toBe(true);
+    expect(createProductRequestSchema.safeParse({ ...request, nutrition: unknown }).success).toBe(
+      true,
+    );
   });
 });

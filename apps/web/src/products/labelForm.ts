@@ -2,6 +2,7 @@ import {
   createProductRequestSchema,
   NUTRIENTS,
   parseLabelValue,
+  partOfWholeProblems,
   type CreateProductRequest,
   type Nutrient,
   type ProductCandidate,
@@ -16,7 +17,8 @@ export interface LabelFormValues {
   nutrition: Record<Nutrient, string>;
 }
 
-export type FieldProblem = 'name' | 'negative' | 'invalid' | 'tooLarge' | 'tooLong';
+export type FieldProblem =
+  'name' | 'negative' | 'invalid' | 'tooLarge' | 'tooLong' | 'aboveCarbs' | 'aboveFat';
 
 /** The longest name or brand the shared store takes; the inputs say it too. */
 export const MAX_TEXT = 200;
@@ -51,6 +53,12 @@ export function readLabelForm(values: LabelFormValues): LabelFormResult {
     const parsed = parseLabelValue(nutrient, values.nutrition[nutrient]);
     if (parsed.ok) nutrition[nutrient] = parsed.value;
     else fields[nutrient] = parsed.reason;
+  }
+  if (Object.keys(fields).length > 0) return { ok: false, fields };
+  // #69-1: a part above its whole is named on the part's field. Only once every value is a number:
+  // there's nothing to compare with a malformed one.
+  for (const part of partOfWholeProblems(nutrition)) {
+    fields[part] = part === 'sugars' ? 'aboveCarbs' : 'aboveFat';
   }
   if (Object.keys(fields).length > 0) return { ok: false, fields };
 

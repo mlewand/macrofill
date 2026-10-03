@@ -579,6 +579,30 @@ describe('an unknown barcode looked up in Open Food Facts (#66)', () => {
     expect(api.createProduct).not.toHaveBeenCalled();
   });
 
+  it('#69-2: a prefilled lookup result with sugars above carbs is refused on the field, and saves once the user corrects it', async () => {
+    const wrong: LookupResponse = {
+      ...answer,
+      candidate: {
+        ...answer.candidate!,
+        nutrition: { ...answer.candidate!.nutrition, carbs: 10, sugars: 56.3, fibre: 0, kcal: 343 },
+      },
+    };
+    const { api } = await scanUnknown(() => Promise.resolve(wrong));
+    await form();
+    expect(value(f.sugars)).toBe('56.3');
+    click(en.product.save);
+    expect(screen.getByLabelText(f.sugars)).toBeInvalid();
+    expect(screen.getByText(en.product.problem.aboveCarbs)).toBeVisible();
+    expect(api.createProduct).not.toHaveBeenCalled();
+    type(f.sugars, '5.6');
+    click(en.product.save);
+    await waitFor(() => expect(api.createProduct).toHaveBeenCalled());
+    expect(vi.mocked(api.createProduct).mock.calls[0]![0].nutrition).toMatchObject({
+      carbs: 10,
+      sugars: 5.6,
+    });
+  });
+
   it('#66-5: the product credits Open Food Facts in the picker, as plain text', async () => {
     const { api } = await scanUnknown(() => Promise.resolve(answer));
     await form();

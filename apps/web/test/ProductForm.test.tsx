@@ -110,6 +110,35 @@ describe('the product form', () => {
     expect(api.createProduct).not.toHaveBeenCalled();
   });
 
+  it('#69-1: sugars above carbs and saturates above fat are refused, with the message on the field', () => {
+    const { api } = setup();
+    type(en.product.name, 'x');
+    type(f.carbs, '10');
+    type(f.sugars, '12');
+    type(f.fat, '3');
+    type(f.saturates, '4');
+    save();
+    expect(field(f.sugars)).toBeInvalid();
+    expect(field(f.saturates)).toBeInvalid();
+    expect(screen.getByText(en.product.problem.aboveCarbs)).toBeVisible();
+    expect(screen.getByText(en.product.problem.aboveFat)).toBeVisible();
+    expect(api.createProduct).not.toHaveBeenCalled();
+    // Fixed, it saves; the message goes with the typo.
+    type(f.sugars, '9,5');
+    type(f.saturates, '2');
+    expect(screen.queryByText(en.product.problem.aboveCarbs)).toBeNull();
+    save();
+    expect(api.createProduct).toHaveBeenCalledOnce();
+  });
+
+  it('#69-1: comparing with an unknown value is skipped: sugars with no carbs is saved', async () => {
+    const { api } = setup();
+    type(en.product.name, 'x');
+    type(f.sugars, '40');
+    save();
+    await waitFor(() => expect(api.createProduct).toHaveBeenCalledOnce());
+  });
+
   it('#64-1: another ingredient class can be chosen', async () => {
     const { api } = setup();
     type(en.product.name, 'Oat milk');
