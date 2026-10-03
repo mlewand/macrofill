@@ -42,29 +42,29 @@ Judge each finding by how it affects the user in realistic use: the product as `
 
 Every finding, including points that appear only in a review summary, gets one of these outcomes, and a reply that says which. Reply on inline threads and resolve them; answer summary points with a PR comment. Check a finding before acting on it.
 
-- **Fix** it in the PR when, in realistic use, the PR would cause a regression in something that worked, data loss or corruption, or a security hole, or would leave a criterion it covers unmet. Any other high or critical finding the PR causes is fixed too; leaving one to an issue needs the maintainer's OK. Reply with the fixing commit.
-- **Extract** it to an issue when it's low or medium priority, theoretical problems included. The issue links where it came from (a permalink to the review thread or the code), says what goes wrong for the user, and gets a priority label. Reply with the issue link and its priority, list it under "Not handled" in the PR description, so re-reviews don't raise it again, and resolve the thread.
+- **Fix** it in the PR when it would open a security hole, however unlikely, or when, in realistic use, the PR would cause a regression in something that worked or data loss or corruption, or would leave a criterion it covers unmet. Any other high or critical finding the PR causes is fixed too; leaving one to an issue needs the maintainer's OK. Reply with the fixing commit.
+- **Extract** it to an issue when it's low or medium priority, theoretical problems included. The issue links where it came from (a permalink to the review thread or the code), says what goes wrong for the user, and gets a priority label, plus `data loss` when user data could be lost or corrupted. Reply with the issue link and its priority, list it under "Not handled" in the PR description, so re-reviews don't raise it again, and resolve the thread.
 - **Reject** it when it doesn't hold: say why, with evidence.
 - **Skip** it when it's unrelated to the PR's purpose, e.g. about code the PR doesn't change: say so in one line. Open an issue for it only when it's high or critical.
 
-Priority is judged from the product side: how much it affects the user, counting how likely it is. The labels (create a missing one with `gh label create`):
+Priority is judged from the product side: how much it affects the user, counting how likely it is. A security hole is the exception: it's critical whatever its likelihood. A scenario that the accepted shortcuts rule out (e.g. two users on one device) isn't realistic use, though, so it isn't a security hole either. The labels (create a missing one with `gh label create`):
 
-- `priority: critical`: data loss or corruption, a security hole, or the app unusable.
+- `priority: critical`: a security hole, however unlikely; or, in realistic use, data loss or corruption, or the app unusable.
 - `priority: high`: a core flow (logging a meal, Today) broken or wrong in normal use.
 - `priority: medium`: a noticeable annoyance, or a wrong result in an uncommon but realistic case, with a workaround.
 - `priority: low`: a rare edge case, a theoretical problem, or something cosmetic.
 
-**Escalation after 20 reviews.** Count the reviews submitted on the PR by reviewers (Codex, Copilot, CodeRabbit, people), as GitHub lists them. GitHub also lists your own thread replies as reviews; those don't count. Once the PR has 20 and the latest review still has findings to fix, stop working on it:
+**Escalation after 20 reviews.** Count the reviews submitted on the PR (by Codex, Copilot, CodeRabbit or people), as GitHub lists them. GitHub also lists each reply on a review thread as a review with an empty body; those don't count. Once the PR has 20 and the latest review still has findings to fix, stop working on it:
 
 - Post a PR comment for the maintainer: why the reviews keep finding things (the themes they come back to, and which findings came from earlier fixes), what has been fixed and extracted so far, and how you suggest proceeding (an accepted shortcut to propose, a narrower scope, a split or a different design).
 - Add the `needs-maintainer` label, and tell the maintainer.
 - Leave the PR alone until the maintainer answers. Other work goes on, within the cap.
 
-When the maintainer gives the go-ahead, remove the label. The count starts again from then: after 20 more reviews, the same applies. To count, with your own login, and `and .submitted_at > "<go-ahead time>"` added to the filter after a go-ahead:
+When the maintainer gives the go-ahead, remove the label. The count starts again from then: after 20 more reviews, the same applies. To count, with `and .submitted_at > "<go-ahead time>"` added to the filter after a go-ahead:
 
 ```sh
 gh api 'repos/{owner}/{repo}/pulls/<number>/reviews' --paginate \
-  --jq '.[] | select(.user.login != "<your login>") | .id' | wc -l
+  --jq '.[] | select(.body != "") | .id' | wc -l
 ```
 
 ## Review guidelines
@@ -73,7 +73,7 @@ For code reviewers (Codex, Copilot, CodeRabbit), and agents reviewing a PR:
 
 - Review for realistic use of the product as `docs/requirements.md` scopes it, accepted shortcuts included. In MVP0 each phone or tablet is used by one person, so switching users on one device, across tabs or with browser storage blocked isn't a scenario to review for. The server keeping users apart (M4-1 to M4-3) is.
 - What matters most: regressions in what worked, data loss or corruption, security, and the acceptance criteria the PR names.
-- Rate each finding by its impact on the user in realistic use, likelihood included, not by its worst case, and say what the user would see.
+- Rate each finding by its impact on the user in realistic use, likelihood included, not by its worst case, and say what the user would see. A security hole is the exception: always the highest priority.
 - Don't raise again what the PR description lists under "Not handled", or what an open issue already tracks. Leave problems in code the PR doesn't change alone, unless they're severe.
 - When a finding follows from the fix of an earlier one, say so.
 
