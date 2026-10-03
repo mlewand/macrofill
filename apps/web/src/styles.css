@@ -219,6 +219,34 @@ button.danger {
   color: var(--accent);
 }
 
+/* #88: the notice after a meal is saved, over the bottom of the main screen. */
+.notice {
+  position: fixed;
+  left: var(--gap);
+  right: var(--gap);
+  bottom: var(--gap);
+  z-index: 10;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: Canvas;
+  color: CanvasText;
+  border: 2px solid var(--accent);
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice-title {
+  font-weight: 600;
+}
+
 /* The product form, over the step it was opened from (#64). */
 .overlay {
   position: fixed;
