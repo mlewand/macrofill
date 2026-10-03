@@ -10,7 +10,7 @@ export function catalogRoutes(db: Db) {
     const [ingredientClasses, recipes, products] = await Promise.all([
       repos.ingredientClasses.all(),
       repos.recipes.all(),
-      repos.products.visibleWithLastUse(),
+      repos.products.allWithLastUse(),
     ]);
     return c.json({ ingredientClasses, recipes, products } satisfies Catalog);
   });

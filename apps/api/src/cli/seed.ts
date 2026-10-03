@@ -1,4 +1,5 @@
-// `pnpm db:seed`: loads the seed data; safe to run again (M4-5). Initial passwords come from
+// `pnpm db:seed`: loads the seed data; safe to run again (M4-5). Products go only into an empty
+// product store (#63-7). Initial passwords come from
 // SEED_PASSWORD_<USERNAME> and are only set for users without one (M4-1).
 import { loadConfig } from '../config';
 import { connect } from '../db/client';
@@ -11,8 +12,17 @@ const database = connect(config.databaseUrl);
 
 try {
   await assertSchemaCurrent(database.db, config.migrationsDir);
-  const { withoutPassword } = await seed(database.db, undefined, seedPasswordsFromEnv(process.env));
+  const { withoutPassword, missingDefaultProducts } = await seed(
+    database.db,
+    undefined,
+    seedPasswordsFromEnv(process.env),
+  );
   console.log('Seed data loaded.');
+  for (const id of missingDefaultProducts) {
+    console.warn(
+      `A recipe step's default product ${id} isn't in the product store, which already holds products, so the step has no default. Add the product in the app.`,
+    );
+  }
   for (const username of withoutPassword) {
     console.warn(
       `User ${username} has no password and can't log in: set ${seedPasswordVariable(username)} and seed again, or run the password command.`,

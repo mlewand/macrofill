@@ -243,20 +243,20 @@ describe('POST /api/meals', () => {
       });
     });
 
-    it("another user's own product can't be used", async () => {
+    it('#63-1: a product another user added can be used', async () => {
       const productId = 'e0b6f4d5-7a8c-4b9d-8e1f-0a9b8c7d6e5f';
       await database.db.execute(
         sql`insert into users (id, username, timezone) values (${otherUserId}, 'other', 'UTC')`,
       );
       await database.db.execute(
-        sql`insert into products (id, owner_id, ingredient_class_id, name, source)
-            values (${productId}, ${otherUserId}, 'curd', 'private', 'user')`,
+        sql`insert into products (id, ingredient_class_id, name, source, created_by)
+            values (${productId}, 'curd', 'shared', 'manual', ${otherUserId})`,
       );
       const body = request();
       const item = { ...body.meal.items[0]!, productId };
       const res = await post({ ...body, meal: { ...body.meal, items: [item] } });
-      expect(res.status).toBe(400);
-      expect(await count('prepared_meals')).toBe(0);
+      expect(res.status).toBe(201);
+      expect(await count('prepared_meals')).toBe(1);
     });
 
     it('an unknown recipe returns 400', async () => {

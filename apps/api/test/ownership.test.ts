@@ -16,11 +16,11 @@ const userA = seedData.users[0]!.user;
 const userB = { id: '6c1f0e2a-3b4d-4e5f-8a9b-0c1d2e3f4a5b', username: 'other' };
 const curdRecipe = seedData.recipes.find((r) => r.name.en === 'Curd')!;
 const curd = seedData.products.find((p) => p.ingredientClassId === 'curd')!;
-/** A product only A can see. */
-const privateProductId = 'e0b6f4d5-7a8c-4b9d-8e1f-0a9b8c7d6e5f';
+/** A product A added; products are shared, so B sees it (#63-8). */
+const sharedProductId = 'e0b6f4d5-7a8c-4b9d-8e1f-0a9b8c7d6e5f';
 const NOW = new Date('2026-01-15T11:00:00.000Z');
 
-/** A's meal: A's private product and a seed product, eaten today. */
+/** A's meal: the product A added and a seed product, eaten today. */
 const mealOfA: SaveMealRequest = {
   meal: {
     id: 'b7e3c1a2-4d5f-4e6a-9b8c-7d6e5f4a3b2c',
@@ -39,7 +39,7 @@ const mealOfA: SaveMealRequest = {
       {
         stepId: curdRecipe.steps[1]!.id,
         skipped: false,
-        productId: privateProductId,
+        productId: sharedProductId,
         grams: 50,
         weightSource: 'manual',
       },
@@ -75,12 +75,16 @@ const count = async (db: Db, table: string) => {
 /** Per route (`METHOD path` as in `app.routes`): what B gets for A's resources. */
 const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
   'GET /api/catalog': async ({ a, b }) => {
+    // Products are global (#63-8): what A added is B's too. Only the history is A's (M5-2).
     const ofB = catalogSchema.parse(await (await b.request('/api/catalog')).json());
-    expect(ofB.products.map((p) => p.id)).not.toContain(privateProductId);
-    // A's use of a seed product doesn't show as B's history (M5-2).
+    expect(ofB.products.map((p) => p.id)).toContain(sharedProductId);
+    expect(ofB.products.find((p) => p.id === sharedProductId)!.lastUsedAt).toBeNull();
     expect(ofB.products.find((p) => p.id === curd.id)!.lastUsedAt).toBeNull();
     const ofA = catalogSchema.parse(await (await a.request('/api/catalog')).json());
-    expect(ofA.products.map((p) => p.id)).toContain(privateProductId);
+    expect(ofA.products.map((p) => p.id)).toContain(sharedProductId);
+    expect(ofA.products.find((p) => p.id === sharedProductId)!.lastUsedAt).toBe(
+      mealOfA.meal.finishedAt,
+    );
   },
 
   'GET /api/me': async ({ a, b }) => {
@@ -160,18 +164,13 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
     expect(rows).toEqual([{ owner_id: userA.id, props: { inputMethod: 'scale' } }]);
   },
 
-  'POST /api/meals': async ({ b, db }) => {
+  'POST /api/meals': async ({ a, b, db }) => {
     const meals = await count(db, 'prepared_meals');
-    // A's meal ids, with only a seed product: not found, as for any of A's resources. With A's
-    // private product it's refused before that, as unknown (400).
-    expect((await b.request('/api/meals', json(mealOfA))).status).toBe(400);
-    const retry = await b.request(
-      '/api/meals',
-      json({ ...mealOfA, meal: { ...mealOfA.meal, items: mealOfA.meal.items.slice(0, 1) } }),
-    );
-    expect(retry.status).toBe(404);
-    expect(await retry.json()).toEqual({ error: 'not_found' });
-    // A new meal of B's with A's private product: as if it didn't exist.
+    // A's meal ids: not found, as for any of A's resources, though the products are shared.
+    const reuse = await b.request('/api/meals', json(mealOfA));
+    expect(reuse.status).toBe(404);
+    expect(await reuse.json()).toEqual({ error: 'not_found' });
+    // A new meal of B's with the product A added: allowed, products are global (#63-8).
     const own = await b.request(
       '/api/meals',
       json({
@@ -182,8 +181,13 @@ const fixtures: Record<string, (ctx: Context) => Promise<void>> = {
         },
       }),
     );
-    expect(own.status).toBe(400);
-    expect(await count(db, 'prepared_meals')).toBe(meals);
+    expect(own.status).toBe(201);
+    expect(await count(db, 'prepared_meals')).toBe(meals + 1);
+    // A's history is untouched by B's use.
+    const ofA = catalogSchema.parse(await (await a.request('/api/catalog')).json());
+    expect(ofA.products.find((p) => p.id === sharedProductId)!.lastUsedAt).toBe(
+      mealOfA.meal.finishedAt,
+    );
   },
 };
 
@@ -226,8 +230,8 @@ describe('M4-3: ownership over the full route table', () => {
       sql`insert into users (id, username, timezone) values (${userB.id}, ${userB.username}, 'Europe/Warsaw')`,
     );
     await db.execute(
-      sql`insert into products (id, owner_id, ingredient_class_id, name, source)
-          values (${privateProductId}, ${userA.id}, 'milk', 'A''s milk', 'user')`,
+      sql`insert into products (id, ingredient_class_id, name, source, created_by)
+          values (${sharedProductId}, 'milk', 'A''s milk', 'manual', ${userA.id})`,
     );
     const app = createApp({ db, now: () => NOW });
     const a = await signedIn(app, db, userA.username);

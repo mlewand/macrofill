@@ -12,7 +12,7 @@ import type {
   ScaleRecording,
   UsageEvent,
 } from '@macrofill/domain';
-import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   consumptionEntries,
@@ -30,7 +30,7 @@ import {
 
 /**
  * Data access for one user. Every query on user-owned data is scoped by `ownerId`; nothing else
- * reads or writes those tables. Curated content (recipes, seed products) is global.
+ * reads or writes those tables. Global content (ingredient classes, recipes, products) isn't.
  */
 export function createRepositories(db: Db, ownerId: string) {
   return {
@@ -78,8 +78,8 @@ export function createRepositories(db: Db, ownerId: string) {
     },
 
     products: {
-      /** Seed products and the user's own, each with when the user last used it (M5-2). */
-      async visibleWithLastUse(): Promise<CatalogProduct[]> {
+      /** Every product, each with when the user last used it (M5-2). */
+      async allWithLastUse(): Promise<CatalogProduct[]> {
         const lastUse = db
           .select({
             productId: preparedMealItems.productId,
@@ -100,7 +100,6 @@ export function createRepositories(db: Db, ownerId: string) {
           .select({ product: products, lastUsedAt: lastUse.lastUsedAt })
           .from(products)
           .leftJoin(lastUse, eq(lastUse.productId, products.id))
-          .where(or(isNull(products.ownerId), eq(products.ownerId, ownerId)))
           .orderBy(asc(products.name));
         return rows.map(({ product: p, lastUsedAt }) => ({
           id: p.id,
@@ -122,18 +121,13 @@ export function createRepositories(db: Db, ownerId: string) {
         }));
       },
 
-      /** Of `ids`, those the user may use: seed products and the user's own. */
-      async visibleIds(ids: readonly string[]): Promise<Set<string>> {
+      /** Of `ids`, those that are products. */
+      async existingIds(ids: readonly string[]): Promise<Set<string>> {
         if (ids.length === 0) return new Set();
         const rows = await db
           .select({ id: products.id })
           .from(products)
-          .where(
-            and(
-              inArray(products.id, [...ids]),
-              or(isNull(products.ownerId), eq(products.ownerId, ownerId)),
-            ),
-          );
+          .where(inArray(products.id, [...ids]));
         return new Set(rows.map((r) => r.id));
       },
     },

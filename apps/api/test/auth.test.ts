@@ -247,6 +247,7 @@ describe('seed passwords (M4-1, M4-5)', () => {
     const first = await hashes();
     await expect(seed(database.db, undefined, { [seedUsername]: 'short' })).resolves.toEqual({
       withoutPassword: [],
+      missingDefaultProducts: [],
     });
     expect(await hashes()).toEqual(first);
   });
@@ -262,6 +263,7 @@ describe('seed passwords (M4-1, M4-5)', () => {
   it('M4-1: the seed reports users without a password', async () => {
     expect(await seed(database.db)).toEqual({
       withoutPassword: seedData.users.map((u) => u.user.username),
+      missingDefaultProducts: [],
     });
   });
 
