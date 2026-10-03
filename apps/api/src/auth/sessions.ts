@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 export const SESSION_COOKIE = 'macrofill_session';
 
-/** How long a login lasts. There's no logout or renewal in MVP0; after this, log in again. */
+/** How long a login lasts. There's no renewal; after this, log in again. A logout (#95) ends one early. */
 export const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 /** A new session token for the cookie: 256 random bits. */
