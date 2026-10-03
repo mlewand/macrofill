@@ -40,7 +40,7 @@ export const lookupResponseSchema = z.object({
 export type LookupResponse = z.infer<typeof lookupResponseSchema>;
 
 /** The providers a product can be saved as coming from: what this build writes (#66-3). */
-export const lookupSourceSchema = z.enum(['openfoodfacts']);
+export const lookupSourceSchema = z.enum(['openfoodfacts', 'usda-fdc']);
 export type LookupSource = z.infer<typeof lookupSourceSchema>;
 
 /**

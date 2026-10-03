@@ -97,7 +97,7 @@ export function createOpenFoodFactsProvider(options: OpenFoodFactsOptions): Prod
           ? { result: 'error' }
           : { result: 'miss' };
       } catch {
-        return { result: timeout.aborted ? 'timeout' : 'error' };
+        return { result: timeout.aborted || signal?.aborted ? 'timeout' : 'error' };
       }
     },
   };

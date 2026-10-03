@@ -15,6 +15,16 @@ const envSchema = z.object({
   LOOKUP_TIMEOUT_MS: optional(
     z.coerce.number().int().min(1).max(MAX_LOOKUP_TIMEOUT_MS).default(5000),
   ),
+  /**
+   * #67-2: how long the whole lookup may take, all product databases together. Capped like the
+   * per-provider time, so the app, which waits longer than the cap, never gives up first.
+   */
+  LOOKUP_TOTAL_TIMEOUT_MS: optional(
+    z.coerce.number().int().min(1).max(MAX_LOOKUP_TIMEOUT_MS).default(10_000),
+  ),
+  /** USDA FoodData Central's data.gov key (#67-5): without one that provider is left out. */
+  USDA_API_KEY: optional(z.string().min(1).max(200).optional()),
+  USDA_API_URL: optional(z.url().default('https://api.nal.usda.gov')),
   /** Open Food Facts; tests and e2e point it at a stub, so CI never calls the real one. */
   OPEN_FOOD_FACTS_URL: optional(z.url().default('https://world.openfoodfacts.org')),
   /** The build's version and a contact, for the User-Agent that Open Food Facts asks for. */
@@ -33,7 +43,12 @@ export interface Config {
   lookup: {
     /** Per provider. */
     timeoutMs: number;
+    /** All providers together. */
+    totalTimeoutMs: number;
     openFoodFactsUrl: string;
+    usdaUrl: string;
+    /** Unset: USDA FoodData Central isn't asked. */
+    usdaApiKey?: string;
     userAgent: string;
   };
 }
@@ -53,6 +68,9 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     MIGRATIONS_DIR,
     WEB_DIST,
     LOOKUP_TIMEOUT_MS,
+    LOOKUP_TOTAL_TIMEOUT_MS,
+    USDA_API_KEY,
+    USDA_API_URL,
     OPEN_FOOD_FACTS_URL,
     APP_VERSION,
     LOOKUP_CONTACT,
@@ -64,7 +82,10 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     ...(WEB_DIST === undefined ? {} : { webDist: WEB_DIST }),
     lookup: {
       timeoutMs: LOOKUP_TIMEOUT_MS,
+      totalTimeoutMs: LOOKUP_TOTAL_TIMEOUT_MS,
       openFoodFactsUrl: OPEN_FOOD_FACTS_URL,
+      usdaUrl: USDA_API_URL,
+      ...(USDA_API_KEY === undefined ? {} : { usdaApiKey: USDA_API_KEY }),
       userAgent: `Macrofill/${APP_VERSION} (${LOOKUP_CONTACT})`,
     },
   };

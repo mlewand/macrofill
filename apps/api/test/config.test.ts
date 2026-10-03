@@ -12,10 +12,47 @@ describe('api config from the environment', () => {
       migrationsDir: expect.stringMatching(/apps\/api\/drizzle$/) as unknown,
       lookup: {
         timeoutMs: 5000,
+        totalTimeoutMs: 10_000,
         openFoodFactsUrl: 'https://world.openfoodfacts.org',
+        usdaUrl: 'https://api.nal.usda.gov',
         userAgent: 'Macrofill/dev (macrofill_app@mlewandowski.com)',
       },
     });
+  });
+
+  it('#67-5: USDA FoodData Central is used only with an API key, which is never part of the defaults', () => {
+    expect(loadConfig({ DATABASE_URL }).lookup).not.toHaveProperty('usdaApiKey');
+    expect(loadConfig({ DATABASE_URL, USDA_API_KEY: '' }).lookup).not.toHaveProperty('usdaApiKey');
+    expect(loadConfig({ DATABASE_URL, USDA_API_KEY: 'abc123' }).lookup.usdaApiKey).toBe('abc123');
+  });
+
+  it('#67-2: the time of the whole lookup and the USDA address come from the environment', () => {
+    expect(
+      loadConfig({
+        DATABASE_URL,
+        LOOKUP_TOTAL_TIMEOUT_MS: '8000',
+        USDA_API_URL: 'http://127.0.0.1:9998',
+      }).lookup,
+    ).toMatchObject({ totalTimeoutMs: 8000, usdaUrl: 'http://127.0.0.1:9998' });
+  });
+
+  it.each(['0', '-5', 'abc', '1.5', '20001'])(
+    'rejects LOOKUP_TOTAL_TIMEOUT_MS=%s (the app waits 25 s)',
+    (value) => {
+      expect(() => loadConfig({ DATABASE_URL, LOOKUP_TOTAL_TIMEOUT_MS: value })).toThrow(
+        /LOOKUP_TOTAL_TIMEOUT_MS/,
+      );
+    },
+  );
+
+  it('never prints the USDA key when the environment is invalid', () => {
+    expect(() =>
+      loadConfig({ DATABASE_URL, USDA_API_KEY: 'secret-usda-key', API_PORT: 'abc' }),
+    ).toThrow(
+      expect.not.objectContaining({
+        message: expect.stringContaining('secret-usda-key') as unknown,
+      }),
+    );
   });
 
   it('#66-4: the lookup time, the Open Food Facts address, the version and the contact come from the environment', () => {
@@ -27,7 +64,7 @@ describe('api config from the environment', () => {
         APP_VERSION: 'abc1234',
         LOOKUP_CONTACT: 'me@example.com',
       }).lookup,
-    ).toEqual({
+    ).toMatchObject({
       timeoutMs: 2500,
       openFoodFactsUrl: 'http://127.0.0.1:9999',
       userAgent: 'Macrofill/abc1234 (me@example.com)',

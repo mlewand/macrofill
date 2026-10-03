@@ -204,4 +204,19 @@ describe('the Open Food Facts provider', () => {
   it('is identified as openfoodfacts', () => {
     expect(createOpenFoodFactsProvider({ ...options, fetch: vi.fn() }).id).toBe('openfoodfacts');
   });
+
+  it('#67-2: the whole lookup running out is a timeout too, not an error', async () => {
+    const total = new AbortController();
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    );
+    const pending = createOpenFoodFactsProvider({ ...options, fetch }).lookup('3017620422003', {
+      signal: total.signal,
+    });
+    total.abort();
+    expect(await pending).toEqual({ result: 'timeout' });
+  });
 });

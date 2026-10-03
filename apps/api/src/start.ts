@@ -18,6 +18,7 @@ export async function startServer<S>(
   const app = createApp({
     db: database.db,
     lookupProviders: createLookupProviders(config.lookup),
+    lookupTotalTimeoutMs: config.lookup.totalTimeoutMs,
     ...(config.webDist === undefined ? {} : { webDist: config.webDist }),
   });
   return listen({ fetch: app.fetch, port: config.port }, (info) => {

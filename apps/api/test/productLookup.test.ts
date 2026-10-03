@@ -96,6 +96,36 @@ describe('GET /api/product-lookup/:code (#66-1)', () => {
     expect(off.lookup).not.toHaveBeenCalled();
   });
 
+  it('#67-1, #67-4: a hit from a later provider comes with what the earlier ones came to', async () => {
+    const off = provider({ result: 'miss' });
+    const usda = provider(
+      { result: 'hit', candidate: { ...candidate, source: 'usda-fdc' } },
+      'usda-fdc',
+    );
+    const res = await get(await client(off, usda), '3017620422003');
+    expect(lookupResponseSchema.parse(await res.json())).toEqual({
+      candidate: { ...candidate, source: 'usda-fdc' },
+      attempts: [
+        { provider: 'openfoodfacts', result: 'miss' },
+        { provider: 'usda-fdc', result: 'hit' },
+      ],
+    });
+  });
+
+  it('#67-2: when every provider has nothing, the answer is attempts only, and still a 200', async () => {
+    const res = await get(
+      await client(provider({ result: 'error' }), provider({ result: 'timeout' }, 'usda-fdc')),
+      '3017620422003',
+    );
+    expect(res.status).toBe(200);
+    expect(lookupResponseSchema.parse(await res.json())).toEqual({
+      attempts: [
+        { provider: 'openfoodfacts', result: 'error' },
+        { provider: 'usda-fdc', result: 'timeout' },
+      ],
+    });
+  });
+
   it('with no providers configured, there is nothing to ask: no attempts, no candidate', async () => {
     const res = await get(await client(), '3017620422003');
     expect(lookupResponseSchema.parse(await res.json())).toEqual({ attempts: [] });
@@ -181,6 +211,21 @@ describe('#66-3: saving a product that came from a provider', () => {
         sql`select source, source_ref from products where id = ${request.id}`,
       ),
     ).toEqual([{ source: 'manual', source_ref: null }]);
+  });
+
+  it('#67-3: a product from USDA FoodData Central is saved with its source and the fdcId', async () => {
+    const res = await post({
+      ...request,
+      barcode: '0016000275683',
+      lookup: { source: 'usda-fdc', ref: '1636115' },
+    });
+    expect(res.status).toBe(201);
+    expect(
+      await queryRows(
+        database.db,
+        sql`select source, source_ref from products where id = ${request.id}`,
+      ),
+    ).toEqual([{ source: 'usda-fdc', source_ref: '1636115' }]);
   });
 
   it('refuses a source this build does not write', async () => {
