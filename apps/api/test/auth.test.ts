@@ -128,9 +128,13 @@ describe('login and sessions (M4-1, M4-2)', () => {
     expect((await authed.request('/api/today')).status).toBe(401);
   });
 
-  it('M4-2: every api route except login and health returns 401 without a valid session', async () => {
+  it('M4-2: every api route except login, logout and health returns 401 without a valid session', async () => {
     const routes = app.routes.filter(
-      (r) => r.method !== 'ALL' && r.path !== '/api/login' && r.path !== '/api/health',
+      (r) =>
+        r.method !== 'ALL' &&
+        r.path !== '/api/login' &&
+        r.path !== '/api/logout' &&
+        r.path !== '/api/health',
     );
     expect(routes.length).toBeGreaterThan(3);
     const forged = withCookie(app, `${SESSION_COOKIE}=${'A'.repeat(43)}`);

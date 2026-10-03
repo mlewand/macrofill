@@ -53,6 +53,11 @@ export function createAuthService(db: Db, now: () => Date) {
       return { status: 'ok', token, expiresAt };
     },
 
+    /** #95-2: ends the session `token` opened, if there is one. Others of the user stay. */
+    async logOut(token: string): Promise<void> {
+      await auth.deleteSession(sessionId(token));
+    },
+
     /** The user an unexpired session belongs to, if any. */
     sessionUser(token: string): Promise<string | undefined> {
       return auth.sessionOwner(sessionId(token), now());

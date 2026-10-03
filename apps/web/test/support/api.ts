@@ -22,6 +22,7 @@ export function fakeApi(overrides: Partial<Api> = {}): Api {
   return {
     login: vi.fn(overrides.login ?? (() => Promise.resolve('ok' as const))),
     me: vi.fn(overrides.me ?? (() => Promise.resolve('mlewand'))),
+    logout: vi.fn(overrides.logout ?? (() => Promise.resolve())),
     catalog: vi.fn(overrides.catalog ?? (() => Promise.resolve(emptyCatalog))),
     saveMeal: vi.fn(overrides.saveMeal ?? ((request) => Promise.resolve(stored(request)))),
     createProduct: vi.fn(

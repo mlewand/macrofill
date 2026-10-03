@@ -198,6 +198,8 @@ const exempt: Record<string, string> = {
   'ALL /api/*': 'session middleware and the not-found fallback; no user data',
   'GET /api/health': 'checks the database; no user data, and no session (M4-2)',
   'POST /api/login': 'opens a session for whoever has the password; no user data',
+  'POST /api/logout':
+    'ends the session named by the caller own cookie, and no one else; no user data, and no session needed (#95-2). logout.test.ts covers it',
   'GET /api/products/by-barcode/:code':
     'looks up the global product store (#63-8); what it returns is the product, which every user sees. products.test.ts covers visibility',
   'GET /api/product-lookup/:code':
@@ -214,6 +216,7 @@ const exempt: Record<string, string> = {
 const reviewedHandlers: Record<string, number> = {
   'GET /api/health': 1,
   'POST /api/login': 2,
+  'POST /api/logout': 1,
   'ALL /api/*': 2,
   'GET /api/catalog': 1,
   'POST /api/meals': 2,

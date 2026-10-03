@@ -49,6 +49,11 @@ export function createAuthRepository(db: Db) {
         .where(and(eq(sessions.ownerId, ownerId), lte(sessions.expiresAt, now)));
     },
 
+    /** Removes one session, expired or not. Nothing happens when there is none. */
+    async deleteSession(id: string): Promise<void> {
+      await db.delete(sessions).where(eq(sessions.id, id));
+    },
+
     /** The owner of an unexpired session, if any. */
     async sessionOwner(id: string, now: Date): Promise<string | undefined> {
       const [row] = await db
