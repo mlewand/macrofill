@@ -43,6 +43,13 @@
       "when": 1791026525102,
       "tag": "0005_shared_products_drop_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791029909361,
+      "tag": "0006_product_source_openfoodfacts",
+      "breakpoints": true
     }
   ]
 }

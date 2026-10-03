@@ -138,14 +138,15 @@ export function createRepositories(db: Db, ownerId: string) {
        * the request. Returns whether it was inserted: false if the id is taken (by anyone).
        */
       async insertIfAbsent(product: CreateProductRequest): Promise<boolean> {
-        const { nutrition, brand, ...rest } = product;
+        const { nutrition, brand, lookup, ...rest } = product;
         const inserted = await db
           .insert(products)
           .values({
             ...rest,
             brand: brand ?? null,
             ...nutrition,
-            source: 'manual',
+            source: lookup?.source ?? 'manual',
+            sourceRef: lookup?.ref ?? null,
             createdBy: ownerId,
           })
           .onConflictDoNothing()
@@ -430,12 +431,17 @@ export function createRepositories(db: Db, ownerId: string) {
 
 export type Repositories = ReturnType<typeof createRepositories>;
 
-export type StoredProduct = CatalogProduct & { barcode: string | null; addedByUser: boolean };
+export type StoredProduct = CatalogProduct & {
+  barcode: string | null;
+  sourceRef: string | null;
+  addedByUser: boolean;
+};
 
 function storedProduct(row: typeof products.$inferSelect, ownerId: string): StoredProduct {
   return {
     ...toCatalogProduct(row, null),
     barcode: row.barcode,
+    sourceRef: row.sourceRef,
     addedByUser: row.createdBy === ownerId,
   };
 }

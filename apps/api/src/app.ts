@@ -6,6 +6,8 @@ import type { Db } from './db/client';
 import { loginRoutes, sessionAuth, type AuthEnv } from './http/auth';
 import { catalogRoutes } from './routes/catalog';
 import { eventRoutes } from './routes/events';
+import { lookupRoutes } from './routes/lookup';
+import type { ProductLookupProvider } from './lookup/provider';
 import { mealRoutes } from './routes/meals';
 import { meRoutes } from './routes/me';
 import { productRoutes } from './routes/products';
@@ -17,9 +19,14 @@ export interface AppOptions {
   now?: () => Date;
   /** Directory with the built `apps/web`. Production only; in development Vite serves the web app. */
   webDist?: string;
+  /**
+   * The product databases an unknown barcode is looked up in (#66). None by default: the real
+   * ones are wired in `startServer`, so tests and tools can never reach the network by accident.
+   */
+  lookupProviders?: readonly ProductLookupProvider[];
 }
 
-function createApiRoutes(db: Db, now: () => Date) {
+function createApiRoutes(db: Db, now: () => Date, providers: readonly ProductLookupProvider[]) {
   // M4-2: login comes first and answers itself; everything after it needs a session.
   return new Hono<AuthEnv>()
     .route('/', loginRoutes(db, now))
@@ -27,6 +34,7 @@ function createApiRoutes(db: Db, now: () => Date) {
     .route('/', catalogRoutes(db))
     .route('/', mealRoutes(db))
     .route('/', productRoutes(db))
+    .route('/', lookupRoutes(providers))
     .route('/', meRoutes(db))
     .route('/', eventRoutes(db))
     .route('/', todayRoutes(db, now));
@@ -57,7 +65,10 @@ export function createApp(options: AppOptions) {
     }
   });
 
-  app.route('/api', createApiRoutes(options.db, options.now ?? (() => new Date())));
+  app.route(
+    '/api',
+    createApiRoutes(options.db, options.now ?? (() => new Date()), options.lookupProviders ?? []),
+  );
   app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
 
   if (options.webDist !== undefined) {
