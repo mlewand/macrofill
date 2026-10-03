@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { emptyLabelForm, readLabelForm, type LabelFormValues } from '../src/products/labelForm';
+import {
+  candidateToForm,
+  emptyLabelForm,
+  readLabelForm,
+  type LabelFormValues,
+} from '../src/products/labelForm';
+
+const emptyNutrition = {
+  kcal: null,
+  fat: null,
+  saturates: null,
+  carbs: null,
+  sugars: null,
+  protein: null,
+  salt: null,
+  fibre: null,
+};
 
 const filled = (change: Partial<LabelFormValues['nutrition']> = {}): LabelFormValues => ({
   ...emptyLabelForm('curd'),
@@ -81,6 +97,34 @@ describe('#64-2: the form rejects what the label cannot say', () => {
       ok: false,
       fields: {},
       total: true,
+    });
+  });
+});
+
+describe('text from a provider that is too long to save (regression: #74)', () => {
+  const long = 'x'.repeat(250);
+
+  it('#66-2: a name or brand over 200 characters is cut to what the form can save when it prefills', () => {
+    const form = candidateToForm({
+      source: 'openfoodfacts',
+      sourceRef: '1',
+      name: long,
+      brand: long,
+      nutrition: emptyNutrition,
+    });
+    expect(form.name).toHaveLength(200);
+    expect(form.brand).toHaveLength(200);
+    expect(readLabelForm({ ...emptyLabelForm('curd'), ...form }).ok).toBe(true);
+  });
+
+  it('a name or brand typed or pasted over 200 characters is named on its field, not as a nutrient total', () => {
+    expect(readLabelForm({ ...filled(), name: long })).toEqual({
+      ok: false,
+      fields: { name: 'tooLong' },
+    });
+    expect(readLabelForm({ ...filled(), brand: long })).toEqual({
+      ok: false,
+      fields: { brand: 'tooLong' },
     });
   });
 });

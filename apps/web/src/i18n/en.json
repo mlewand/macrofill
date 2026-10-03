@@ -152,7 +152,8 @@
       "negative": "Can't be negative.",
       "invalid": "Enter a number, like 3,2 or 3.2.",
       "tooLarge": "Can't be more than 100 g per 100 g.",
-      "total": "Carbs, protein, fat, fibre and salt add up to more than 100 g per 100 g. Check the values."
+      "total": "Carbs, protein, fat, fibre and salt add up to more than 100 g per 100 g. Check the values.",
+      "tooLong": "Can't be longer than 200 characters."
     },
     "kcalWarning": "The energy ({{kcal}} kcal) doesn't match the macros, which add up to about {{expected}} kcal. Check the values.",
     "saveAnyway": "Save anyway",

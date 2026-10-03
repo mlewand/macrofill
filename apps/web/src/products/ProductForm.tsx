@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiError, useApi } from '../api/api';
 import {
   emptyLabelForm,
+  MAX_TEXT,
   readLabelForm,
   type FieldProblem,
   type LabelFormValues,
@@ -159,7 +160,7 @@ export function ProductForm(props: ProductFormProps) {
         <input
           id={`${ids}-name`}
           autoFocus
-          maxLength={200}
+          maxLength={MAX_TEXT}
           autoComplete="off"
           value={values.name}
           aria-invalid={shown?.fields.name !== undefined}
@@ -170,11 +171,13 @@ export function ProductForm(props: ProductFormProps) {
         <label htmlFor={`${ids}-brand`}>{t('product.brand')}</label>
         <input
           id={`${ids}-brand`}
-          maxLength={200}
+          maxLength={MAX_TEXT}
           autoComplete="off"
           value={values.brand}
+          aria-invalid={shown?.fields.brand !== undefined}
           onChange={(event) => edit((v) => ({ ...v, brand: event.target.value }))}
         />
+        {shown?.fields.brand && <p className="problem">{problemText(shown.fields.brand)}</p>}
 
         <label htmlFor={`${ids}-class`}>{t('product.ingredientClass')}</label>
         <select
