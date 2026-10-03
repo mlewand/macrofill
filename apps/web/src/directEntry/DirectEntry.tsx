@@ -380,14 +380,29 @@ export function ProductChoices(props: {
       ).options,
     [catalog, step],
   );
+  // Cancel, or leaving the step, ends the lookup in flight: its answer is dropped, so it never
+  // selects a product or opens a form the user has already walked away from.
+  const lookupId = useRef(0);
+  useEffect(
+    () => () => {
+      lookupId.current++;
+    },
+    [],
+  );
+  const cancel = () => {
+    lookupId.current++;
+    setOverlay(undefined);
+  };
   /**
    * #65-3, #65-4: a known barcode selects its product for the step, whatever its class (#65-5); an
    * unknown one opens the product form with the barcode. If the store can't be asked, the scan
    * view stays.
    */
   const lookup = async (barcode: string): Promise<LookupOutcome> => {
+    const mine = ++lookupId.current;
     try {
       const product = await api.productByBarcode(barcode);
+      if (mine !== lookupId.current) return 'failed';
       if (product === undefined) {
         setOverlay({ type: 'add', barcode });
         return 'unknown';
@@ -439,9 +454,7 @@ export function ProductChoices(props: {
           {t('step.addProduct')}
         </button>
       </div>
-      {overlay?.type === 'scan' && (
-        <ScanDialog lookup={lookup} onCancel={() => setOverlay(undefined)} />
-      )}
+      {overlay?.type === 'scan' && <ScanDialog lookup={lookup} onCancel={cancel} />}
       {overlay?.type === 'add' && (
         <ProductDialog
           ingredientClasses={catalog.ingredientClasses}

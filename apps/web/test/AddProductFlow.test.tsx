@@ -1,5 +1,5 @@
 import type { Catalog, SaveMealRequest } from '@macrofill/domain';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiContext, ApiError, type Api } from '../src/api/api';
@@ -391,6 +391,38 @@ describe('scanning a barcode at a step', () => {
     expect(await screen.findByText(en.product.barcodeTaken)).toBeVisible();
     expect(screen.queryByText(en.product.refused)).toBeNull();
   });
+
+  it.each([
+    ['a known barcode', () => Promise.resolve(catalog.products[0])],
+    ['an unknown barcode', () => Promise.resolve(undefined)],
+  ])(
+    '#65-3: Cancel while looking up %s is final: the late answer selects nothing and opens nothing (regression: #73)',
+    async (_name, answer) => {
+      let finish!: () => void;
+      const gate = new Promise<void>((resolve) => (finish = resolve));
+      const api = fakeApi({
+        catalog: () => Promise.resolve(catalog),
+        productByBarcode: async () => {
+          await gate;
+          return answer();
+        },
+      });
+      const scanner = fakeScanner();
+      await atFirstStep(api, scanner);
+      click(en.step.scan);
+      await cameraOn(scanner);
+      scanner.read(EAN13);
+      expect(await screen.findByText(en.scan.looking)).toBeVisible();
+      click(en.scan.cancel);
+      expect(screen.queryByRole('dialog')).toBeNull();
+      await act(async () => {
+        finish();
+        await gate;
+      });
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(checked()).toEqual([]);
+    },
+  );
 
   it('#65-6: with the camera denied, the digits can still be typed', async () => {
     await atFirstStep(base(), fakeScanner({ problem: 'denied' }));
