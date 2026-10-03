@@ -9,7 +9,7 @@ Read before any work:
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current phase: none. **Phase D (the product store) is done**, as is MVP0 before it. Phase D's exit was confirmed on 2026-10-03: every criterion in its issues (#63 to #67) passes in CI, and the maintainer's smoke run on the phone, the same day, passed (barcode scan, the fallbacks when the code is invalid or there is no camera, products added by barcode lookup and found again without a form, and the scale's Bluetooth connection untouched). The cumulative review (#85) needed no fixes. No next phase is defined yet: the maintainer picks it. Update this line when a phase starts or its exit criteria are met.
+Current phase: **D, Product store** (started 2026-10-03). Its scope is the umbrella issue #70 and its sub-issues, plus three independent issues added on 2026-10-03: #88 (the saved-meal screen), #89 (the scale stays connected between meals) and #95 (sign out). Sub-issues labelled `on hold` wait for the maintainer. MVP0 (Phases A to C) is done: its exit was confirmed on 2026-10-02, when the cumulative review (#57) merged. The product store's own work (#63 to #67) is done, and the maintainer's smoke run on the phone passed on 2026-10-03 (barcode scan, the fallbacks when the code is invalid or there is no camera, products added by barcode lookup and found again without a form, and the scale's Bluetooth connection untouched); the phase exits when the added issues are done too. Update this line when a phase starts or its exit criteria are met.
 
 ## How to work
 

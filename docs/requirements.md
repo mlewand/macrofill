@@ -2,7 +2,7 @@
 
 Working code name: **Diet Tracking App** (Macrofill)
 
-Status: MVP0 is done (Phases A to C), and so is Phase D (see Phases). Future stages are listed so the design leaves room for them. Don't implement them before a phase takes them in.
+Status: MVP0 is done (Phases A to C). Phase D is in progress (see Phases). Future stages are listed so the design leaves room for them. Don't implement them before a phase takes them in.
 
 # Problem
 
@@ -270,7 +270,7 @@ Work proceeds in phases. MVP0 was Phases A to C. Each phase ends with the app de
 ## Phase D: Product store
 
 - Goal: no product is a dead end. A product the app doesn't know is added from the app, by barcode lookup or by typing its label, into one store shared by all users.
-- Scope: the umbrella issue #70 and its sub-issues. More work may join this phase later; it's added here when it does.
+- Scope: the umbrella issue #70 and its sub-issues, plus three independent issues that joined on 2026-10-03: #88 (after saving a meal, go straight to the main screen with a notification), #89 (the scale stays connected between meals) and #95 (sign out). More work may join this phase later; it's added here when it does.
 - Criteria: in the GitHub issues, not in this doc. Each sub-issue lists its own, with IDs like `#123-3` (issue 123, criterion 3). The umbrella issue holds no criteria of its own; it closes when its sub-issues are closed. Issues labelled `on hold` belong to the phase's backlog, not its exit.
 - Moved in from Deferred from MVP0: the kcal consistency check, as part of adding a product by its label.
 - Moved in from Future stages: the products GUI; barcode scan with Open Food Facts lookup, plus a second provider to prove that providers chain.
