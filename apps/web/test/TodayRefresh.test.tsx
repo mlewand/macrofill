@@ -7,7 +7,7 @@ import { App } from '../src/App';
 import en from '../src/i18n/en.json';
 import { OutboxStoreContext } from '../src/outbox/Outbox';
 import { indexedDbOutbox } from '../src/outbox/store';
-import { REFRESH_INTERVAL_MS } from '../src/today/TodayView';
+import { REFRESH_INTERVAL_MS, REFRESH_STALLED_MS } from '../src/today/TodayView';
 import { emptyToday, fakeApi } from './support/api';
 import { outboxItem } from './support/outbox';
 
@@ -46,8 +46,8 @@ let visibility: DocumentVisibilityState = 'visible';
 beforeEach(() => {
   visibility = 'visible';
   vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
-  // Only the interval: waiting for responses relies on the real timeouts.
-  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  // Only the interval and the clock: waiting for responses relies on the real timeouts.
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -197,9 +197,11 @@ describe('Today refreshes itself (#77)', () => {
     renderApp(api);
     await screen.findByText('Curd');
 
+    // Focus twice, and the interval's tick comes while the first load is only 5 s old.
+    act(() => void vi.advanceTimersByTime(REFRESH_INTERVAL_MS - 5_000));
     focus();
     focus();
-    tick();
+    act(() => void vi.advanceTimersByTime(5_000));
     await settle();
     expect(api.today).toHaveBeenCalledTimes(2);
 
@@ -208,6 +210,39 @@ describe('Today refreshes itself (#77)', () => {
     focus();
     await settle();
     expect(api.today).toHaveBeenCalledTimes(3);
+  });
+
+  it('#77-5: a refresh that never answers does not stop the next ones (regression: #79)', async () => {
+    const answers: Array<(today: Today) => void> = [];
+    const api = fakeApi({
+      today: vi
+        .fn<Api['today']>()
+        .mockResolvedValueOnce(withMeals(curd))
+        .mockImplementation(() => new Promise((resolve) => answers.push(resolve))),
+    });
+    renderApp(api);
+    await screen.findByText('Curd');
+
+    focus();
+    await settle();
+    expect(api.today).toHaveBeenCalledTimes(2);
+    // Still out well within its limit: no second one.
+    act(() => void vi.advanceTimersByTime(REFRESH_STALLED_MS - 1));
+    focus();
+    await settle();
+    expect(api.today).toHaveBeenCalledTimes(2);
+
+    // Never answered by the next tick: given up on, and the tick loads again.
+    tick();
+    await settle();
+    expect(api.today).toHaveBeenCalledTimes(3);
+    answers[1]!(withMeals(sandwich, curd));
+    await screen.findByText('Sandwich');
+
+    // The answer that comes late, with older data, is dropped.
+    answers[0]!(withMeals(curd));
+    await settle();
+    expect(names()).toEqual(['Sandwich', 'Curd']);
   });
 
   it('#77-5: nothing loads while the server has not confirmed the user', async () => {

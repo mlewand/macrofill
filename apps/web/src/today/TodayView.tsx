@@ -16,6 +16,12 @@ import type { OutboxItem } from '../outbox/store';
 
 /** How often Today loads the day again by itself while the tab is visible (#77-2). */
 export const REFRESH_INTERVAL_MS = 30_000;
+/**
+ * A refresh not answered after this long is given up on: a connection that hangs instead of
+ * failing must not stop the next refreshes (#77-5). The next one starts, and the old one's answer,
+ * if it ever comes, is dropped.
+ */
+export const REFRESH_STALLED_MS = 15_000;
 
 /**
  * Today (M7-1 to M7-4): totals against targets and the day's meals, newest first, with the meals
@@ -90,15 +96,22 @@ export function TodayView(props: {
   useEffect(() => {
     if (!ready) return;
     const state = loadState.current;
-    let refreshing = false;
+    let latest = 0;
+    let out = false;
+    let startedAt = 0;
     const refresh = () => {
-      if (document.visibilityState !== 'visible' || refreshing || state.loading) return;
-      refreshing = true;
+      if (document.visibilityState !== 'visible' || state.loading) return;
+      if (out && Date.now() - startedAt < REFRESH_STALLED_MS) return;
+      const mine = ++latest;
+      out = true;
+      startedAt = Date.now();
       const load = state.count;
       const askedFor = lastUser();
       api.today().then(
         (loaded) => {
-          refreshing = false;
+          // Only the latest refresh counts, also for being the one out.
+          if (mine !== latest) return;
+          out = false;
           if (load !== state.count) return;
           if (lastUser() === askedFor) rememberTimezone(askedFor, loaded.timezone);
           // Brings the day back too, when it couldn't be loaded before.
@@ -106,7 +119,7 @@ export function TodayView(props: {
           setToday(loaded);
         },
         () => {
-          refreshing = false;
+          if (mine === latest) out = false;
         },
       );
     };
