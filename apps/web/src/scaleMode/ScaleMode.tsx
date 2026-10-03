@@ -6,7 +6,7 @@ import {
   type Recipe,
   type TrackerConfig,
 } from '@macrofill/domain';
-import { SessionRecorder, type ScaleDriver, type UserEvent } from '@macrofill/scale';
+import { SessionRecorder, type UserEvent } from '@macrofill/scale';
 import { useCallback, useEffect, useId, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,7 +19,7 @@ import {
 import { isSummary, stepProblem } from '../directEntry/state';
 import { formatGrams } from '../format';
 import type { SaveResult } from '../outbox/Outbox';
-import { useCreateScaleDriver } from '../scale';
+import { useScaleHolder } from '../scale';
 import { useTrack } from '../events/track';
 import { sinceStart, useFlowEvents } from '../events/useFlowEvents';
 import { reconnect } from './reconnect';
@@ -104,9 +104,10 @@ function Session(props: {
 }) {
   const { t } = useTranslation();
   const { recipe, catalog } = props;
-  const createDriver = useCreateScaleDriver();
-  // One driver per session, created once: never in an effect, which StrictMode runs twice.
-  const [driver] = useState<ScaleDriver>(createDriver);
+  // The app's scale, which outlives the session: still connected from the last meal if it hasn't
+  // dropped since (#89).
+  const holder = useScaleHolder();
+  const driver = holder.driver;
   const [state, dispatch] = useReducer(scaleMode, undefined, () =>
     startScaleMode({
       recipe,
@@ -150,7 +151,9 @@ function Session(props: {
     }
     dispatch(action);
   };
-  const [connection, setConnection] = useState<Connection>('idle');
+  const [connection, setConnection] = useState<Connection>(() =>
+    holder.connected ? 'connected' : 'idle',
+  );
   const [reconnectConfig] = useState(props.reconnect);
   const { startedAt } = state.flow;
   // The first step is shown from Start: connecting and the bowl don't count (M7-8).
@@ -174,7 +177,7 @@ function Session(props: {
   const droppedAt = useRef<number | undefined>(undefined);
   // Who the meal belongs to, fixed when the session starts (see Summary).
   const [owner] = useState(props.owner);
-  const everConnected = useRef(false);
+  const everConnected = useRef(holder.connected);
   /** The reconnect in progress (M6-6), to stop it. */
   const reconnecting = useRef<AbortController | undefined>(undefined);
   const byHand = useRef(false);
@@ -195,7 +198,7 @@ function Session(props: {
 
   useEffect(() => {
     const offReading = driver.onReading((reading) => dispatch({ type: 'reading', reading }));
-    const offConnection = driver.onConnectionChange((change) => {
+    const onChange = (change: 'connected' | 'disconnected') => {
       if (change === 'connected') {
         everConnected.current = true;
         // An attempt that was under way when the user chose typed grams: not needed any more.
@@ -222,17 +225,20 @@ function Session(props: {
           },
         );
       }
-    });
+    };
+    const offConnection = driver.onConnectionChange(onChange);
+    // A scale that dropped between this session's first render and now is a drop mid-meal (M6-6).
+    if (everConnected.current && !holder.connected) onChange('disconnected');
     return () => {
       offReading();
       offConnection();
       reconnecting.current?.abort();
       reconnecting.current = undefined;
     };
-  }, [driver, reconnectConfig, finishByHand, track]);
+  }, [driver, holder, reconnectConfig, finishByHand, track]);
 
-  // Disconnect when the session ends (saved, cancelled or left). Safe before any connect.
-  useEffect(() => () => void driver.disconnect().catch(() => undefined), [driver]);
+  // The session ending doesn't disconnect the scale: the next meal uses it (#89-1). Reconnecting
+  // stops with the session (above), and a drop after it is noticed by the next one (#89-3).
 
   // M6-1: called straight from the click, so the device chooser gets the user gesture.
   const connect = () => {

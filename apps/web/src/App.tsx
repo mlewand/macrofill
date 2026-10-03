@@ -6,6 +6,7 @@ import { DirectEntry } from './directEntry/DirectEntry';
 import { createUsageTracker, TrackContext } from './events/track';
 import { Login } from './Login';
 import { OutboxProvider, useSync, type SaveResult } from './outbox/Outbox';
+import { ScaleHolder, ScaleHolderContext, useCreateScaleDriver } from './scale';
 import { ScaleMode } from './scaleMode/ScaleMode';
 import { belongsToCurrentUser, lastUser, onUserChangedElsewhere, rememberUser } from './session';
 import { useDraftStore, type Draft } from './storage/drafts';
@@ -22,6 +23,9 @@ type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
 
 export function App() {
   const { t } = useTranslation();
+  // The scale outlives a meal: it stays connected for the next one (#89).
+  const createScaleDriver = useCreateScaleDriver();
+  const [scale] = useState(() => new ScaleHolder(createScaleDriver));
   const [screen, setScreen] = useState<Screen>('home');
   const [savedResult, setSavedResult] = useState<SaveResult>('synced');
   const showSaved = (result: SaveResult) => {
@@ -266,97 +270,99 @@ export function App() {
   const noStart = user === undefined || resumeWaiting;
 
   return (
-    <TrackContext value={tracker.track}>
-      <ApiContext value={api}>
-        <OutboxProvider ready={confirmed} readyNow={confirmedNow} offline={unreachable}>
-          <SyncAfterLogin logins={logins} user={user} confirmed={confirmed} />
-          <main hidden={needsLogin}>
-            {screen === 'home' && (
-              // Keyed by logins, so what failed without a session loads again after one.
-              <section key={logins}>
-                <h1>{t('app.name')}</h1>
-                {/* A meal must belong to someone: none starts until the user is known (M5-8). */}
-                {user === undefined && (
-                  <>
+    <ScaleHolderContext value={scale}>
+      <TrackContext value={tracker.track}>
+        <ApiContext value={api}>
+          <OutboxProvider ready={confirmed} readyNow={confirmedNow} offline={unreachable}>
+            <SyncAfterLogin logins={logins} user={user} confirmed={confirmed} />
+            <main hidden={needsLogin}>
+              {screen === 'home' && (
+                // Keyed by logins, so what failed without a session loads again after one.
+                <section key={logins}>
+                  <h1>{t('app.name')}</h1>
+                  {/* A meal must belong to someone: none starts until the user is known (M5-8). */}
+                  {user === undefined && (
+                    <>
+                      <p role="alert" className="problem">
+                        {t('home.userUnknown')}
+                      </p>
+                      <button type="button" className="secondary" onClick={recheckUser}>
+                        {t('app.retry')}
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={noStart}
+                    onClick={() => setScreen('scaleMode')}
+                  >
+                    {t('home.weighMeal')}
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={noStart}
+                    onClick={() => setScreen('directEntry')}
+                  >
+                    {t('home.logMeal')}
+                  </button>
+                  {user !== undefined && <TodayView recheckUser={recheckUser} />}
+                </section>
+              )}
+              {screen === 'scaleMode' && (
+                <WithCatalog>
+                  {(catalog, onProductAdded) => (
+                    <ScaleMode
+                      catalog={catalog}
+                      onProductAdded={onProductAdded}
+                      owner={user}
+                      onSaved={showSaved}
+                      onCancel={() => setScreen('home')}
+                    />
+                  )}
+                </WithCatalog>
+              )}
+              {screen === 'directEntry' && (
+                <WithCatalog>
+                  {(catalog, onProductAdded) => (
+                    <DirectEntry
+                      catalog={catalog}
+                      onProductAdded={onProductAdded}
+                      owner={user}
+                      onSaved={(result) => {
+                        setResume(undefined);
+                        showSaved(result);
+                      }}
+                      onCancel={() => leaveDirectEntry('home')}
+                      {...(resume ? { resume } : {})}
+                    />
+                  )}
+                </WithCatalog>
+              )}
+              {screen === 'saved' && (
+                <section>
+                  <h1 role="status">
+                    {savedResult === 'refused' ? t('saved.refusedTitle') : t('saved.title')}
+                  </h1>
+                  {savedResult === 'refused' && (
                     <p role="alert" className="problem">
-                      {t('home.userUnknown')}
+                      {t('saved.refused')}
                     </p>
-                    <button type="button" className="secondary" onClick={recheckUser}>
-                      {t('app.retry')}
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={noStart}
-                  onClick={() => setScreen('scaleMode')}
-                >
-                  {t('home.weighMeal')}
-                </button>
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={noStart}
-                  onClick={() => setScreen('directEntry')}
-                >
-                  {t('home.logMeal')}
-                </button>
-                {user !== undefined && <TodayView recheckUser={recheckUser} />}
-              </section>
-            )}
-            {screen === 'scaleMode' && (
-              <WithCatalog>
-                {(catalog, onProductAdded) => (
-                  <ScaleMode
-                    catalog={catalog}
-                    onProductAdded={onProductAdded}
-                    owner={user}
-                    onSaved={showSaved}
-                    onCancel={() => setScreen('home')}
-                  />
-                )}
-              </WithCatalog>
-            )}
-            {screen === 'directEntry' && (
-              <WithCatalog>
-                {(catalog, onProductAdded) => (
-                  <DirectEntry
-                    catalog={catalog}
-                    onProductAdded={onProductAdded}
-                    owner={user}
-                    onSaved={(result) => {
-                      setResume(undefined);
-                      showSaved(result);
-                    }}
-                    onCancel={() => leaveDirectEntry('home')}
-                    {...(resume ? { resume } : {})}
-                  />
-                )}
-              </WithCatalog>
-            )}
-            {screen === 'saved' && (
-              <section>
-                <h1 role="status">
-                  {savedResult === 'refused' ? t('saved.refusedTitle') : t('saved.title')}
-                </h1>
-                {savedResult === 'refused' && (
-                  <p role="alert" className="problem">
-                    {t('saved.refused')}
-                  </p>
-                )}
-                {/* M5-9: kept on the device until the server has it. */}
-                {savedResult === 'pending' && <p>{t('saved.pending')}</p>}
-                <button type="button" className="primary" onClick={() => setScreen('home')}>
-                  {t('saved.done')}
-                </button>
-              </section>
-            )}
-          </main>
-          {needsLogin && <Login onLoggedIn={loggedIn} />}
-        </OutboxProvider>
-      </ApiContext>
-    </TrackContext>
+                  )}
+                  {/* M5-9: kept on the device until the server has it. */}
+                  {savedResult === 'pending' && <p>{t('saved.pending')}</p>}
+                  <button type="button" className="primary" onClick={() => setScreen('home')}>
+                    {t('saved.done')}
+                  </button>
+                </section>
+              )}
+            </main>
+            {needsLogin && <Login onLoggedIn={loggedIn} />}
+          </OutboxProvider>
+        </ApiContext>
+      </TrackContext>
+    </ScaleHolderContext>
   );
 }
 
