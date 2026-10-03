@@ -105,7 +105,7 @@ describe('POST /api/products (#64-1, #64-4, #64-8)', () => {
   });
 
   it('#64-8: a retry with no brand matches a product stored without one', async () => {
-    const { brand: _brand, ...noBrand } = request;
+    const noBrand = { ...request, brand: undefined };
     expect((await post(app, noBrand)).status).toBe(201);
     expect((await post(app, noBrand)).status).toBe(200);
   });

@@ -56,9 +56,16 @@ async function existing(
   return same ? { status: 'replayed', product: shown(stored) } : { status: 'conflict' };
 }
 
-function shown({
-  addedByUser: _addedByUser,
-  ...product
-}: CatalogProduct & { addedByUser: boolean }) {
-  return product;
+function shown(stored: CatalogProduct & { addedByUser: boolean }): CatalogProduct {
+  // Rebuilt, so what only the server needs doesn't leave with it.
+  const { id, ingredientClassId, name, brand, nutrition, source, lastUsedAt } = stored;
+  return {
+    id,
+    ingredientClassId,
+    name,
+    ...(brand === undefined ? {} : { brand }),
+    nutrition,
+    source,
+    lastUsedAt,
+  };
 }
