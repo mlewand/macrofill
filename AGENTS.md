@@ -4,18 +4,19 @@ Diet tracking app (working name Macrofill). It logs a multi-ingredient meal whil
 
 Read before any work:
 
-- `docs/requirements.md`: requirements, acceptance criteria (IDs like `M3-6`) and phases. The source of truth.
+- `docs/requirements.md`: requirements, MVP0's acceptance criteria (IDs like `M3-6`) and phases. The source of truth.
+- The current phase's GitHub issues: from Phase D on, acceptance criteria live there (IDs like `#123-3`), not in `docs/requirements.md`.
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current phase: none. **Phase C is done, and with it MVP0.** Its exit was confirmed on 2026-10-02, when the cumulative review (#57) merged: every MVP0 criterion passes in CI or in the manual smoke run, done on 2026-10-01 on the phone and the tablet against the production box (master at `f4c0889`). No next phase is defined yet: the maintainer picks it from Future stages in the requirements. Update this line when a phase starts or its exit criteria are met.
+Current phase: **D, Product store** (started 2026-10-03). Its scope is the umbrella issue #70 and its sub-issues; sub-issues labelled `on hold` wait for the maintainer. MVP0 (Phases A to C) is done: its exit was confirmed on 2026-10-02, when the cumulative review (#57) merged. Update this line when a phase starts or its exit criteria are met.
 
 ## How to work
 
-- Work in the current phase only (A, B, C in the requirements). Don't implement criteria from a later phase, `TODO.md` or Future stages.
+- Work in the current phase only (see Phases in the requirements). Don't implement criteria from a later phase, `TODO.md`, Future stages, or issues labelled `on hold`.
 - One milestone, or one coherent group of criteria, per pull request (see Git workflow).
-- Tests first: write failing tests for the criteria you're implementing, then the code. Put the criterion ID in the test name, e.g. `it('M3-6: negative step asks for correction', ...)`.
-- Never change requirements, criteria, `docs/ARCHITECTURE.md` or `docs/TODO.md` silently. If a criterion is ambiguous, contradicts another, or looks wrong, stop and ask. If it has to change, propose the edit and say why.
+- Tests first: write failing tests for the criteria you're implementing, then the code. Put the criterion ID in the test name, e.g. `it('M3-6: negative step asks for correction', ...)`, or for a criterion from an issue `it('#123-3: an unknown barcode opens the product form', ...)`.
+- Never change requirements, criteria (in `docs/requirements.md` or in issues), `docs/ARCHITECTURE.md` or `docs/TODO.md` silently. If a criterion is ambiguous, contradicts another, or looks wrong, stop and ask. If it has to change, propose the edit and say why.
 - Never weaken tests, coverage thresholds or lint rules to get a green build.
 - **Every business logic bug that's discovered gets a regression test**, whether it was found in review, testing or use. The test references the pull request or GitHub issue where the bug was found: add `(regression: #<number>)` at the end of the test name, after the criterion ID, e.g. `it('M4-6: a retry naming a different entry is a conflict (regression: #11)', ...)`. Check that the test fails without the fix and passes with it. A test that passes either way doesn't guard anything. `pnpm test -t 'regression: #'` runs them all.
 - Before finishing: `pnpm lint`, `pnpm typecheck` and `pnpm test` pass from the repo root.

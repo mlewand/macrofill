@@ -2,12 +2,6 @@
 
 Deferred from MVP0. Each item states the behavior that applies until it's done.
 
-## Kcal consistency check for products
-
-Warn when a product's kcal differs from 4·protein + 4·carbs + 9·fat + 2·fibre, and save only after the user confirms the values. A relative tolerance alone misfires on low-energy products because of label rounding, so use something like max(15%, 10 kcal).
-
-Until then: no check.
-
 ## Tare and bowl-lift detection mid-meal
 
 Unresolved. Cases to handle:
