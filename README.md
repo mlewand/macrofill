@@ -28,7 +28,7 @@ Open http://localhost:5173 and log in as `mlewand` with the password from `.env`
 
 - `pnpm db:up` starts Postgres 17 in Docker Compose on `127.0.0.1:5432`, and `.env.example` already points `DATABASE_URL` at it. To use an existing Postgres server instead, give the app its own database and role there and change only `DATABASE_URL`.
 - `pnpm db:migrate` applies the Drizzle migrations in `apps/api/drizzle`. It's the only way migrations run: the api refuses to start while the schema is behind.
-- `pnpm db:seed` loads the recipes, ingredient classes, products and users from `apps/api/src/seed/data.ts`. Running it again is safe; it updates rows in place. Daily targets are set there too (unset means not tracked).
+- `pnpm db:seed` loads the recipes, ingredient classes, products and users from `apps/api/src/seed/data.ts`. Running it again is safe; it updates rows in place, except products: they're one store shared by all users and go in only while the store is empty. Once it holds products, editing the seed file's products changes nothing. Daily targets are set there too (unset means not tracked).
 - Logging in (M4-1): the seed hashes each user's initial password from `SEED_PASSWORD_<USERNAME>` (e.g. `SEED_PASSWORD_MLEWAND`) and stores only the argon2id hash. It sets a password only for a user who has none, so seeding again never changes it. To change a password, run `pnpm db:password <username>` and type the new one (or pipe it in: `printf '%s\n' "$new" | pnpm db:password mlewand`). A login lasts 90 days; there's no logout yet.
 - After changing `apps/api/src/db/schema.ts`, generate a migration with `pnpm -F @macrofill/api db:generate`, then run `pnpm db:migrate`.
 
@@ -172,6 +172,6 @@ read -rs -p 'New password: ' pw && echo && printf '%s\n' "$pw" | docker compose 
 
 Deploys keep it: the seed's initial password applies only to a user without one.
 
-**Daily targets and the catalog come from the seed file:** every deploy resets them to `apps/api/src/seed/data.ts`. To change your targets or add a product, edit that file, commit it, and deploy. Edits made directly in the database are overwritten by the next deploy. Logged meals are never touched.
+**Daily targets, recipes and ingredient classes come from the seed file:** every deploy resets them to `apps/api/src/seed/data.ts`. To change them, edit that file, commit it, and deploy. Edits made directly in the database are overwritten by the next deploy. Products are different: the seed file only fills an empty product store, so a deploy never changes a product. Logged meals are never touched.
 
 The container's healthcheck calls `/api/health`, which checks the database connection. `docker compose -f compose.prod.yml ps` shows the status, and `docker compose -f compose.prod.yml logs app` shows the logs. "Database schema is behind" means migrations haven't run; `deploy.sh` runs them. Migrations run only through that explicit step: an app that's newer than the database schema refuses to start. Include the `macrofill` database in the host's `pg_dump` backups.
