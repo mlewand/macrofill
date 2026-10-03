@@ -399,7 +399,7 @@ function invalidControls() {
   );
 }
 
-describe('a wrong value always says what is wrong (#94)', () => {
+describe('a wrong value always says what is wrong', () => {
   const long = 'x'.repeat(250);
   const scenarios: [string, () => void, string[]][] = [
     ['no name', () => undefined, [en.product.problem.name]],
@@ -427,7 +427,7 @@ describe('a wrong value always says what is wrong (#94)', () => {
   ];
 
   it.each(scenarios)(
-    '%s: the field marked invalid points at a visible message saying why',
+    '%s: the field marked invalid points at a visible message saying why (regression: #94)',
     (_name, wrong, messages) => {
       const { api } = setup();
       // Every scenario but the first has a name.
@@ -442,7 +442,7 @@ describe('a wrong value always says what is wrong (#94)', () => {
     },
   );
 
-  it('everything wrong at once: every marked field has its own message', () => {
+  it('everything wrong at once: every marked field has its own message (regression: #94)', () => {
     setup();
     type(f.fat, '-1');
     type(f.sugars, 'abc');
@@ -455,7 +455,7 @@ describe('a wrong value always says what is wrong (#94)', () => {
     for (const control of invalid) expect(control.text, control.label).not.toBe('');
   });
 
-  it('values that add up to more than 100 g mark no field, and say so in one message', () => {
+  it('values that add up to more than 100 g mark no field, and say so in one message (regression: #94)', () => {
     setup();
     type(en.product.name, 'x');
     type(f.carbs, '50');
@@ -474,7 +474,7 @@ describe('a wrong value always says what is wrong (#94)', () => {
         }),
       );
 
-    it('marks the field the server named, and says it does not accept that value', async () => {
+    it('marks the field the server named, and says it does not accept that value (regression: #94)', async () => {
       refusing([{ path: 'nutrition.fat', message: 'whatever the server says' }]);
       type(en.product.name, 'x');
       type(f.fat, '5');
@@ -489,7 +489,7 @@ describe('a wrong value always says what is wrong (#94)', () => {
       expect(invalidControls()).toEqual([]);
     });
 
-    it('names the name, the brand or the class too', async () => {
+    it('names the name, the brand or the class too (regression: #94)', async () => {
       refusing([
         { path: 'name', message: 'x' },
         { path: 'brand', message: 'x' },
@@ -505,7 +505,7 @@ describe('a wrong value always says what is wrong (#94)', () => {
       ]);
     });
 
-    it('with nothing to point at, says the server refused the product, without a red field', async () => {
+    it('with nothing to point at, says the server refused the product, without a red field (regression: #94)', async () => {
       refusing([{ path: 'something.else', message: 'x' }]);
       type(en.product.name, 'x');
       save();

@@ -137,7 +137,7 @@ describe('the http api', () => {
     await expect(api.lookupProduct('3017620422003')).rejects.toMatchObject({ status: 500 });
   });
 
-  it('#94: a 400 for a product carries the fields the server named', async () => {
+  it('a 400 for a product carries the fields the server named (regression: #94)', async () => {
     const issues = [{ path: 'nutrition.fat', message: 'x' }];
     stub(() => json({ error: 'invalid_request', issues }, 400));
     const api = createHttpApi(createApiClient('http://localhost/api'));
