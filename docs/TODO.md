@@ -27,7 +27,7 @@ Until then: automatic reconnect only (M6-6). If it fails, the meal can be finish
 
 ## Resume Scale Mode after page reload
 
-Needs a reconnect (see above) and new-zero handling.
+Needs a reconnect (see above) and new-zero handling. Reconnecting without the chooser after a reload depends on Chrome's `navigator.bluetooth.getDevices()`, which is still behind a flag; within the page session of the first pick, `new CapacitorTransport({ deviceId })` already works (M6-6).
 
 Until then: a reload resumes Direct Entry sessions only (M5-8).
 
@@ -40,11 +40,3 @@ Until then: item grams must be ≥ 0.
 ## Usage data consent
 
 Before serving other users: consent or opt-out for usage events, and including them in per-user data export and deletion (GDPR).
-
-## Scale library changes (before Phase B)
-
-Done in `@mlewand/huajun-ble-scale` 0.0.4 (library PR #1); nothing open:
-
-- Monotonic timestamp: `Reading.receivedAtMonotonic`, alongside the unchanged `receivedAt`. Use it for `ScaleReading.timestamp`.
-- `toReading(frame, times)` is exported, so `ReplayScaleDriver` can re-parse stored bytes with `parseFrame` + `toReading` (M3-11).
-- `CapacitorTransport.deviceId` holds the picked device's ID, and `new CapacitorTransport({ deviceId })` connects to it without the chooser (M6-6). On the web this works within the page session of the first pick. After a reload it depends on Chrome's `navigator.bluetooth.getDevices()`, which is still behind a flag; see "Resume Scale Mode after page reload" above.

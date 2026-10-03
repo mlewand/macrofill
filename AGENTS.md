@@ -8,14 +8,7 @@ Read before any work:
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current phase: **C**, about to start. Phase B's exit was confirmed on 2026-10-01: a real meal logged with the scale on the phone, on the production box. No Phase C code exists yet. Update this line when a phase's exit criteria are met.
-
-## Starting Phase C
-
-Handover from Phase B. Delete each point once it's resolved, and this section once it's empty.
-
-- **Recording (M3-11, M6-7).** Readings carry `raw`, but nothing records them yet. The mock's `raw` is empty, so only real sessions can be re-parsed. Replay uses the library's `parseFrame` and `toReading`.
-- **Tracker decisions from Phase B**, beyond the criteria text, are in the descriptions of #22, #27 and #29: correction references, undo back to before Start, and M3-1 kept literal for a stalled stream. The tracker's settings, for tuning on the real scale, are in `apps/web/src/scaleMode/settings.ts`.
+Current phase: none. **Phase C is done, and with it MVP0.** Its exit was confirmed on 2026-10-01: every MVP0 criterion passes in CI or in the manual smoke run on the phone and the tablet against the production box (master at `f4c0889`), and the cumulative review (#57) is merged. No next phase is defined yet: the maintainer picks it from Future stages in the requirements. Update this line when a phase starts or its exit criteria are met.
 
 ## How to work
 
@@ -37,7 +30,7 @@ Handover from Phase B. Delete each point once it's resolved, and this section on
 - PR descriptions list the criterion IDs they cover.
 - Do branch work in a `git worktree`, and keep the main checkout on `master`: it may be serving the dev server, and switching branches under a running Vite can break its config reload. Pull `master` there after merges.
 - A PR is ready for review when CI is green. Reviews come from Codex by default. GitHub Copilot reviews are for bigger or riskier PRs, and are requested less often. Address every finding, including points that appear only in the review summary; answer those with a PR comment. Reply on inline threads with the fixing commit and resolve them. Check a finding before fixing it, and if it doesn't hold, say why, with evidence.
-- At the end of a phase, before its exit, a cumulative review covers everything the phase changed. A base branch at master's commit from the phase's start, and a head branch starting as current master, in a PR marked as not to be merged into that base. Fixes go on the head branch, so they're reviewed in context. When it's approved, retarget the PR to `master` (its diff shrinks to the fixes), merge it, and delete both branches. Phase B's was #29, covering #22 to #28. #30, a small UI change merged after it, was reviewed on its own.
+- At the end of a phase, before its exit, a cumulative review covers everything the phase changed. A base branch at master's commit from the phase's start, and a head branch starting as current master, in a PR marked as not to be merged into that base. Fixes go on the head branch, so they're reviewed in context. When it's approved, retarget the PR to `master` (its diff shrinks to the fixes), merge it, and delete both branches. Phase B's was #29, covering #22 to #28. #30, a small UI change merged after it, was reviewed on its own. Phase C's was #57, covering #33 to #52; findings the maintainer deferred are issues that link the review threads they came from.
 - Request the first review, and a re-review after each round of fixes (every thread answered and resolved, CI green on the new head), once per round. Codex answers only to the maintainer's account, so the request is a PR comment posted as the maintainer, with exactly this text: `Asking for @codex review on @mlewand behalf.` Copilot is requested as a reviewer, also as the maintainer. How an agent gets that access is harness-specific (Claude Code: see `CLAUDE.md`). Without it, tell the maintainer the PR is ready instead.
 
 ## Conventions
@@ -57,6 +50,7 @@ Handover from Phase B. Delete each point once it's resolved, and this section on
 
 - The real scale isn't available in CI or to you. Use `MockScaleDriver` with the `scaleScript()` builder.
 - Web Bluetooth needs HTTPS and a user gesture for the first connect. On the web the device chooser lists all devices (`showAllDevices: true`) because Chrome's name filter doesn't match this scale. That is expected.
+- The weight tracker's decisions beyond the criteria text are in the descriptions of #22, #27 and #29: correction references, undo back to before Start, and M3-1 kept literal for a stalled stream. Its settings, for tuning on the real scale, are in `apps/web/src/scaleMode/settings.ts`.
 
 ## Commands
 
