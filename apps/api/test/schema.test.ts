@@ -125,7 +125,7 @@ describe('#63-2, #63-3: the database enforces the shared product shape', () => {
       (e: unknown) => e,
     );
     const text = (e: unknown): string =>
-      e instanceof Error ? `${e.message} ${text(e.cause)}` : String(e ?? '');
+      e instanceof Error ? `${e.message} ${text(e.cause)}` : '';
     expect(text(error)).toContain(constraint);
   };
 
