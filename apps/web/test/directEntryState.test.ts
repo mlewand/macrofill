@@ -262,3 +262,29 @@ describe('the flow in Scale Mode', () => {
     ]);
   });
 });
+
+describe('a product of another class picked on purpose (#64-5)', () => {
+  it('is marked on the step, and the mark follows typed grams and an undo', () => {
+    const picked = directEntry(start(), {
+      type: 'selectProduct',
+      productId: milk,
+      otherClass: true,
+    });
+    expect(picked.steps[0]).toMatchObject({ productId: milk, otherClass: true });
+    const typed = directEntry(picked, { type: 'setGrams', grams: '150' });
+    expect(typed.steps[0]).toMatchObject({ productId: milk, grams: '150', otherClass: true });
+    const back = apply(typed, { type: 'next' }, { type: 'undo' });
+    expect(back.steps[0]).toMatchObject({ productId: milk, otherClass: true });
+  });
+
+  it('is gone once a product of the step’s own class is picked', () => {
+    const picked = directEntry(start(), {
+      type: 'selectProduct',
+      productId: milk,
+      otherClass: true,
+    });
+    const own = directEntry(picked, { type: 'selectProduct', productId: curd });
+    expect(own.steps[0]).toEqual({ productId: curd, grams: '', skipped: false });
+    expect(own.steps[0]).not.toHaveProperty('otherClass');
+  });
+});

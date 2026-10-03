@@ -11,6 +11,7 @@ import {
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NutritionTable } from '../NutritionTable';
+import { ProductDialog } from '../products/ProductForm';
 import { useSaveMeal, type SaveResult } from '../outbox/Outbox';
 import { belongsTo, lastUser } from '../session';
 import { sinceStart, useFlowEvents } from '../events/useFlowEvents';
@@ -29,6 +30,8 @@ import {
 
 interface Props {
   catalog: Catalog;
+  /** A product was added at a step (#64): it joins the catalog the pickers list. */
+  onProductAdded: (product: CatalogProduct) => void;
   onSaved: (result: SaveResult) => void;
   /** Leaving: from the recipe list, or discarding the meal. */
   onCancel: () => void;
@@ -42,7 +45,14 @@ interface Props {
  * Direct Entry (M5-1 to M5-6): pick a recipe, enter each step, review and save. The session is
  * kept on the device from the recipe pick until it's saved or discarded (M5-8).
  */
-export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Props) {
+export function DirectEntry({
+  catalog,
+  onProductAdded,
+  onSaved,
+  onCancel,
+  resume,
+  ...props
+}: Props) {
   const drafts = useDraftStore();
   const track = useTrack();
   // A session whose save was sent is resumed as it was: only resending that request is left.
@@ -132,6 +142,7 @@ export function DirectEntry({ catalog, onSaved, onCancel, resume, ...props }: Pr
       state={state}
       catalog={catalog}
       dispatch={dispatch}
+      onProductAdded={onProductAdded}
       onDiscard={discard}
     />
   );
@@ -149,12 +160,15 @@ function resumable(draft: DirectEntryState, catalog: Catalog): DirectEntryState 
   return {
     ...draft,
     recipe,
-    steps: draft.steps.map((step, i) =>
-      step.productId === undefined ||
-      classOf.get(step.productId) === recipe.steps[i]!.ingredientClassId
-        ? step
-        : { ...step, productId: undefined },
-    ),
+    steps: draft.steps.map((step, i) => {
+      const { productId, otherClass, ...rest } = step;
+      if (productId === undefined) return step;
+      // Of the step's class, or of another one picked on purpose (#64-5) and still in the catalog.
+      const fits =
+        classOf.get(productId) === recipe.steps[i]!.ingredientClassId ||
+        (otherClass === true && classOf.has(productId));
+      return fits ? step : { ...rest, productId: undefined };
+    }),
   };
 }
 
@@ -253,6 +267,7 @@ function StepScreen(props: {
   state: DirectEntryState;
   catalog: Catalog;
   dispatch: (action: DirectEntryAction) => void;
+  onProductAdded: (product: CatalogProduct) => void;
   onDiscard: () => Promise<boolean>;
 }) {
   const { t } = useTranslation();
@@ -277,7 +292,14 @@ function StepScreen(props: {
       <ProductChoices
         state={state}
         catalog={catalog}
-        onSelect={(productId) => dispatch({ type: 'selectProduct', productId })}
+        onSelect={(productId, otherClass) =>
+          dispatch({
+            type: 'selectProduct',
+            productId,
+            ...(otherClass ? { otherClass: true } : {}),
+          })
+        }
+        onProductAdded={props.onProductAdded}
       />
 
       <label htmlFor={gramsId}>{t('step.grams')}</label>
@@ -327,14 +349,21 @@ export function StepHeading({ state, catalog }: { state: DirectEntryState; catal
   return <h1>{ingredientClass?.name.en ?? step.ingredientClassId}</h1>;
 }
 
-/** M5-2: products of the current step's class, most recently used first, then the default. */
+/**
+ * M5-2: products of the current step's class, most recently used first, then the default. A product
+ * of another class picked for the step (#64-5) is listed first, with a notice. "Add product" opens
+ * the product form over the step (#64).
+ */
 export function ProductChoices(props: {
   state: DirectEntryState;
   catalog: Catalog;
-  onSelect: (productId: string) => void;
+  /** `otherClass`: the product is of another class than the step's (#64-5). */
+  onSelect: (productId: string, otherClass?: boolean) => void;
+  onProductAdded: (product: CatalogProduct) => void;
 }) {
   const { t } = useTranslation();
   const { state, catalog } = props;
+  const [adding, setAdding] = useState(false);
   const step = state.recipe.steps[state.current]!;
   const draft = state.steps[state.current]!;
   const options = useMemo(
@@ -346,23 +375,53 @@ export function ProductChoices(props: {
       ).options,
     [catalog, step],
   );
+  // A picked product of another class isn't among the options: it's shown anyway, checked.
+  const picked = catalog.products.find((p) => p.id === draft.productId);
+  const other = picked && picked.ingredientClassId !== step.ingredientClassId ? picked : undefined;
+  const className = (id: string) =>
+    catalog.ingredientClasses.find((c) => c.id === id)?.name.en ?? id;
   return (
-    <fieldset>
-      <legend>{t('step.product')}</legend>
-      {options.length === 0 && <p>{t('step.noProducts')}</p>}
-      {options.map((product) => (
-        <label key={product.id} className="option">
-          <input
-            type="radio"
-            name="product"
-            value={product.id}
-            checked={draft.productId === product.id}
-            onChange={() => props.onSelect(product.id)}
-          />
-          {product.name}
-        </label>
-      ))}
-    </fieldset>
+    <>
+      <fieldset>
+        <legend>{t('step.product')}</legend>
+        {options.length === 0 && !other && <p>{t('step.noProducts')}</p>}
+        {[...(other ? [other] : []), ...options].map((product) => (
+          <label key={product.id} className="option">
+            <input
+              type="radio"
+              name="product"
+              value={product.id}
+              checked={draft.productId === product.id}
+              onChange={() => props.onSelect(product.id, product.id === other?.id)}
+            />
+            {product.name}
+          </label>
+        ))}
+        {other && (
+          <p className="muted">
+            {t('step.otherClass', {
+              product: other.name,
+              class: className(other.ingredientClassId),
+            })}
+          </p>
+        )}
+      </fieldset>
+      <button type="button" className="secondary" onClick={() => setAdding(true)}>
+        {t('step.addProduct')}
+      </button>
+      {adding && (
+        <ProductDialog
+          ingredientClasses={catalog.ingredientClasses}
+          ingredientClassId={step.ingredientClassId}
+          onCancel={() => setAdding(false)}
+          onSaved={(product) => {
+            props.onProductAdded(product);
+            props.onSelect(product.id, product.ingredientClassId !== step.ingredientClassId);
+            setAdding(false);
+          }}
+        />
+      )}
+    </>
   );
 }
 

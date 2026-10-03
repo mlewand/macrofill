@@ -42,7 +42,9 @@
     "discardQuestion": "Discard this meal? What you entered so far is lost.",
     "confirmDiscard": "Discard",
     "keep": "Keep",
-    "discardFailed": "Couldn't discard the meal on this device. Try again."
+    "discardFailed": "Couldn't discard the meal on this device. Try again.",
+    "addProduct": "Add product",
+    "otherClass": "{{product}} is a {{class}} product. It is used for this step, and from now on it appears under {{class}}."
   },
   "scale": {
     "status": {
@@ -123,5 +125,39 @@
     "refusedTitle": "Couldn't be saved",
     "refusedHint": "The server refused these meals, so they're not in your day. Remove them, and log them again if you need to.",
     "remove": "Remove"
+  },
+  "product": {
+    "title": "Add a product",
+    "intro": "Type the values from the label, per 100 g. Leave a value empty if the label doesn't list it.",
+    "name": "Name",
+    "brand": "Brand (optional)",
+    "ingredientClass": "Ingredient class",
+    "per100": "Per 100 g",
+    "field": {
+      "kcal": "Energy (kcal)",
+      "fat": "Fat (g)",
+      "saturates": "of which saturates (g)",
+      "carbs": "Carbohydrates (g)",
+      "sugars": "of which sugars (g)",
+      "protein": "Protein (g)",
+      "salt": "Salt (g)",
+      "fibre": "Fibre (g)"
+    },
+    "save": "Save product",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "problem": {
+      "name": "Enter the product name.",
+      "negative": "Can't be negative.",
+      "invalid": "Enter a number, like 3,2 or 3.2.",
+      "tooLarge": "Can't be more than 100 g per 100 g.",
+      "total": "Carbs, protein, fat, fibre and salt add up to more than 100 g per 100 g. Check the values."
+    },
+    "kcalWarning": "The energy ({{kcal}} kcal) doesn't match the macros, which add up to about {{expected}} kcal. Check the values.",
+    "saveAnyway": "Save anyway",
+    "fixValues": "Fix the values",
+    "offline": "Adding a product needs a connection. Connect, then try again.",
+    "failed": "Couldn't save the product. Check the connection and try again.",
+    "refused": "The server refused this product. Check the values."
   }
 }

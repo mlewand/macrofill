@@ -54,7 +54,7 @@ export type ScaleModeAction =
   | { type: 'correct'; grams: string }
   | { type: 'skip' }
   | { type: 'undo' }
-  | { type: 'selectProduct'; productId: string }
+  | { type: 'selectProduct'; productId: string; otherClass?: true }
   /** Manual mode only. */
   | { type: 'setGrams'; grams: string }
   /** Summary only (M6-5). */

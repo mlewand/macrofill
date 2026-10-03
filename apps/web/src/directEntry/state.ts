@@ -11,6 +11,11 @@ export interface StepDraft {
   skipped: boolean;
   /** Set while `grams` is the amount the scale recorded; typed grams are manual (M6-5). */
   fromScale?: true;
+  /**
+   * Set while `productId` is a product of another ingredient class than the step's, picked on
+   * purpose (#64-5). A kept session resumes with it; an unmarked one of another class is dropped.
+   */
+  otherClass?: true;
 }
 
 export interface DirectEntryState {
@@ -27,7 +32,7 @@ export interface DirectEntryState {
 }
 
 export type DirectEntryAction =
-  | { type: 'selectProduct'; productId: string }
+  | { type: 'selectProduct'; productId: string; otherClass?: true }
   | { type: 'setGrams'; grams: string }
   /** Scale Mode: the tracker recorded the current step's amount (M6-4). */
   | { type: 'record'; grams: number }
@@ -84,8 +89,14 @@ export function directEntry(state: DirectEntryState, action: DirectEntryAction):
   const step = state.steps[state.current];
 
   switch (action.type) {
-    case 'selectProduct':
-      return step ? update(state.current, { productId: action.productId }) : state;
+    case 'selectProduct': {
+      if (!step) return state;
+      // The mark belongs to the product picked, so it never carries over to another one.
+      const next: StepDraft = { ...step, productId: action.productId };
+      delete next.otherClass;
+      if (action.otherClass) next.otherClass = true;
+      return replace(state.current, next);
+    }
     case 'setGrams':
       return step ? replace(state.current, typed(step, action.grams)) : state;
     case 'record': {
@@ -95,6 +106,7 @@ export function directEntry(state: DirectEntryState, action: DirectEntryAction):
         grams: String(action.grams),
         skipped: false,
         fromScale: true,
+        ...(step.otherClass ? { otherClass: true as const } : {}),
       };
       if (stepProblem(recorded) !== undefined) return state;
       return { ...replace(state.current, recorded), current: state.current + 1 };
@@ -165,5 +177,10 @@ export function mealItems(state: DirectEntryState): SaveMealRequest['meal']['ite
 
 /** A draft with typed grams: no longer the scale's amount. */
 function typed(step: StepDraft, grams: string): StepDraft {
-  return { productId: step.productId, grams, skipped: step.skipped };
+  return {
+    productId: step.productId,
+    grams,
+    skipped: step.skipped,
+    ...(step.otherClass ? { otherClass: true as const } : {}),
+  };
 }

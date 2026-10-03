@@ -198,6 +198,8 @@ const exempt: Record<string, string> = {
   'ALL /api/*': 'session middleware and the not-found fallback; no user data',
   'GET /api/health': 'checks the database; no user data, and no session (M4-2)',
   'POST /api/login': 'opens a session for whoever has the password; no user data',
+  'POST /api/products':
+    'adds to the global product store (#63-8); what it returns is the product, which every user sees, and createdBy never leaves the server (#63-4). products.test.ts covers visibility',
 };
 
 /**
@@ -211,6 +213,7 @@ const reviewedHandlers: Record<string, number> = {
   'ALL /api/*': 2,
   'GET /api/catalog': 1,
   'POST /api/meals': 2,
+  'POST /api/products': 2,
   'GET /api/meals/:id/recording': 2,
   'POST /api/events': 2,
   'GET /api/today': 1,

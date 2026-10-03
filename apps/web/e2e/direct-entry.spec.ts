@@ -142,3 +142,38 @@ test('M5-9: a meal saved offline waits on the device, survives a restart and is 
   await expect(page.getByText(en.today.pending)).toHaveCount(0, { timeout: 10_000 });
   await expect(page.getByRole('region', { name: en.today.title }).getByRole('table')).toBeVisible();
 });
+
+test('#64-1 to #64-4: add a product at a step by its label, select it, and find it in the next meal', async ({
+  page,
+}) => {
+  const name = `E2E curd ${Date.now()}`;
+  await page.goto('/');
+  await page.getByRole('button', { name: en.home.logMeal }).click();
+  await page.getByRole('button', { name: 'Curd' }).click();
+  await page.getByLabel(en.step.grams).fill('200');
+
+  await page.getByRole('button', { name: en.step.addProduct }).click();
+  const dialog = page.getByRole('dialog', { name: en.product.title });
+  await expect(dialog.getByLabel(en.product.ingredientClass)).toHaveValue('curd');
+  await dialog.getByLabel(en.product.name).fill(name);
+  // The label values, with a comma. Fibre isn't listed: it stays unknown.
+  await dialog.getByLabel(en.product.field.protein).fill('17');
+  await dialog.getByLabel(en.product.field.fat).fill('4,2');
+  await dialog.getByLabel(en.product.field.carbs).fill('3.4');
+  await dialog.getByLabel(en.product.field.kcal).fill('119');
+  // Enter saves the product; it must not also press Next on the step behind the form (#64-6).
+  await dialog.getByLabel(en.product.name).press('Enter');
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('radio', { name })).toBeChecked();
+  await expect(page.getByText('Step 1 of 5')).toBeVisible();
+  await expect(page.getByLabel(en.step.grams)).toHaveValue('200');
+
+  // The shared store has it: the next meal lists it without anyone adding it again.
+  await page.reload();
+  await page.getByRole('button', { name: en.step.addProduct }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: en.step.discard }).click();
+  await page.getByRole('button', { name: en.step.confirmDiscard }).click();
+  await page.getByRole('button', { name: en.home.logMeal }).click();
+  await page.getByRole('button', { name: 'Curd' }).click();
+  await expect(page.getByRole('radio', { name })).toBeVisible();
+});
