@@ -154,7 +154,6 @@ describe('Today view', () => {
     fireEvent.click(screen.getByRole('button', { name: en.home.logMeal }));
     fireEvent.click(await screen.findByRole('button', { name: 'Curd' }));
     fireEvent.click(screen.getByRole('button', { name: en.summary.save }));
-    fireEvent.click(await screen.findByRole('button', { name: en.saved.done }));
     expect(await screen.findByText('Curd')).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
   });

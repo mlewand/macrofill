@@ -77,7 +77,7 @@ test('M6-8: a full meal with skip, undo, a manual correction and a negative step
     (request) => request.method() === 'POST' && request.url().endsWith('/api/meals'),
   );
   await page.getByRole('button', { name: en.summary.save }).click();
-  await expect(page.getByRole('status')).toHaveText(en.saved.title);
+  await expect(page.getByText(en.saved.title)).toBeVisible();
 
   // M6-7, M4-7: the meal's recording was saved with it, and downloads as sent.
   const body = (await sent).postDataJSON() as SaveMealRequest;
@@ -139,7 +139,7 @@ test('M6-8, M6-6: after the scale drops, it reconnects by itself and the meal go
   }
   await expect(page.getByRole('heading', { name: en.summary.title })).toBeVisible();
   await page.getByRole('button', { name: en.summary.save }).click();
-  await expect(page.getByRole('status')).toHaveText(en.saved.title);
+  await expect(page.getByText(en.saved.title)).toBeVisible();
 });
 
 test('M6-8, M6-5: after the scale drops, the meal is finished with typed grams', async ({
@@ -159,5 +159,5 @@ test('M6-8, M6-5: after the scale drops, the meal is finished with typed grams',
   }
   await expect(page.getByRole('heading', { name: en.summary.title })).toBeVisible();
   await page.getByRole('button', { name: en.summary.save }).click();
-  await expect(page.getByRole('status')).toHaveText(en.saved.title);
+  await expect(page.getByText(en.saved.title)).toBeVisible();
 });

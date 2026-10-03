@@ -50,7 +50,7 @@ test('M5-1 to M5-6: log a meal with Direct Entry, with skip, undo and a summary 
   await expect(page.getByRole('row', { name: /Fibre/ })).toContainText(en.unknown);
 
   await page.getByRole('button', { name: en.summary.save }).click();
-  await expect(page.getByRole('status')).toHaveText(en.saved.title);
+  await expect(page.getByText(en.saved.title)).toBeVisible();
 });
 
 test('M5-8: a page reload resumes Direct Entry at the same step, with what was entered', async ({
@@ -129,7 +129,6 @@ test('M5-9: a meal saved offline waits on the device, survives a restart and is 
   await context.setOffline(true);
   await page.getByRole('button', { name: en.summary.save }).click();
   await expect(page.getByText(en.saved.pending)).toBeVisible();
-  await page.getByRole('button', { name: en.saved.done }).click();
   // Offline, the day can't load, but the meal waiting on the device shows.
   await expect(page.getByText(en.today.pendingTitle)).toBeVisible();
 

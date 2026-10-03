@@ -338,13 +338,45 @@ describe('Direct Entry', () => {
     expect(screen.getByRole('button', { name: en.summary.save })).toBeDisabled();
   });
 
+  it('#88-1: after saving, the main screen is open with the notice, and no screen asks for a tap on Done', async () => {
+    await openCurdBowl();
+    typeGrams('3,2');
+    click(en.step.next);
+    click(en.step.skip);
+    click(en.summary.save);
+    expect(await screen.findByText(en.saved.title)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.home.logMeal })).toBeVisible();
+    expect(screen.getByRole('button', { name: en.home.weighMeal })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: en.saved.title })).toBeNull();
+  });
+
+  it('#88-4: the notice is dismissed by hand, and starting the next meal clears it', async () => {
+    await openCurdBowl();
+    typeGrams('3,2');
+    click(en.step.next);
+    click(en.step.skip);
+    click(en.summary.save);
+    await screen.findByText(en.saved.title);
+    click(en.notice.dismiss);
+    expect(screen.queryByText(en.saved.title)).toBeNull();
+
+    // A second meal: its notice goes away when a third one starts.
+    click(en.home.logMeal);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sandwich' }));
+    click(en.summary.save);
+    await screen.findByText(en.saved.title);
+    click(en.home.logMeal);
+    expect(screen.queryByText(en.saved.title)).toBeNull();
+  });
+
   it('saves the meal and confirms it', async () => {
     const api = await openCurdBowl();
     typeGrams('3,2');
     click(en.step.next);
     click(en.step.skip);
     click(en.summary.save);
-    expect(await screen.findByRole('status')).toHaveTextContent(en.saved.title);
+    expect(await screen.findByText(en.saved.title)).toBeInTheDocument();
     const [request] = vi.mocked(api.saveMeal).mock.calls[0]!;
     expect(request.meal.items).toEqual([
       {
@@ -370,7 +402,7 @@ describe('Direct Entry', () => {
     click(en.summary.save);
     expect(await screen.findByRole('alert')).toHaveTextContent(en.summary.saveFailed);
     click(en.summary.save);
-    expect(await screen.findByRole('status')).toHaveTextContent(en.saved.title);
+    expect(await screen.findByText(en.saved.title)).toBeInTheDocument();
     const [first, second] = vi.mocked(api.saveMeal).mock.calls.map(([request]) => request);
     expect(second).toEqual(first);
   });
@@ -406,7 +438,7 @@ describe('Direct Entry', () => {
     fireEvent.change(input, { target: { value: '999' } });
 
     click(en.summary.save);
-    expect(await screen.findByRole('status')).toHaveTextContent(en.saved.title);
+    expect(await screen.findByText(en.saved.title)).toBeInTheDocument();
     const [first, second] = vi.mocked(api.saveMeal).mock.calls.map(([request]) => request);
     expect(second).toEqual(first);
     expect(second?.meal.items[0]).toMatchObject({ grams: 200 });
@@ -1429,7 +1461,7 @@ describe('saving through the outbox (M5-9)', () => {
     expect(drafts.kept()).toBeUndefined();
     expect(await outbox.all()).toHaveLength(1);
 
-    click(en.saved.done);
+    // #88-1: straight to the main screen, where Today already lists it.
     const entry = await screen.findByText(en.today.pending);
     expect(entry.closest('li')).toHaveTextContent('Curd bowl');
     // Counted: 150 g and 3.5 g at 100 kcal per 100 g.
@@ -1504,12 +1536,11 @@ describe('saving through the outbox (M5-9)', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: en.summary.save }));
     // Not "Meal saved", and not stuck on a frozen summary either.
-    expect(await screen.findByRole('status')).toHaveTextContent(en.saved.refusedTitle);
+    expect(await screen.findByText(en.saved.refusedTitle)).toBeInTheDocument();
     expect(screen.getByText(en.saved.refused)).toBeInTheDocument();
     expect(drafts.kept()).toBeUndefined();
     // The meal is kept on the device, listed as not saved, until removed.
     expect(await outbox.all()).toEqual([expect.objectContaining({ refused: 409 })]);
-    click(en.saved.done);
     expect(await screen.findByRole('region', { name: en.today.refusedTitle })).toBeInTheDocument();
     warn.mockRestore();
   });
