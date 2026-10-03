@@ -26,12 +26,56 @@ Current phase: none. **Phase C is done, and with it MVP0.** Its exit was confirm
 
 - Never commit to `master` directly. Work on a dedicated branch and merge through a pull request.
 - Commit as you go: one commit per small, self-contained change, where possible.
-- Open a PR once the branch holds a deliverable. Keep PRs reasonably sized. If the work is bigger, split it into stacked PRs (each branch based on the previous one) and name the base PR in the description.
-- PR descriptions list the criterion IDs they cover.
+- Open a PR once the branch holds a deliverable. Keep PRs reasonably sized. If the work is bigger, split it into stacked PRs (each branch based on the previous one) and name the base PR in the description. Before stacking on a PR that hasn't been reviewed yet, start an independent PR for another task on the list, if there is one: the base PR then has time to get its review before more work builds on it. Stack on an unreviewed PR only when no independent work is left.
+- Keep at most 4 of your PRs open at a time, stacked ones included. At the cap, work on the open ones instead of starting another.
+- A PR description opens with a short overview that someone who barely knows the product, such as an end user, would understand: what changes for them, and why, in a few sentences. The details follow: the criterion IDs it covers, the assumptions it makes, what it doesn't handle (including the issues extracted in review, see Handling reviews), then implementation notes. `.github/pull_request_template.md` has the layout.
 - Do branch work in a `git worktree`, and keep the main checkout on `master`: it may be serving the dev server, and switching branches under a running Vite can break its config reload. Pull `master` there after merges.
-- A PR is ready for review when CI is green. Reviews come from Codex by default. GitHub Copilot reviews are for bigger or riskier PRs, and are requested less often. Address every finding, including points that appear only in the review summary; answer those with a PR comment. Reply on inline threads with the fixing commit and resolve them. Check a finding before fixing it, and if it doesn't hold, say why, with evidence.
+- A PR is ready for review when CI is green. Reviews come from Codex by default. GitHub Copilot reviews are for bigger or riskier PRs, and are requested less often. CodeRabbit may review too; it's welcome but not required. Handle the findings as Handling reviews says.
 - At the end of a phase, before its exit, a cumulative review covers everything the phase changed. A base branch at master's commit from the phase's start, and a head branch starting as current master, in a PR marked as not to be merged into that base. Fixes go on the head branch, so they're reviewed in context. When it's approved, retarget the PR to `master` (its diff shrinks to the fixes), merge it, and delete both branches. Phase B's was #29, covering #22 to #28. #30, a small UI change merged after it, was reviewed on its own. Phase C's was #57, covering #33 to #52; findings the maintainer deferred are issues that link the review threads they came from.
 - Request the first review, and a re-review after each round of fixes (every thread answered and resolved, CI green on the new head), once per round. Codex answers only to the maintainer's account, so the request is a PR comment posted as the maintainer, with exactly this text: `Asking for @codex review on @mlewand behalf.` Copilot is requested as a reviewer, also as the maintainer. How an agent gets that access is harness-specific (Claude Code: see `CLAUDE.md`). Without it, tell the maintainer the PR is ready instead.
+
+## Handling reviews
+
+Not every finding has to be fixed in the PR that drew it. #37 and #41 went through more than 30 review threads each, mostly over scenarios the product doesn't support, and each fix drew new findings; that must not happen again.
+
+Judge each finding by how it affects the user in realistic use: the product as `docs/requirements.md` scopes it, including the accepted shortcuts in MVP0 scope (e.g. one user per device). A problem that needs an unsupported setup or an unlikely chain of failures is theoretical.
+
+Every finding, including points that appear only in a review summary, gets one of these outcomes, and a reply that says which. Reply on inline threads and resolve them; answer summary points with a PR comment. Check a finding before acting on it.
+
+- **Fix** it in the PR when, in realistic use, the PR would cause a regression in something that worked, data loss or corruption, or a security hole, or would leave a criterion it covers unmet. Any other high or critical finding the PR causes is fixed too; leaving one to an issue needs the maintainer's OK. Reply with the fixing commit.
+- **Extract** it to an issue when it's low or medium priority, theoretical problems included. The issue links where it came from (a permalink to the review thread or the code), says what goes wrong for the user, and gets a priority label. Reply with the issue link and its priority, list it under "Not handled" in the PR description, so re-reviews don't raise it again, and resolve the thread.
+- **Reject** it when it doesn't hold: say why, with evidence.
+- **Skip** it when it's unrelated to the PR's purpose, e.g. about code the PR doesn't change: say so in one line. Open an issue for it only when it's high or critical.
+
+Priority is judged from the product side: how much it affects the user, counting how likely it is. The labels (create a missing one with `gh label create`):
+
+- `priority: critical`: data loss or corruption, a security hole, or the app unusable.
+- `priority: high`: a core flow (logging a meal, Today) broken or wrong in normal use.
+- `priority: medium`: a noticeable annoyance, or a wrong result in an uncommon but realistic case, with a workaround.
+- `priority: low`: a rare edge case, a theoretical problem, or something cosmetic.
+
+**Escalation after 20 reviews.** Count the reviews submitted on the PR by reviewers (Codex, Copilot, CodeRabbit, people), as GitHub lists them. GitHub also lists your own thread replies as reviews; those don't count. Once the PR has 20 and the latest review still has findings to fix, stop working on it:
+
+- Post a PR comment for the maintainer: why the reviews keep finding things (the themes they come back to, and which findings came from earlier fixes), what has been fixed and extracted so far, and how you suggest proceeding (an accepted shortcut to propose, a narrower scope, a split or a different design).
+- Add the `needs-maintainer` label, and tell the maintainer.
+- Leave the PR alone until the maintainer answers. Other work goes on, within the cap.
+
+When the maintainer gives the go-ahead, remove the label. The count starts again from then: after 20 more reviews, the same applies. To count, with your own login, and `and .submitted_at > "<go-ahead time>"` added to the filter after a go-ahead:
+
+```sh
+gh api 'repos/{owner}/{repo}/pulls/<number>/reviews' --paginate \
+  --jq '.[] | select(.user.login != "<your login>") | .id' | wc -l
+```
+
+## Review guidelines
+
+For code reviewers (Codex, Copilot, CodeRabbit), and agents reviewing a PR:
+
+- Review for realistic use of the product as `docs/requirements.md` scopes it, accepted shortcuts included. In MVP0 each phone or tablet is used by one person, so switching users on one device, across tabs or with browser storage blocked isn't a scenario to review for. The server keeping users apart (M4-1 to M4-3) is.
+- What matters most: regressions in what worked, data loss or corruption, security, and the acceptance criteria the PR names.
+- Rate each finding by its impact on the user in realistic use, likelihood included, not by its worst case, and say what the user would see.
+- Don't raise again what the PR description lists under "Not handled", or what an open issue already tracks. Leave problems in code the PR doesn't change alone, unless they're severe.
+- When a finding follows from the fix of an earlier one, say so.
 
 ## Conventions
 
