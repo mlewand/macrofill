@@ -10,7 +10,9 @@ import en from '../src/i18n/en.json';
 import { ScaleContext } from '../src/scale';
 import { TrackContext, type Track } from '../src/events/track';
 import { ScaleMode } from '../src/scaleMode/ScaleMode';
+import { ScannerContext } from '../src/scanner';
 import { fakeApi } from './support/api';
+import { fakeScanner, type FakeScanner } from './support/scanner';
 
 const nutrition = {
   kcal: 100,
@@ -85,23 +87,29 @@ const button = (name: string) => screen.getByRole('button', { name });
 const liveWeight = () => screen.getByLabelText(en.scale.added);
 
 /** Renders Scale Mode with a mock scale, picks the recipe and connects. */
-async function session({ connect = true } = {}) {
+async function session({
+  connect = true,
+  scanner = fakeScanner(),
+  api: given,
+}: { connect?: boolean; scanner?: FakeScanner; api?: Api } = {}) {
   const driver = new MockScaleDriver();
-  const api = fakeApi({ catalog: () => Promise.resolve(catalog) });
+  const api = given ?? fakeApi({ catalog: () => Promise.resolve(catalog) });
   const onSaved = vi.fn();
   const track = vi.fn<Track>();
   const view = render(
     <ApiContext value={api}>
       <TrackContext value={track}>
-        <ScaleContext value={() => driver}>
-          <Harness
-            onSaved={onSaved}
-            onCancel={vi.fn()}
-            owner="mlewand"
-            tracker={{ stableWaitMs: 60 }}
-            reconnect={{ firstDelayMs: 5, maxDelayMs: 10, giveUpAfterMs: 50 }}
-          />
-        </ScaleContext>
+        <ScannerContext value={scanner}>
+          <ScaleContext value={() => driver}>
+            <Harness
+              onSaved={onSaved}
+              onCancel={vi.fn()}
+              owner="mlewand"
+              tracker={{ stableWaitMs: 60 }}
+              reconnect={{ firstDelayMs: 5, maxDelayMs: 10, giveUpAfterMs: 50 }}
+            />
+          </ScaleContext>
+        </ScannerContext>
       </TrackContext>
     </ApiContext>,
   );
@@ -686,5 +694,41 @@ describe('adding a product at a step (#64-6)', () => {
       ),
     ).toBeVisible();
     expect(added.ingredientClassId).toBe('curd');
+  });
+
+  it('#65-7: scanning a barcode keeps the scale connected and the screen awake, and selects the product', async () => {
+    const release = vi.fn(() => Promise.resolve());
+    const request = vi.fn(() => Promise.resolve({ release }));
+    vi.stubGlobal('navigator', { ...navigator, onLine: true, wakeLock: { request } });
+    const scanner = fakeScanner();
+    const found = {
+      ...catalog.products[0]!,
+      id: '7a1f3d52-8c4e-4b6a-9d20-3e5f6a7b8c9d',
+      name: 'Scanned curd',
+    };
+    const api = fakeApi({
+      catalog: () => Promise.resolve(catalog),
+      productByBarcode: () => Promise.resolve(found),
+    });
+    const s = await session({ scanner, api });
+    const disconnect = vi.spyOn(s.driver, 'disconnect');
+    await s.play(s.script.baseline(312, { forMs: 0 }));
+    fireEvent.click(button(en.scale.start));
+
+    fireEvent.click(button(en.step.scan));
+    await waitFor(() => expect(scanner.open).toBe(true));
+    // The scale goes on streaming while the camera is up.
+    await s.play(s.script.add(150));
+    act(() => scanner.read('5901234123457'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    expect(screen.getByText(en.scale.status.connected)).toBeVisible();
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Scanned curd')).toBeChecked();
+    await s.play(s.script.stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    expect(await screen.findByText('Step 2 of 2')).toBeVisible();
   });
 });

@@ -44,7 +44,8 @@
     "keep": "Keep",
     "discardFailed": "Couldn't discard the meal on this device. Try again.",
     "addProduct": "Add product",
-    "otherClass": "{{product}} is a {{class}} product. It is used for this step, and from now on it appears under {{class}}."
+    "otherClass": "{{product}} is a {{class}} product. It is used for this step, and from now on it appears under {{class}}.",
+    "scan": "Scan barcode"
   },
   "scale": {
     "status": {
@@ -158,6 +159,25 @@
     "fixValues": "Fix the values",
     "offline": "Adding a product needs a connection. Connect, then try again.",
     "failed": "Couldn't save the product. Check the connection and try again.",
-    "refused": "The server refused this product. Check the values."
+    "refused": "The server refused this product. Check the values.",
+    "barcode": "Barcode: {{barcode}}",
+    "barcodeTaken": "Another product already has this barcode. Close this form and scan again to use it."
+  },
+  "scan": {
+    "title": "Scan a barcode",
+    "hint": "Point the camera at the barcode on the package.",
+    "unsupported": "This browser can't scan barcodes. Type the digits instead.",
+    "denied": "The camera isn't allowed for Macrofill. Type the digits instead, or allow the camera in the browser's site settings.",
+    "unavailable": "The camera can't be opened. Type the digits instead.",
+    "digits": "Barcode digits",
+    "useDigits": "Use these digits",
+    "problem": {
+      "format": "A barcode has 8, 12 or 13 digits. Check what you typed.",
+      "checkDigit": "The last digit doesn't match the others. Check the digits."
+    },
+    "looking": "Looking up the product…",
+    "lookupFailed": "Couldn't look the product up. Check the connection and try again.",
+    "scanAgain": "Scan again",
+    "cancel": "Cancel"
   }
 }

@@ -20,7 +20,9 @@ export interface ProductFormProps {
   ingredientClasses: readonly IngredientClass[];
   /** Preselected: the class of the step the product is added for. */
   ingredientClassId: string;
-  /** Values to start from, e.g. a barcode lookup's result (#65, #66). */
+  /** The barcode the product is added for (#65-4): shown, not editable, and saved with it. */
+  barcode?: string;
+  /** Values to start from, e.g. a barcode lookup's result (#66). */
   initial?: Partial<Omit<LabelFormValues, 'nutrition'>> & {
     nutrition?: Partial<Record<Nutrient, string>>;
   };
@@ -68,7 +70,7 @@ export function ProductForm(props: ProductFormProps) {
   const [attempted, setAttempted] = useState(false);
   const [warning, setWarning] = useState<{ kcal: number; expected: number }>();
   const [saving, setSaving] = useState(false);
-  const [problem, setProblem] = useState<'failed' | 'refused'>();
+  const [problem, setProblem] = useState<'failed' | 'refused' | 'barcodeTaken'>();
   // A second tap before the first save's re-render must not send again.
   const inFlight = useRef(false);
   const mounted = useRef(true);
@@ -102,12 +104,22 @@ export function ProductForm(props: ProductFormProps) {
     setSaving(true);
     setProblem(undefined);
     try {
-      props.onSaved(await api.createProduct({ id, ...read.product }));
+      props.onSaved(
+        await api.createProduct({
+          id,
+          ...read.product,
+          ...(props.barcode === undefined ? {} : { barcode: props.barcode }),
+        }),
+      );
     } catch (error) {
       inFlight.current = false;
       if (!mounted.current) return;
       setProblem(
-        error instanceof ApiError && REFUSED.includes(error.status) ? 'refused' : 'failed',
+        error instanceof ApiError && error.code === 'barcode_taken'
+          ? 'barcodeTaken'
+          : error instanceof ApiError && REFUSED.includes(error.status)
+            ? 'refused'
+            : 'failed',
       );
       setSaving(false);
     }
@@ -128,6 +140,9 @@ export function ProductForm(props: ProductFormProps) {
       {/* Frozen while saving: the request holds the values it was sent with, so editing them now
           would show something other than what gets stored. */}
       <fieldset disabled={saving} className="form-body">
+        {props.barcode && (
+          <p className="muted">{t('product.barcode', { barcode: props.barcode })}</p>
+        )}
         <label htmlFor={`${ids}-name`}>{t('product.name')}</label>
         <input
           id={`${ids}-name`}

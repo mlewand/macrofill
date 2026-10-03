@@ -75,4 +75,40 @@ describe('the http api', () => {
       await expect(api.createProduct(product)).rejects.toBeInstanceOf(ApiError);
     },
   );
+
+  it('#65-3: the lookup gives the product for a barcode, and nothing for an unknown one', async () => {
+    const stored = { ...product, source: 'manual', lastUsedAt: null };
+    const fetch = stub(() => json(stored, 200));
+    const api = createHttpApi(createApiClient('http://localhost/api'));
+    expect(await api.productByBarcode('5901234123457')).toEqual(stored);
+    expect(fetch.mock.calls[0]![0]).toBe('http://localhost/api/products/by-barcode/5901234123457');
+    stub(() => json({ error: 'not_found' }, 404));
+    expect(await api.productByBarcode('5901234123457')).toBeUndefined();
+  });
+
+  it('#65-3: any other answer to the lookup is an error, not an unknown product', async () => {
+    const api = createHttpApi(createApiClient('http://localhost/api'));
+    for (const status of [400, 401, 500]) {
+      stub(() => json({ error: 'x' }, status));
+      await expect(api.productByBarcode('5901234123457')).rejects.toMatchObject({ status });
+    }
+    // Like a save, it gives up after a while.
+    const fetch = stub(() => json({}, 404));
+    await api.productByBarcode('5901234123457');
+    expect(fetch.mock.calls[0]![1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('#65-4: a 409 for a taken barcode says which kind of conflict it is', async () => {
+    const api = createHttpApi(createApiClient('http://localhost/api'));
+    stub(() => json({ error: 'barcode_taken' }, 409));
+    await expect(api.createProduct(product)).rejects.toMatchObject({
+      status: 409,
+      code: 'barcode_taken',
+    });
+    stub(() => json({ error: 'conflict' }, 409));
+    await expect(api.createProduct(product)).rejects.toMatchObject({
+      status: 409,
+      code: 'conflict',
+    });
+  });
 });

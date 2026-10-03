@@ -32,6 +32,12 @@ export interface Api {
    * any other error when it can't be reached.
    */
   createProduct: (request: CreateProductRequest) => Promise<CatalogProduct>;
+  /**
+   * #65-3: the product with this barcode, or undefined if the store has none. The code is as
+   * scanned or typed; the server normalizes it. Anything but 200 and 404 is an error: not knowing
+   * the product is different from not being able to ask.
+   */
+  productByBarcode: (code: string) => Promise<CatalogProduct | undefined>;
   /** Deletes a consumption entry (M7-4). Resolves also when it's already gone. */
   deleteEntry: (id: string) => Promise<void>;
   /** M7-8, M4-10: a batch of usage events. Resolves once the server has them. */
@@ -42,7 +48,11 @@ export interface Api {
 const SAVE_TIMEOUT_MS = 15_000;
 
 export class ApiError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    /** The server's own name for the problem (`error` in its answer), when it gave one. */
+    readonly code?: string,
+  ) {
     super(`api responded ${status}`);
   }
 }
@@ -79,7 +89,17 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
         { json: request },
         { init: { signal: AbortSignal.timeout(SAVE_TIMEOUT_MS) } },
       );
+      if (res.status === 409) throw new ApiError(409, await errorCode(res));
       if (res.status !== 200 && res.status !== 201) throw new ApiError(res.status);
+      return catalogProductSchema.parse(await res.json());
+    },
+    async productByBarcode(code) {
+      const res = await client.products['by-barcode'][':code'].$get(
+        { param: { code } },
+        { init: { signal: AbortSignal.timeout(SAVE_TIMEOUT_MS) } },
+      );
+      if (res.status === 404) return undefined;
+      if (res.status !== 200) throw new ApiError(res.status);
       return catalogProductSchema.parse(await res.json());
     },
     async today() {
@@ -103,6 +123,16 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
   };
 }
 
+/** The `error` name in a JSON answer, if it has one. */
+async function errorCode(res: Response): Promise<string | undefined> {
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    return typeof body.error === 'string' ? body.error : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * M4-2: `api`, calling `onUnauthorized` whenever a request is refused for want of a session. The
  * request still fails as before; the caller's own retry works once logged in again.
@@ -124,6 +154,7 @@ export function guardApi(api: Api, onUnauthorized: () => void): Api {
     catalog: guard(api.catalog),
     saveMeal: guard(api.saveMeal),
     createProduct: guard(api.createProduct),
+    productByBarcode: guard(api.productByBarcode),
     today: guard(api.today),
     deleteEntry: guard(api.deleteEntry),
     // Not guarded: tracking never asks to log in. Events wait for a session (M7-8).
