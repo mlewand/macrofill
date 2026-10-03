@@ -435,7 +435,13 @@ function StepScreen(props: {
       <ProductChoices
         state={flow}
         catalog={catalog}
-        onSelect={(productId) => dispatch({ type: 'selectProduct', productId })}
+        onSelect={(productId, otherClass) =>
+          dispatch({
+            type: 'selectProduct',
+            productId,
+            ...(otherClass ? { otherClass: true } : {}),
+          })
+        }
         onProductAdded={props.onProductAdded}
       />
 

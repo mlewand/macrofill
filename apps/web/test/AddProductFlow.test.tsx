@@ -6,6 +6,7 @@ import { ApiContext, type Api } from '../src/api/api';
 import { App } from '../src/App';
 import en from '../src/i18n/en.json';
 import { rememberUser } from '../src/session';
+import { DraftContext, indexedDbDraftStore } from '../src/storage/drafts';
 import { fakeApi } from './support/api';
 
 const nutrition = {
@@ -145,6 +146,44 @@ describe('adding a product at a step (Direct Entry)', () => {
     // And under its own class from now on: the next step is milk.
     expect(options()).toContain('Oat milk');
     expect(checked()).toEqual([]);
+  });
+
+  it('#64-5: the cross-class product is still selected after a reload of the page (regression: #73)', async () => {
+    const api = fakeApi({ catalog: () => Promise.resolve(catalog) });
+    const store = indexedDbDraftStore();
+    const renderApp = () =>
+      render(
+        <ApiContext value={api}>
+          <DraftContext value={store}>
+            <App />
+          </DraftContext>
+        </ApiContext>,
+      );
+    renderApp();
+    fireEvent.click(await screen.findByRole('button', { name: en.home.logMeal }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+    click(en.step.addProduct);
+    type(en.product.name, 'Oat milk');
+    fireEvent.change(screen.getByLabelText(en.product.ingredientClass), {
+      target: { value: 'milk' },
+    });
+    click(en.product.save);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(checked()).toEqual(['Oat milk']);
+    // Kept once IndexedDB has it; then a reload: a new page, the same device.
+    await waitFor(async () =>
+      expect((await store.load())?.state.steps[0]?.productId).toBeDefined(),
+    );
+    cleanup();
+    // The catalog now has the product, as the server's would after the save.
+    const added = vi.mocked(api.createProduct).mock.calls[0]![0];
+    vi.mocked(api.catalog).mockResolvedValue({
+      ...catalog,
+      products: [...catalog.products, { ...added, source: 'manual', lastUsedAt: null }],
+    });
+    renderApp();
+    await screen.findByText('Step 1 of 2');
+    expect(checked()).toEqual(['Oat milk']);
   });
 
   it('#64-5: choosing another product takes the notice away', async () => {

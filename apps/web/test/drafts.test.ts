@@ -141,4 +141,27 @@ describe('device stores (M5-8, M5-9)', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('#64-5: keeps the mark of a product of another class picked on purpose, and nothing else in its place (regression: #73)', () => {
+    const marked = {
+      state: {
+        ...state,
+        steps: state.steps.map((step, i) =>
+          i === 0 ? { ...step, otherClass: true as const } : step,
+        ),
+      },
+      username: 'mlewand',
+    };
+    expect(parseDraft(marked)).toEqual(marked);
+    const invalid = {
+      ...marked,
+      state: {
+        ...marked.state,
+        steps: marked.state.steps.map((step, i) =>
+          i === 0 ? { ...step, otherClass: false } : step,
+        ),
+      },
+    };
+    expect(parseDraft(invalid)).toBeUndefined();
+  });
 });

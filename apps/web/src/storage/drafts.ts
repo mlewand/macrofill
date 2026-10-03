@@ -43,6 +43,7 @@ const stepDraftSchema = z.object({
   grams: z.string(),
   skipped: z.boolean(),
   fromScale: z.literal(true).optional(),
+  otherClass: z.literal(true).optional(),
 });
 
 // Only Direct Entry sessions are kept; resuming Scale Mode is deferred (docs/TODO.md).
@@ -82,14 +83,15 @@ export function parseDraft(value: unknown): Draft | undefined {
 }
 
 function parseState(state: z.infer<typeof draftSchema>): DirectEntryState {
-  // The state keeps `productId` as an explicit key, and `fromScale` only when set.
+  // The state keeps `productId` as an explicit key, and `fromScale` and `otherClass` only when set.
   return {
     ...state,
-    steps: state.steps.map(({ productId, grams, skipped, fromScale }) => ({
+    steps: state.steps.map(({ productId, grams, skipped, fromScale, otherClass }) => ({
       productId,
       grams,
       skipped,
       ...(fromScale ? { fromScale } : {}),
+      ...(otherClass ? { otherClass } : {}),
     })),
   };
 }

@@ -1328,6 +1328,47 @@ describe('Direct Entry across a reload (M5-8)', () => {
     expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
   });
 
+  it('#64-5: a kept product of another class that was picked on purpose stays picked, with its notice (regression: #73)', async () => {
+    const drafts = memoryDrafts({
+      ...draftAtMilk,
+      current: 0,
+      steps: [
+        {
+          productId: '2fb48689-9acc-4a8a-9b1f-f0bf8e44b474',
+          grams: '150',
+          skipped: false,
+          otherClass: true,
+        },
+        draftAtMilk.steps[1]!,
+      ],
+    });
+    renderWithDrafts(drafts.store);
+    await screen.findByText('Step 1 of 2');
+    expect(checkedProduct()).toEqual(['Mleko 3.2%']);
+    expect(screen.getByText(/Mleko 3.2% is a Milk product/)).toBeVisible();
+    click(en.step.next);
+    expect(screen.getByText('Step 2 of 2')).toBeInTheDocument();
+  });
+
+  it('#64-5: a marked product that is gone from the catalog is unpicked', async () => {
+    const drafts = memoryDrafts({
+      ...draftAtMilk,
+      current: 0,
+      steps: [
+        {
+          productId: '7d0f4a1e-0000-4000-8000-000000000000',
+          grams: '150',
+          skipped: false,
+          otherClass: true,
+        },
+        draftAtMilk.steps[1]!,
+      ],
+    });
+    renderWithDrafts(drafts.store);
+    await screen.findByText('Step 1 of 2');
+    expect(checkedProduct()).toEqual([]);
+  });
+
   it('M5-8: a kept product that is gone from the catalog is unpicked', async () => {
     const drafts = memoryDrafts({
       ...draftAtMilk,

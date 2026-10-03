@@ -160,12 +160,15 @@ function resumable(draft: DirectEntryState, catalog: Catalog): DirectEntryState 
   return {
     ...draft,
     recipe,
-    steps: draft.steps.map((step, i) =>
-      step.productId === undefined ||
-      classOf.get(step.productId) === recipe.steps[i]!.ingredientClassId
-        ? step
-        : { ...step, productId: undefined },
-    ),
+    steps: draft.steps.map((step, i) => {
+      const { productId, otherClass, ...rest } = step;
+      if (productId === undefined) return step;
+      // Of the step's class, or of another one picked on purpose (#64-5) and still in the catalog.
+      const fits =
+        classOf.get(productId) === recipe.steps[i]!.ingredientClassId ||
+        (otherClass === true && classOf.has(productId));
+      return fits ? step : { ...rest, productId: undefined };
+    }),
   };
 }
 
@@ -289,7 +292,13 @@ function StepScreen(props: {
       <ProductChoices
         state={state}
         catalog={catalog}
-        onSelect={(productId) => dispatch({ type: 'selectProduct', productId })}
+        onSelect={(productId, otherClass) =>
+          dispatch({
+            type: 'selectProduct',
+            productId,
+            ...(otherClass ? { otherClass: true } : {}),
+          })
+        }
         onProductAdded={props.onProductAdded}
       />
 
@@ -348,7 +357,8 @@ export function StepHeading({ state, catalog }: { state: DirectEntryState; catal
 export function ProductChoices(props: {
   state: DirectEntryState;
   catalog: Catalog;
-  onSelect: (productId: string) => void;
+  /** `otherClass`: the product is of another class than the step's (#64-5). */
+  onSelect: (productId: string, otherClass?: boolean) => void;
   onProductAdded: (product: CatalogProduct) => void;
 }) {
   const { t } = useTranslation();
@@ -382,7 +392,7 @@ export function ProductChoices(props: {
               name="product"
               value={product.id}
               checked={draft.productId === product.id}
-              onChange={() => props.onSelect(product.id)}
+              onChange={() => props.onSelect(product.id, product.id === other?.id)}
             />
             {product.name}
           </label>
@@ -406,7 +416,7 @@ export function ProductChoices(props: {
           onCancel={() => setAdding(false)}
           onSaved={(product) => {
             props.onProductAdded(product);
-            props.onSelect(product.id);
+            props.onSelect(product.id, product.ingredientClassId !== step.ingredientClassId);
             setAdding(false);
           }}
         />
