@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   createProductRequestSchema,
+  LOOKUP_CLIENT_TIMEOUT_MS,
   lookupResponseSchema,
+  MAX_LOOKUP_TIMEOUT_MS,
   productSchema,
   usageEventSchema,
 } from '../src/index.js';
@@ -123,5 +125,11 @@ describe('#66-6: the product lookup usage event', () => {
         props: { attempts: [{ provider: 'openfoodfacts', result: 'slow' }] },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('the lookup time limits (regression: #74)', () => {
+  it('#66-4: the app waits longer than the server can be set to take, so a configured time is never cut short by the client', () => {
+    expect(LOOKUP_CLIENT_TIMEOUT_MS).toBeGreaterThan(MAX_LOOKUP_TIMEOUT_MS);
   });
 });

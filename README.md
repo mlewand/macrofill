@@ -142,7 +142,7 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
 
    `deploy.sh` reads `SEED_PASSWORD_*` lines itself: one `KEY=value` per line, optionally in single or double quotes, with no comment after the value.
 
-   Optional, in the same `.env`: `LOOKUP_TIMEOUT_MS` (how long a product database may take, default 5000 ms), `LOOKUP_CONTACT` (the contact in the User-Agent that Open Food Facts asks for; default `macrofill_app@mlewandowski.com`) and `OPEN_FOOD_FACTS_URL`. The version in the User-Agent is the commit `deploy.sh` builds.
+   Optional, in the same `.env`: `LOOKUP_TIMEOUT_MS` (how long a product database may take, default 5000 ms, at most 20000), `LOOKUP_CONTACT` (the contact in the User-Agent that Open Food Facts asks for; default `macrofill_app@mlewandowski.com`) and `OPEN_FOOD_FACTS_URL`. The version in the User-Agent is the commit `deploy.sh` builds.
 
 4. **Deploy:**
 

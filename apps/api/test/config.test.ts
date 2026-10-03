@@ -34,10 +34,17 @@ describe('api config from the environment', () => {
     });
   });
 
-  it.each(['0', '-5', 'abc', '1.5', '60001'])('rejects LOOKUP_TIMEOUT_MS=%s', (value) => {
-    expect(() => loadConfig({ DATABASE_URL, LOOKUP_TIMEOUT_MS: value })).toThrow(
-      /LOOKUP_TIMEOUT_MS/,
-    );
+  it.each(['0', '-5', 'abc', '1.5', '20001', '60000'])(
+    'rejects LOOKUP_TIMEOUT_MS=%s (the app waits 25 s; regression: #74)',
+    (value) => {
+      expect(() => loadConfig({ DATABASE_URL, LOOKUP_TIMEOUT_MS: value })).toThrow(
+        /LOOKUP_TIMEOUT_MS/,
+      );
+    },
+  );
+
+  it('accepts the longest time the app still waits for (regression: #74)', () => {
+    expect(loadConfig({ DATABASE_URL, LOOKUP_TIMEOUT_MS: '20000' }).lookup.timeoutMs).toBe(20_000);
   });
 
   it('rejects an Open Food Facts address that is not a URL', () => {

@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { MAX_LOOKUP_TIMEOUT_MS } from '@macrofill/domain';
 import { z } from 'zod';
 
 /** An unset variable and an empty one (`FOO=` in a .env file) both mean "use the default". */
@@ -11,7 +12,9 @@ const envSchema = z.object({
   MIGRATIONS_DIR: z.string().min(1).optional(),
   WEB_DIST: z.string().min(1).optional(),
   /** #66-4: how long one product database may take before the lookup goes on without it. */
-  LOOKUP_TIMEOUT_MS: optional(z.coerce.number().int().min(1).max(60_000).default(5000)),
+  LOOKUP_TIMEOUT_MS: optional(
+    z.coerce.number().int().min(1).max(MAX_LOOKUP_TIMEOUT_MS).default(5000),
+  ),
   /** Open Food Facts; tests and e2e point it at a stub, so CI never calls the real one. */
   OPEN_FOOD_FACTS_URL: optional(z.url().default('https://world.openfoodfacts.org')),
   /** The build's version and a contact, for the User-Agent that Open Food Facts asks for. */

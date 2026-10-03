@@ -42,3 +42,16 @@ export type LookupResponse = z.infer<typeof lookupResponseSchema>;
 /** The providers a product can be saved as coming from: what this build writes (#66-3). */
 export const lookupSourceSchema = z.enum(['openfoodfacts']);
 export type LookupSource = z.infer<typeof lookupSourceSchema>;
+
+/**
+ * The longest the lookup in the product databases may be set to take on the server (#66-4, #67-2).
+ * The server caps its settings here so the app's own limit, below, is always beyond them.
+ */
+export const MAX_LOOKUP_TIMEOUT_MS = 20_000;
+
+/**
+ * What the web app waits for the lookup before it gives up and opens the empty form: longer than the
+ * server can be set to take, so the server's answer is never thrown away by a client that gave up
+ * first, and the user is still never left waiting.
+ */
+export const LOOKUP_CLIENT_TIMEOUT_MS = MAX_LOOKUP_TIMEOUT_MS + 5_000;

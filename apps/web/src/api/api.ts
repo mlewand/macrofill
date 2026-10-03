@@ -1,6 +1,7 @@
 import {
   catalogProductSchema,
   catalogSchema,
+  LOOKUP_CLIENT_TIMEOUT_MS,
   lookupResponseSchema,
   meSchema,
   saveMealResponseSchema,
@@ -54,13 +55,6 @@ export interface Api {
 
 /** How long a save request may take before it counts as unanswered. */
 const SAVE_TIMEOUT_MS = 15_000;
-
-/**
- * How long the lookup in the product databases may take, as far as the app is concerned: more than
- * the server's own limit (#66-4), so it's the server that gives the answer, and the user is never
- * left waiting if even that doesn't come.
- */
-const LOOKUP_TIMEOUT_MS = 12_000;
 
 export class ApiError extends Error {
   constructor(
@@ -120,7 +114,7 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
     async lookupProduct(code) {
       const res = await client['product-lookup'][':code'].$get(
         { param: { code } },
-        { init: { signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS) } },
+        { init: { signal: AbortSignal.timeout(LOOKUP_CLIENT_TIMEOUT_MS) } },
       );
       if (res.status !== 200) throw new ApiError(res.status);
       return lookupResponseSchema.parse(await res.json());
