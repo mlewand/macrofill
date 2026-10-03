@@ -1,5 +1,5 @@
 import type { CatalogProduct } from '@macrofill/domain';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiContext, ApiError, type Api } from '../src/api/api';
 import en from '../src/i18n/en.json';
@@ -242,6 +242,36 @@ describe('#64-7, #64-8: needs a connection, and a retry is safe', () => {
     save();
     expect(await screen.findByText(en.product.refused)).toBeVisible();
     expect(screen.queryByText(en.product.failed)).toBeNull();
+  });
+
+  it('#64-8: Cancel is not available while the product is being saved, so a saved product is never one the user cancelled (regression: #72)', async () => {
+    let finish!: (product: CatalogProduct) => void;
+    const createProduct = vi.fn<Api['createProduct']>(
+      () => new Promise<CatalogProduct>((resolve) => (finish = resolve)),
+    );
+    const { onSaved, onCancel } = setup(fakeApi({ createProduct }));
+    type(en.product.name, 'x');
+    save();
+    const cancel = screen.getByRole('button', { name: en.product.cancel });
+    expect(cancel).toBeDisabled();
+    fireEvent.click(cancel);
+    expect(onCancel).not.toHaveBeenCalled();
+    // The save went through: it is the form's to finish, and Cancel is back if it had failed.
+    const request = vi.mocked(createProduct).mock.calls[0]![0];
+    await act(async () => {
+      finish({ ...request, source: 'manual', lastUsedAt: null });
+      await Promise.resolve();
+    });
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+
+  it('#64-8: Cancel is back after a failed save (regression: #72)', async () => {
+    const createProduct = vi.fn<Api['createProduct']>().mockRejectedValue(new TypeError('x'));
+    setup(fakeApi({ createProduct }));
+    type(en.product.name, 'x');
+    save();
+    await screen.findByText(en.product.failed);
+    expect(screen.getByRole('button', { name: en.product.cancel })).toBeEnabled();
   });
 
   it('a second tap while saving sends once', () => {

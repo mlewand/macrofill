@@ -220,7 +220,8 @@ export function ProductForm(props: ProductFormProps) {
           {saving ? t('product.saving') : t('product.save')}
         </button>
       )}
-      <button type="button" className="secondary" onClick={props.onCancel}>
+      {/* Not while saving: the request can't be taken back, so it's finished, not cancelled. */}
+      <button type="button" className="secondary" disabled={saving} onClick={props.onCancel}>
         {t('product.cancel')}
       </button>
     </form>
