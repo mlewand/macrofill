@@ -265,6 +265,43 @@ describe('#64-7, #64-8: needs a connection, and a retry is safe', () => {
     expect(onSaved).toHaveBeenCalledOnce();
   });
 
+  it('#64-8: nothing can be edited while the product is being saved, so what is stored is what the user sees (regression: #72)', async () => {
+    let finish!: (product: CatalogProduct) => void;
+    const createProduct = vi.fn<Api['createProduct']>(
+      () => new Promise<CatalogProduct>((resolve) => (finish = resolve)),
+    );
+    setup(fakeApi({ createProduct }));
+    type(en.product.name, 'x');
+    type(f.fat, '5');
+    save();
+    for (const label of [
+      en.product.name,
+      en.product.brand,
+      en.product.ingredientClass,
+      ...Object.values(f),
+    ]) {
+      expect(field(label), label).toBeDisabled();
+    }
+    // Back for a retry after a failure, with the values as they were.
+    const request = vi.mocked(createProduct).mock.calls[0]![0];
+    await act(async () => {
+      finish({ ...request, source: 'manual', lastUsedAt: null });
+      await Promise.resolve();
+    });
+  });
+
+  it('#64-8: the fields are editable again after a failed save, with what was typed (regression: #72)', async () => {
+    const createProduct = vi.fn<Api['createProduct']>().mockRejectedValue(new TypeError('x'));
+    setup(fakeApi({ createProduct }));
+    type(en.product.name, 'x');
+    type(f.fat, '5');
+    save();
+    await screen.findByText(en.product.failed);
+    expect(field(en.product.name)).toBeEnabled();
+    expect(field(f.fat)).toBeEnabled();
+    expect(field(f.fat)).toHaveValue('5');
+  });
+
   it('#64-8: Cancel is back after a failed save (regression: #72)', async () => {
     const createProduct = vi.fn<Api['createProduct']>().mockRejectedValue(new TypeError('x'));
     setup(fakeApi({ createProduct }));

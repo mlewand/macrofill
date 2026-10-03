@@ -252,3 +252,9 @@ button.danger {
   position: relative;
   z-index: 30;
 }
+
+/* A form's whole body in one fieldset, so it can be disabled as one. */
+fieldset.form-body {
+  gap: var(--gap);
+  min-width: 0;
+}

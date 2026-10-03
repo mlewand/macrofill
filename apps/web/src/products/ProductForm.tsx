@@ -125,105 +125,109 @@ export function ProductForm(props: ProductFormProps) {
 
   return (
     <form onSubmit={submit} noValidate>
-      <label htmlFor={`${ids}-name`}>{t('product.name')}</label>
-      <input
-        id={`${ids}-name`}
-        autoFocus
-        maxLength={200}
-        autoComplete="off"
-        value={values.name}
-        aria-invalid={shown?.fields.name !== undefined}
-        onChange={(event) => edit((v) => ({ ...v, name: event.target.value }))}
-      />
-      {shown?.fields.name && <p className="problem">{problemText(shown.fields.name)}</p>}
+      {/* Frozen while saving: the request holds the values it was sent with, so editing them now
+          would show something other than what gets stored. */}
+      <fieldset disabled={saving} className="form-body">
+        <label htmlFor={`${ids}-name`}>{t('product.name')}</label>
+        <input
+          id={`${ids}-name`}
+          autoFocus
+          maxLength={200}
+          autoComplete="off"
+          value={values.name}
+          aria-invalid={shown?.fields.name !== undefined}
+          onChange={(event) => edit((v) => ({ ...v, name: event.target.value }))}
+        />
+        {shown?.fields.name && <p className="problem">{problemText(shown.fields.name)}</p>}
 
-      <label htmlFor={`${ids}-brand`}>{t('product.brand')}</label>
-      <input
-        id={`${ids}-brand`}
-        maxLength={200}
-        autoComplete="off"
-        value={values.brand}
-        onChange={(event) => edit((v) => ({ ...v, brand: event.target.value }))}
-      />
+        <label htmlFor={`${ids}-brand`}>{t('product.brand')}</label>
+        <input
+          id={`${ids}-brand`}
+          maxLength={200}
+          autoComplete="off"
+          value={values.brand}
+          onChange={(event) => edit((v) => ({ ...v, brand: event.target.value }))}
+        />
 
-      <label htmlFor={`${ids}-class`}>{t('product.ingredientClass')}</label>
-      <select
-        id={`${ids}-class`}
-        value={values.ingredientClassId}
-        onChange={(event) => edit((v) => ({ ...v, ingredientClassId: event.target.value }))}
-      >
-        {props.ingredientClasses.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name.en}
-          </option>
-        ))}
-      </select>
+        <label htmlFor={`${ids}-class`}>{t('product.ingredientClass')}</label>
+        <select
+          id={`${ids}-class`}
+          value={values.ingredientClassId}
+          onChange={(event) => edit((v) => ({ ...v, ingredientClassId: event.target.value }))}
+        >
+          {props.ingredientClasses.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name.en}
+            </option>
+          ))}
+        </select>
 
-      <fieldset>
-        <legend>{t('product.per100')}</legend>
-        {NUTRIENTS.map((nutrient) => (
-          <div key={nutrient} className="value">
-            <label htmlFor={`${ids}-${nutrient}`}>{t(`product.field.${nutrient}`)}</label>
-            <input
-              id={`${ids}-${nutrient}`}
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              value={values.nutrition[nutrient]}
-              aria-invalid={shown?.fields[nutrient] !== undefined}
-              onChange={(event) =>
-                edit((v) => ({
-                  ...v,
-                  nutrition: { ...v.nutrition, [nutrient]: event.target.value },
-                }))
-              }
-            />
-            {shown?.fields[nutrient] && (
-              <p className="problem">{problemText(shown.fields[nutrient])}</p>
-            )}
-          </div>
-        ))}
-      </fieldset>
-      {shown?.total && (
-        <p role="alert" className="problem">
-          {t('product.problem.total')}
-        </p>
-      )}
-
-      {warning && (
-        <div role="alert" className="confirm">
-          <p>
-            {t('product.kcalWarning', {
-              kcal: warning.kcal,
-              expected: Math.round(warning.expected),
-            })}
+        <fieldset>
+          <legend>{t('product.per100')}</legend>
+          {NUTRIENTS.map((nutrient) => (
+            <div key={nutrient} className="value">
+              <label htmlFor={`${ids}-${nutrient}`}>{t(`product.field.${nutrient}`)}</label>
+              <input
+                id={`${ids}-${nutrient}`}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={values.nutrition[nutrient]}
+                aria-invalid={shown?.fields[nutrient] !== undefined}
+                onChange={(event) =>
+                  edit((v) => ({
+                    ...v,
+                    nutrition: { ...v.nutrition, [nutrient]: event.target.value },
+                  }))
+                }
+              />
+              {shown?.fields[nutrient] && (
+                <p className="problem">{problemText(shown.fields[nutrient])}</p>
+              )}
+            </div>
+          ))}
+        </fieldset>
+        {shown?.total && (
+          <p role="alert" className="problem">
+            {t('product.problem.total')}
           </p>
-          <div className="row">
-            <button type="button" className="danger" onClick={() => void save(true)}>
-              {t('product.saveAnyway')}
-            </button>
-            <button type="button" className="secondary" onClick={() => setWarning(undefined)}>
-              {t('product.fixValues')}
-            </button>
-          </div>
-        </div>
-      )}
-      {!online && <p role="status">{t('product.offline')}</p>}
-      {problem && (
-        <p role="alert" className="problem">
-          {t(`product.${problem}`)}
-        </p>
-      )}
+        )}
 
-      {!warning && (
-        <button type="submit" className="primary" disabled={saving || !online}>
-          {saving ? t('product.saving') : t('product.save')}
+        {warning && (
+          <div role="alert" className="confirm">
+            <p>
+              {t('product.kcalWarning', {
+                kcal: warning.kcal,
+                expected: Math.round(warning.expected),
+              })}
+            </p>
+            <div className="row">
+              <button type="button" className="danger" onClick={() => void save(true)}>
+                {t('product.saveAnyway')}
+              </button>
+              <button type="button" className="secondary" onClick={() => setWarning(undefined)}>
+                {t('product.fixValues')}
+              </button>
+            </div>
+          </div>
+        )}
+        {!online && <p role="status">{t('product.offline')}</p>}
+        {problem && (
+          <p role="alert" className="problem">
+            {t(`product.${problem}`)}
+          </p>
+        )}
+
+        {!warning && (
+          <button type="submit" className="primary" disabled={saving || !online}>
+            {saving ? t('product.saving') : t('product.save')}
+          </button>
+        )}
+        {/* Not while saving: the request can't be taken back, so it's finished, not cancelled. */}
+        <button type="button" className="secondary" disabled={saving} onClick={props.onCancel}>
+          {t('product.cancel')}
         </button>
-      )}
-      {/* Not while saving: the request can't be taken back, so it's finished, not cancelled. */}
-      <button type="button" className="secondary" disabled={saving} onClick={props.onCancel}>
-        {t('product.cancel')}
-      </button>
+      </fieldset>
     </form>
   );
 }
