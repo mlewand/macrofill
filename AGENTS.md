@@ -74,7 +74,7 @@ For code reviewers (Codex, Copilot, CodeRabbit), and agents reviewing a PR:
 - Review for realistic use of the product as `docs/requirements.md` scopes it, accepted shortcuts included. In MVP0 each phone or tablet is used by one person, so switching users on one device, across tabs or with browser storage blocked isn't a scenario to review for. The server keeping users apart (M4-1 to M4-3) is.
 - What matters most: regressions in what worked, data loss or corruption, security, and the acceptance criteria the PR names.
 - Rate each finding by its impact on the user in realistic use, likelihood included, not by its worst case, and say what the user would see. A security hole is the exception: always the highest priority.
-- Don't raise again a low or medium problem that the PR description lists under "Not handled", or that an open issue already tracks. A security hole, or another high or critical problem the PR causes, stays open to review even when it's listed or tracked, unless the PR description notes the maintainer's OK to defer it. Leave problems in code the PR doesn't change alone, unless they're severe.
+- Don't raise again a low or medium problem that the PR description lists under "Not handled", or that an open issue already tracks. A security hole always stays open to review. So does another high or critical problem the PR causes, even when it's listed or tracked, unless the PR description notes the maintainer's OK to defer it. Leave problems in code the PR doesn't change alone, unless they're severe.
 - When a finding follows from the fix of an earlier one, say so.
 
 ## Conventions
