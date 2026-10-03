@@ -1,4 +1,4 @@
-import type { Catalog, SaveMealRequest } from '@macrofill/domain';
+import type { Catalog, LookupResponse, SaveMealRequest } from '@macrofill/domain';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -479,5 +479,193 @@ describe('scanning a barcode at a step', () => {
     expect(screen.getByText('Step 1 of 2')).toBeVisible();
     expect(screen.getByLabelText(en.step.grams)).toHaveValue('200');
     expect(api.productByBarcode).not.toHaveBeenCalled();
+  });
+});
+
+describe('an unknown barcode looked up in Open Food Facts (#66)', () => {
+  const EAN13 = '3017620422003';
+  const answer: LookupResponse = {
+    candidate: {
+      source: 'openfoodfacts',
+      sourceRef: EAN13,
+      name: 'Nutella',
+      brand: 'Ferrero',
+      nutrition: {
+        kcal: 539,
+        fat: 30.9,
+        saturates: 10.6,
+        carbs: 57.5,
+        sugars: 56.3,
+        protein: 6.3,
+        salt: 0.107,
+        fibre: null,
+      },
+    },
+    attempts: [{ provider: 'openfoodfacts', result: 'hit' }],
+  };
+
+  async function scanUnknown(lookupProduct: Api['lookupProduct']) {
+    const api = fakeApi({ catalog: () => Promise.resolve(catalog), lookupProduct });
+    const scanner = fakeScanner();
+    render(
+      <ApiContext value={api}>
+        <ScannerContext value={scanner}>
+          <App />
+        </ScannerContext>
+      </ApiContext>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: en.home.logMeal }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+    click(en.step.scan);
+    await waitFor(() => expect(scanner.open).toBe(true));
+    scanner.read(EAN13);
+    return { api, scanner };
+  }
+
+  const form = () => screen.findByRole('dialog', { name: en.product.title });
+  const value = (label: string) => screen.getByLabelText<HTMLInputElement>(label).value;
+
+  it('#66-2: a hit opens the form filled in, values it lacks empty (unknown), with the barcode and the source', async () => {
+    const { api } = await scanUnknown(() => Promise.resolve(answer));
+    await form();
+    expect(value(en.product.name)).toBe('Nutella');
+    expect(value(en.product.brand)).toBe('Ferrero');
+    expect(value(f.kcal)).toBe('539');
+    expect(value(f.fat)).toBe('30.9');
+    expect(value(f.salt)).toBe('0.107');
+    expect(value(f.fibre)).toBe('');
+    // The ingredient class still comes from the step.
+    expect(value(en.product.ingredientClass)).toBe('curd');
+    expect(screen.getByText(en.product.barcode.replace('{{barcode}}', EAN13))).toBeVisible();
+    expect(
+      screen.getByText(en.product.prefilled.replace('{{source}}', 'Open Food Facts')),
+    ).toBeVisible();
+    // Looked up through our server, once, after the store had been asked.
+    expect(api.productByBarcode).toHaveBeenCalledWith(EAN13);
+    expect(api.lookupProduct).toHaveBeenCalledWith(EAN13);
+    expect(api.createProduct).not.toHaveBeenCalled();
+  });
+
+  it('#66-3: nothing is stored until Save, and the saved product has the source, the reference and what the user changed', async () => {
+    const { api } = await scanUnknown(() => Promise.resolve(answer));
+    await form();
+    expect(api.createProduct).not.toHaveBeenCalled();
+    type(f.fat, '31');
+    click(en.product.save);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(vi.mocked(api.createProduct).mock.calls[0]![0]).toMatchObject({
+      name: 'Nutella',
+      brand: 'Ferrero',
+      barcode: EAN13,
+      ingredientClassId: 'curd',
+      lookup: { source: 'openfoodfacts', ref: EAN13 },
+      nutrition: { kcal: 539, fat: 31, fibre: null },
+    });
+    expect(checked()).toEqual(['Nutella']);
+  });
+
+  it('#66-3: the kcal check applies to what a provider gave', async () => {
+    const wrong = {
+      ...answer,
+      candidate: {
+        ...answer.candidate!,
+        nutrition: { ...answer.candidate!.nutrition, kcal: 100, fibre: 0 },
+      },
+    };
+    const { api } = await scanUnknown(() => Promise.resolve(wrong));
+    await form();
+    click(en.product.save);
+    expect(screen.getByRole('alert')).toHaveTextContent('100');
+    expect(api.createProduct).not.toHaveBeenCalled();
+  });
+
+  it('#66-5: the product credits Open Food Facts in the picker, as plain text', async () => {
+    const { api } = await scanUnknown(() => Promise.resolve(answer));
+    await form();
+    click(en.product.save);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(api.createProduct).toHaveBeenCalled();
+    const credit = screen.getByText(en.product.credit.replace('{{source}}', 'Open Food Facts'));
+    expect(credit).toBeVisible();
+    // Not a link: following it would leave the page, and in Scale Mode drop the scale.
+    expect(credit.closest('a')).toBeNull();
+    expect(credit.querySelector('a')).toBeNull();
+  });
+
+  it('#66-5: a product typed in, or from the seed, credits nobody', async () => {
+    await atFirstStep();
+    expect(screen.queryByText(/Nutrition data/)).toBeNull();
+  });
+
+  it.each([
+    ['a miss', { attempts: [{ provider: 'openfoodfacts', result: 'miss' as const }] }],
+    ['an error', { attempts: [{ provider: 'openfoodfacts', result: 'error' as const }] }],
+    ['a timeout', { attempts: [{ provider: 'openfoodfacts', result: 'timeout' as const }] }],
+    ['no provider asked', { attempts: [] }],
+  ])('#66-4: %s opens the empty form with the barcode', async (_name, response) => {
+    const { api } = await scanUnknown(() => Promise.resolve(response));
+    await form();
+    expect(value(en.product.name)).toBe('');
+    expect(value(f.kcal)).toBe('');
+    expect(screen.getByText(en.product.barcode.replace('{{barcode}}', EAN13))).toBeVisible();
+    expect(screen.queryByText(/Prefilled/)).toBeNull();
+    click(en.product.save);
+    // Typed in, so no lookup source is claimed.
+    type(en.product.name, 'Typed');
+    click(en.product.save);
+    await waitFor(() => expect(api.createProduct).toHaveBeenCalled());
+    expect(vi.mocked(api.createProduct).mock.calls[0]![0]).not.toHaveProperty('lookup');
+  });
+
+  it('#66-4: when our server cannot be reached for the lookup either, the empty form still opens', async () => {
+    await scanUnknown(() => Promise.reject(new ApiError(502)));
+    await form();
+    expect(value(en.product.name)).toBe('');
+    expect(screen.getByText(en.product.barcode.replace('{{barcode}}', EAN13))).toBeVisible();
+  });
+
+  /** The page goes to the background: the app sends what it tracked (M7-8). */
+  const hidePage = () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    visibility.mockRestore();
+  };
+  const sentEvents = (api: Api) =>
+    vi.mocked(api.sendEvents).mock.calls.flatMap(([events]) => events);
+
+  it('#66-6: the lookup is recorded with each provider and its result, and no barcode', async () => {
+    const { api } = await scanUnknown(() => Promise.resolve(answer));
+    await form();
+    hidePage();
+    await waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    const lookups = sentEvents(api).filter((e) => e.name === 'product_lookup');
+    expect(lookups.map((e) => e.props)).toEqual([
+      { attempts: [{ provider: 'openfoodfacts', result: 'hit' }] },
+    ]);
+    expect(JSON.stringify(sentEvents(api))).not.toContain(EAN13);
+  });
+
+  it('#66-6: a lookup our own server could not answer is not reported as a provider result', async () => {
+    const { api } = await scanUnknown(() => Promise.reject(new ApiError(502)));
+    await form();
+    hidePage();
+    await waitFor(() => expect(api.sendEvents).toHaveBeenCalled());
+    expect(sentEvents(api).filter((e) => e.name === 'product_lookup')).toEqual([]);
+  });
+
+  it('#66-4: Cancel while the providers are asked is final: no form opens afterwards (regression: #73)', async () => {
+    let finish!: (response: LookupResponse) => void;
+    const lookupProduct = () => new Promise<LookupResponse>((resolve) => (finish = resolve));
+    const { api } = await scanUnknown(lookupProduct);
+    await waitFor(() => expect(api.lookupProduct).toHaveBeenCalled());
+    click(en.scan.cancel);
+    await act(async () => {
+      finish(answer);
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(checked()).toEqual([]);
   });
 });

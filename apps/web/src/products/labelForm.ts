@@ -4,6 +4,7 @@ import {
   parseLabelValue,
   type CreateProductRequest,
   type Nutrient,
+  type ProductCandidate,
   type NutritionValues,
 } from '@macrofill/domain';
 
@@ -59,4 +60,25 @@ export function readLabelForm(values: LabelFormValues): LabelFormResult {
   const checked = createProductRequestSchema.safeParse({ id: crypto.randomUUID(), ...product });
   if (!checked.success) return { ok: false, fields: {}, total: true };
   return { ok: true, product };
+}
+
+/**
+ * A provider's candidate as the form's starting values (#66-2). A value the provider lacks is an
+ * empty field: unknown, never 0 (M2-3). The ingredient class is not the candidate's to give.
+ */
+export function candidateToForm(candidate: ProductCandidate): {
+  name: string;
+  brand: string;
+  nutrition: Record<Nutrient, string>;
+} {
+  return {
+    name: candidate.name,
+    brand: candidate.brand ?? '',
+    nutrition: Object.fromEntries(
+      NUTRIENTS.map((n) => [
+        n,
+        candidate.nutrition[n] === null ? '' : String(candidate.nutrition[n]),
+      ]),
+    ) as Record<Nutrient, string>,
+  };
 }

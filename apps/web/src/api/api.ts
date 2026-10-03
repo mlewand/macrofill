@@ -1,11 +1,13 @@
 import {
   catalogProductSchema,
   catalogSchema,
+  lookupResponseSchema,
   meSchema,
   saveMealResponseSchema,
   todaySchema,
   type Catalog,
   type CatalogProduct,
+  type LookupResponse,
   type CreateProductRequest,
   type SaveMealRequest,
   type SaveMealResponse,
@@ -38,6 +40,12 @@ export interface Api {
    * the product is different from not being able to ask.
    */
   productByBarcode: (code: string) => Promise<CatalogProduct | undefined>;
+  /**
+   * #66-1: asks the product databases about a barcode that the store doesn't have, through our
+   * server. Resolves with what each provider came to, and the candidate if one had it. Rejects when
+   * our own server can't be reached, which is not a provider's answer.
+   */
+  lookupProduct: (code: string) => Promise<LookupResponse>;
   /** Deletes a consumption entry (M7-4). Resolves also when it's already gone. */
   deleteEntry: (id: string) => Promise<void>;
   /** M7-8, M4-10: a batch of usage events. Resolves once the server has them. */
@@ -46,6 +54,13 @@ export interface Api {
 
 /** How long a save request may take before it counts as unanswered. */
 const SAVE_TIMEOUT_MS = 15_000;
+
+/**
+ * How long the lookup in the product databases may take, as far as the app is concerned: more than
+ * the server's own limit (#66-4), so it's the server that gives the answer, and the user is never
+ * left waiting if even that doesn't come.
+ */
+const LOOKUP_TIMEOUT_MS = 12_000;
 
 export class ApiError extends Error {
   constructor(
@@ -102,6 +117,14 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
       if (res.status !== 200) throw new ApiError(res.status);
       return catalogProductSchema.parse(await res.json());
     },
+    async lookupProduct(code) {
+      const res = await client['product-lookup'][':code'].$get(
+        { param: { code } },
+        { init: { signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS) } },
+      );
+      if (res.status !== 200) throw new ApiError(res.status);
+      return lookupResponseSchema.parse(await res.json());
+    },
     async today() {
       const res = await client.today.$get();
       if (!res.ok) throw new ApiError(res.status);
@@ -155,6 +178,7 @@ export function guardApi(api: Api, onUnauthorized: () => void): Api {
     saveMeal: guard(api.saveMeal),
     createProduct: guard(api.createProduct),
     productByBarcode: guard(api.productByBarcode),
+    lookupProduct: guard(api.lookupProduct),
     today: guard(api.today),
     deleteEntry: guard(api.deleteEntry),
     // Not guarded: tracking never asks to log in. Events wait for a session (M7-8).

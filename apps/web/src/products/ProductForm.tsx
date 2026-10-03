@@ -3,6 +3,7 @@ import {
   NUTRIENTS,
   type CatalogProduct,
   type IngredientClass,
+  type LookupSource,
   type Nutrient,
 } from '@macrofill/domain';
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
@@ -22,6 +23,11 @@ export interface ProductFormProps {
   ingredientClassId: string;
   /** The barcode the product is added for (#65-4): shown, not editable, and saved with it. */
   barcode?: string;
+  /**
+   * The form's values came from this provider's candidate (#66): the product is saved as coming
+   * from it, with its reference, and the form says where the values are from (#66-5).
+   */
+  lookup?: { source: LookupSource; ref: string };
   /** Values to start from, e.g. a barcode lookup's result (#66). */
   initial?: Partial<Omit<LabelFormValues, 'nutrition'>> & {
     nutrition?: Partial<Record<Nutrient, string>>;
@@ -109,6 +115,7 @@ export function ProductForm(props: ProductFormProps) {
           id,
           ...read.product,
           ...(props.barcode === undefined ? {} : { barcode: props.barcode }),
+          ...(props.lookup === undefined ? {} : { lookup: props.lookup }),
         }),
       );
     } catch (error) {
@@ -140,6 +147,11 @@ export function ProductForm(props: ProductFormProps) {
       {/* Frozen while saving: the request holds the values it was sent with, so editing them now
           would show something other than what gets stored. */}
       <fieldset disabled={saving} className="form-body">
+        {props.lookup && (
+          <p className="muted">
+            {t('product.prefilled', { source: t(`source.${props.lookup.source}`) })}
+          </p>
+        )}
         {props.barcode && (
           <p className="muted">{t('product.barcode', { barcode: props.barcode })}</p>
         )}

@@ -111,4 +111,24 @@ describe('the http api', () => {
       code: 'conflict',
     });
   });
+
+  it('#66-1: the lookup of an unknown barcode goes to our own server, and gives up after a while', async () => {
+    const answer = {
+      candidate: {
+        source: 'openfoodfacts',
+        sourceRef: '3017620422003',
+        name: 'Nutella',
+        nutrition: { ...product.nutrition, kcal: 539 },
+      },
+      attempts: [{ provider: 'openfoodfacts', result: 'hit' }],
+    };
+    const fetch = stub(() => json(answer, 200));
+    const api = createHttpApi(createApiClient('http://localhost/api'));
+    expect(await api.lookupProduct('3017620422003')).toEqual(answer);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe('http://localhost/api/product-lookup/3017620422003');
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    stub(() => json({ error: 'x' }, 500));
+    await expect(api.lookupProduct('3017620422003')).rejects.toMatchObject({ status: 500 });
+  });
 });
