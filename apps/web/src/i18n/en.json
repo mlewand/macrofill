@@ -155,7 +155,8 @@
       "total": "Carbs, protein, fat, fibre and salt add up to more than 100 g per 100 g. Check the values.",
       "tooLong": "Can't be longer than 200 characters.",
       "aboveCarbs": "Sugars are part of the carbs, so they can't be more than the carbs. Check both values.",
-      "aboveFat": "Saturates are part of the fat, so they can't be more than the fat. Check both values."
+      "aboveFat": "Saturates are part of the fat, so they can't be more than the fat. Check both values.",
+      "refusedField": "The server doesn't accept this value. Check it."
     },
     "kcalWarning": "The energy ({{kcal}} kcal) doesn't match the macros, which add up to about {{expected}} kcal. Check the values.",
     "saveAnyway": "Save anyway",
