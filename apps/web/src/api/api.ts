@@ -24,6 +24,8 @@ export interface Api {
   login: (username: string, password: string) => Promise<'ok' | 'invalid'>;
   /** Who the session belongs to (M4-1). */
   me: () => Promise<string>;
+  /** #95-2: ends the session on the server. Rejects when it can't be reached, or on an error. */
+  logout: () => Promise<void>;
   catalog: () => Promise<Catalog>;
   /** Resolves once the server has the meal (201 created, or 200 for a retry of a saved meal). */
   saveMeal: (request: SaveMealRequest) => Promise<SaveMealResponse>;
@@ -75,6 +77,12 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
       if (res.status === 204) return 'ok';
       if (res.status === 401) return 'invalid';
       throw new ApiError(res.status);
+    },
+    async logout() {
+      const res = await client.logout.$post(undefined, {
+        init: { signal: AbortSignal.timeout(SAVE_TIMEOUT_MS) },
+      });
+      if (res.status !== 204) throw new ApiError(res.status);
     },
     async me() {
       const res = await client.me.$get();
@@ -181,6 +189,8 @@ export function guardApi(api: Api, onUnauthorized: () => void): Api {
   return {
     login: api.login,
     me: api.me,
+    // Not guarded: logging out of a session that is already gone is a success, not a login.
+    logout: api.logout,
     catalog: guard(api.catalog),
     saveMeal: guard(api.saveMeal),
     createProduct: guard(api.createProduct),

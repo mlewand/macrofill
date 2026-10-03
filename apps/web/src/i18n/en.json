@@ -95,6 +95,14 @@
   "notice": {
     "dismiss": "Dismiss"
   },
+  "signOut": {
+    "button": "Sign out",
+    "failed": "Couldn't sign out. Check your connection and try again.",
+    "confirmTitle": "Sign out with unsent meals?",
+    "unsent": "Some meals haven't reached your account yet. They stay on this device and are sent when you log in again.",
+    "confirm": "Sign out anyway",
+    "cancel": "Cancel"
+  },
   "nutrient": {
     "protein": "Protein",
     "fat": "Fat",
