@@ -9,7 +9,7 @@ Read before any work:
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current phase: **D, Product store** (started 2026-10-03). Its scope is the umbrella issue #TBD and its sub-issues; sub-issues labelled `on hold` wait for the maintainer. MVP0 (Phases A to C) is done: its exit was confirmed on 2026-10-02, when the cumulative review (#57) merged. Update this line when a phase starts or its exit criteria are met.
+Current phase: **D, Product store** (started 2026-10-03). Its scope is the umbrella issue #70 and its sub-issues; sub-issues labelled `on hold` wait for the maintainer. MVP0 (Phases A to C) is done: its exit was confirmed on 2026-10-02, when the cumulative review (#57) merged. Update this line when a phase starts or its exit criteria are met.
 
 ## How to work
 
