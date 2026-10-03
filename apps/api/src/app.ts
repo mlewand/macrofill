@@ -8,6 +8,7 @@ import { catalogRoutes } from './routes/catalog';
 import { eventRoutes } from './routes/events';
 import { mealRoutes } from './routes/meals';
 import { meRoutes } from './routes/me';
+import { productRoutes } from './routes/products';
 import { todayRoutes } from './routes/today';
 
 export interface AppOptions {
@@ -25,6 +26,7 @@ function createApiRoutes(db: Db, now: () => Date) {
     .use(sessionAuth(db, now))
     .route('/', catalogRoutes(db))
     .route('/', mealRoutes(db))
+    .route('/', productRoutes(db))
     .route('/', meRoutes(db))
     .route('/', eventRoutes(db))
     .route('/', todayRoutes(db, now));

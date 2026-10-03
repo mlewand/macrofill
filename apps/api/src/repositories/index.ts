@@ -1,6 +1,7 @@
 import type {
   CatalogProduct,
   ConsumptionEntry,
+  CreateProductRequest,
   DailyTargets,
   IngredientClass,
   LocalizedText,
@@ -75,6 +76,14 @@ export function createRepositories(db: Db, ownerId: string) {
       all(): Promise<IngredientClass[]> {
         return db.select().from(ingredientClasses).orderBy(asc(ingredientClasses.id));
       },
+
+      async exists(id: string): Promise<boolean> {
+        const rows = await db
+          .select({ id: ingredientClasses.id })
+          .from(ingredientClasses)
+          .where(eq(ingredientClasses.id, id));
+        return rows.length > 0;
+      },
     },
 
     products: {
@@ -101,24 +110,39 @@ export function createRepositories(db: Db, ownerId: string) {
           .from(products)
           .leftJoin(lastUse, eq(lastUse.productId, products.id))
           .orderBy(asc(products.name));
-        return rows.map(({ product: p, lastUsedAt }) => ({
-          id: p.id,
-          ingredientClassId: p.ingredientClassId,
-          name: p.name,
-          ...(p.brand === null ? {} : { brand: p.brand }),
-          nutrition: {
-            kcal: p.kcal,
-            fat: p.fat,
-            saturates: p.saturates,
-            carbs: p.carbs,
-            sugars: p.sugars,
-            protein: p.protein,
-            salt: p.salt,
-            fibre: p.fibre,
-          },
-          source: p.source,
-          lastUsedAt: lastUsedAt === null ? null : new Date(lastUsedAt).toISOString(),
-        }));
+        return rows.map(({ product, lastUsedAt }) =>
+          toCatalogProduct(
+            product,
+            lastUsedAt === null ? null : new Date(lastUsedAt).toISOString(),
+          ),
+        );
+      },
+
+      /** The product, never used by this user, or undefined. Used to answer a retry (#64-8). */
+      async find(id: string): Promise<(CatalogProduct & { addedByUser: boolean }) | undefined> {
+        const [row] = await db.select().from(products).where(eq(products.id, id));
+        if (row === undefined) return undefined;
+        return { ...toCatalogProduct(row, null), addedByUser: row.createdBy === ownerId };
+      },
+
+      /**
+       * Adds a manual product by the user (#64-4); `createdBy` comes from the session, never from
+       * the request. Returns whether it was inserted: false if the id is taken (by anyone).
+       */
+      async insertIfAbsent(product: CreateProductRequest): Promise<boolean> {
+        const { nutrition, brand, ...rest } = product;
+        const inserted = await db
+          .insert(products)
+          .values({
+            ...rest,
+            brand: brand ?? null,
+            ...nutrition,
+            source: 'manual',
+            createdBy: ownerId,
+          })
+          .onConflictDoNothing()
+          .returning({ id: products.id });
+        return inserted.length > 0;
       },
 
       /** Of `ids`, those that are products. */
@@ -397,6 +421,31 @@ export function createRepositories(db: Db, ownerId: string) {
 }
 
 export type Repositories = ReturnType<typeof createRepositories>;
+
+/** The catalog's view of a product row: it leaves out who added it and the barcode. */
+function toCatalogProduct(
+  p: typeof products.$inferSelect,
+  lastUsedAt: string | null,
+): CatalogProduct {
+  return {
+    id: p.id,
+    ingredientClassId: p.ingredientClassId,
+    name: p.name,
+    ...(p.brand === null ? {} : { brand: p.brand }),
+    nutrition: {
+      kcal: p.kcal,
+      fat: p.fat,
+      saturates: p.saturates,
+      carbs: p.carbs,
+      sugars: p.sugars,
+      protein: p.protein,
+      salt: p.salt,
+      fibre: p.fibre,
+    },
+    source: p.source,
+    lastUsedAt,
+  };
+}
 
 function toItem(row: typeof preparedMealItems.$inferSelect): PreparedMealItem {
   const stepId = row.stepId === null ? {} : { stepId: row.stepId };

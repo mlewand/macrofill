@@ -6,6 +6,7 @@ export * from './format.js';
 export * from './input.js';
 export * from './macros.js';
 export * from './meal.js';
+export * from './newProduct.js';
 export * from './nutrition.js';
 export * from './picker.js';
 export * from './recording.js';
