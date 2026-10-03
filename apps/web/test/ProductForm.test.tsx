@@ -65,8 +65,9 @@ describe('the product form', () => {
     type(f.kcal, '119');
     save();
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
-    expect(api.createProduct).toHaveBeenCalledWith({
-      id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    const { id, ...sent } = vi.mocked(api.createProduct).mock.calls[0]![0];
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(sent).toEqual({
       ingredientClassId: 'curd',
       name: 'Homemade curd',
       brand: 'Home',
@@ -120,7 +121,7 @@ describe('the product form', () => {
 
   it('opens prefilled, for the barcode and lookup flows to reuse (#65, #66)', () => {
     setup(fakeApi(), {
-      initial: { name: 'From a database', nutrition: { fat: '1,5' } as never },
+      initial: { name: 'From a database', nutrition: { fat: '1,5' } },
     });
     expect(field(en.product.name)).toHaveValue('From a database');
   });
@@ -243,7 +244,7 @@ describe('#64-7, #64-8: needs a connection, and a retry is safe', () => {
     expect(screen.queryByText(en.product.failed)).toBeNull();
   });
 
-  it('a second tap while saving sends once', async () => {
+  it('a second tap while saving sends once', () => {
     let finish!: (product: CatalogProduct) => void;
     const createProduct = vi.fn<Api['createProduct']>(
       () => new Promise<CatalogProduct>((resolve) => (finish = resolve)),

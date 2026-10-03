@@ -41,7 +41,7 @@ describe('the http api', () => {
     },
   };
   const stub = (response: () => Response) => {
-    const fetch = vi.fn((_input: unknown, _init?: RequestInit) => Promise.resolve(response()));
+    const fetch = vi.fn<typeof globalThis.fetch>(() => Promise.resolve(response()));
     vi.stubGlobal('fetch', fetch);
     return fetch;
   };
@@ -58,9 +58,9 @@ describe('the http api', () => {
       const api = createHttpApi(createApiClient('http://localhost/api'));
       expect(await api.createProduct(product)).toEqual(stored);
       const [url, init] = fetch.mock.calls[0]!;
-      expect(String(url)).toBe('http://localhost/api/products');
+      expect(url).toBe('http://localhost/api/products');
       expect(init?.method).toBe('POST');
-      expect(JSON.parse(String(init?.body))).toEqual(product);
+      expect(JSON.parse(init?.body as string)).toEqual(product);
       // Like a save, it fails after a while instead of hanging.
       expect(init?.signal).toBeInstanceOf(AbortSignal);
     }
