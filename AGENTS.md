@@ -8,7 +8,7 @@ Read before any work:
 - `docs/ARCHITECTURE.md`: package roles and import rules.
 - `docs/TODO.md`: deferred items. Don't implement them.
 
-Current phase: none. **Phase C is done, and with it MVP0.** Its exit was confirmed on 2026-10-01: every MVP0 criterion passes in CI or in the manual smoke run on the phone and the tablet against the production box (master at `f4c0889`), and the cumulative review (#57) is merged. No next phase is defined yet: the maintainer picks it from Future stages in the requirements. Update this line when a phase starts or its exit criteria are met.
+Current phase: none. **Phase C is done, and with it MVP0.** Its exit was confirmed on 2026-10-02, when the cumulative review (#57) merged: every MVP0 criterion passes in CI or in the manual smoke run, done on 2026-10-01 on the phone and the tablet against the production box (master at `f4c0889`). No next phase is defined yet: the maintainer picks it from Future stages in the requirements. Update this line when a phase starts or its exit criteria are met.
 
 ## How to work
 
