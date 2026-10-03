@@ -1,4 +1,5 @@
 export * from './auth.js';
+export * from './barcode.js';
 export * from './catalog.js';
 export * from './common.js';
 export * from './events.js';

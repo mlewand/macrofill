@@ -118,11 +118,19 @@ export function createRepositories(db: Db, ownerId: string) {
         );
       },
 
-      /** The product, never used by this user, or undefined. Used to answer a retry (#64-8). */
-      async find(id: string): Promise<(CatalogProduct & { addedByUser: boolean }) | undefined> {
+      /**
+       * The product with what a retry is compared by: its barcode, and whether this user added it.
+       * Not for responses.
+       */
+      async find(id: string): Promise<StoredProduct | undefined> {
         const [row] = await db.select().from(products).where(eq(products.id, id));
-        if (row === undefined) return undefined;
-        return { ...toCatalogProduct(row, null), addedByUser: row.createdBy === ownerId };
+        return row && storedProduct(row, ownerId);
+      },
+
+      /** The product with this barcode (the store's 13-digit form), or undefined (#65-3). */
+      async findByBarcode(barcode: string): Promise<StoredProduct | undefined> {
+        const [row] = await db.select().from(products).where(eq(products.barcode, barcode));
+        return row && storedProduct(row, ownerId);
       },
 
       /**
@@ -421,6 +429,16 @@ export function createRepositories(db: Db, ownerId: string) {
 }
 
 export type Repositories = ReturnType<typeof createRepositories>;
+
+export type StoredProduct = CatalogProduct & { barcode: string | null; addedByUser: boolean };
+
+function storedProduct(row: typeof products.$inferSelect, ownerId: string): StoredProduct {
+  return {
+    ...toCatalogProduct(row, null),
+    barcode: row.barcode,
+    addedByUser: row.createdBy === ownerId,
+  };
+}
 
 /** The catalog's view of a product row: it leaves out who added it and the barcode. */
 function toCatalogProduct(

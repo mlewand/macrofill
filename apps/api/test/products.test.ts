@@ -165,3 +165,126 @@ describe('POST /api/products (#64-1, #64-4, #64-8)', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('barcodes (#65-3, #65-4)', () => {
+  let database: Database;
+  let app: TestApp;
+  let appB: TestApp;
+  const ean13 = '5901234123457';
+
+  beforeEach(async () => {
+    database = await createMigratedTestDatabase();
+    await seed(database.db);
+    await database.db.execute(
+      sql`insert into users (id, username, timezone) values (${userB.id}, ${userB.username}, 'UTC')`,
+    );
+    const base = createApp({ db: database.db });
+    app = await signedIn(base, database.db);
+    appB = await signedIn(base, database.db, userB.username);
+  });
+
+  afterEach(async () => {
+    await database.close();
+  });
+
+  const post = (client: TestApp, body: unknown) =>
+    client.request('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  const byBarcode = (client: TestApp, code: string) =>
+    client.request(`/api/products/by-barcode/${encodeURIComponent(code)}`);
+
+  it('#65-4: a product is saved with its barcode, and the lookup finds it for any user', async () => {
+    expect((await post(app, { ...request, barcode: ean13 })).status).toBe(201);
+    const stored = await queryRows(
+      database.db,
+      sql`select barcode from products where id = ${request.id}`,
+    );
+    expect(stored).toEqual([{ barcode: ean13 }]);
+    for (const client of [app, appB]) {
+      const res = await byBarcode(client, ean13);
+      expect(res.status).toBe(200);
+      expect(catalogProductSchema.parse(await res.json())).toMatchObject({
+        id: request.id,
+        name: 'Homemade curd',
+        lastUsedAt: null,
+      });
+    }
+  });
+
+  it('#65-2, #65-3: the lookup takes UPC-A and EAN-8 forms, normalized to the stored 13 digits', async () => {
+    await post(app, { ...request, barcode: '0036000291452' });
+    const upc = await byBarcode(appB, '036000291452');
+    expect(upc.status).toBe(200);
+    expect(catalogProductSchema.parse(await upc.json()).id).toBe(request.id);
+    await post(app, {
+      ...request,
+      id: '5a1d8b4f-4c9f-4e8b-8b62-7d2a3e0f9c12',
+      barcode: '0000096385074',
+    });
+    expect((await byBarcode(app, '96385074')).status).toBe(200);
+  });
+
+  it('#65-3: a barcode nobody added is not found', async () => {
+    const res = await byBarcode(app, ean13);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not_found' });
+  });
+
+  it('#65-1: a code that is not an EAN-13, EAN-8 or UPC-A, or has a wrong check digit, is refused', async () => {
+    for (const code of ['5901234123458', '123', 'abc']) {
+      const res = await byBarcode(app, code);
+      expect(res.status, code).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: 'invalid_request',
+        issues: [{ path: 'code' }],
+      });
+    }
+  });
+
+  it('#65-2: a product is only saved with its barcode in the 13-digit form, check digit valid', async () => {
+    for (const barcode of ['036000291452', '5901234123458']) {
+      expect((await post(app, { ...request, barcode })).status, barcode).toBe(400);
+    }
+  });
+
+  it('no response shows who added it', async () => {
+    await post(app, { ...request, barcode: ean13 });
+    expect(await (await byBarcode(appB, ean13)).text()).not.toMatch(/created_?by|owner/i);
+  });
+
+  it('#65-4: a barcode a product already has is taken, and the stored product stays', async () => {
+    await post(app, { ...request, barcode: ean13 });
+    const other = {
+      ...request,
+      id: '5a1d8b4f-4c9f-4e8b-8b62-7d2a3e0f9c12',
+      name: 'Another curd',
+      barcode: ean13,
+    };
+    const res = await post(appB, other);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'barcode_taken' });
+    const rows = await queryRows(
+      database.db,
+      sql`select count(*)::int as n from products where barcode = ${ean13}`,
+    );
+    expect(rows).toEqual([{ n: 1 }]);
+  });
+
+  it('#64-8: a retry of a product saved with a barcode is a replay, not a taken barcode', async () => {
+    const withBarcode = { ...request, barcode: ean13 };
+    expect((await post(app, withBarcode)).status).toBe(201);
+    expect((await post(app, withBarcode)).status).toBe(200);
+    // Same id, but the barcode differs: other content.
+    const changed = await post(app, { ...withBarcode, barcode: '4006381333931' });
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toEqual({ error: 'conflict' });
+  });
+
+  it('#65-3: the lookup needs a session', async () => {
+    const res = await createApp({ db: database.db }).request(`/api/products/by-barcode/${ean13}`);
+    expect(res.status).toBe(401);
+  });
+});

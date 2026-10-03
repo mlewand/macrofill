@@ -2,13 +2,15 @@ import type { CatalogProduct, CreateProductRequest } from '@macrofill/domain';
 import { NUTRIENTS } from '@macrofill/domain';
 import type { Db } from '../db/client';
 import type { Issue } from '../http/validation';
-import { createRepositories } from '../repositories';
+import { createRepositories, type StoredProduct } from '../repositories';
 
 export type CreateProductResult =
   | { status: 'created' | 'replayed'; product: CatalogProduct }
   | { status: 'invalid'; issues: Issue[] }
   /** The id is taken by another product, or by the same one with other content. */
-  | { status: 'conflict' };
+  | { status: 'conflict' }
+  /** Another product already has this barcode (#65-4). */
+  | { status: 'barcode_taken' };
 
 /**
  * #64-4, #64-8: adds a product to the shared store. Idempotent through the client-generated id: a
@@ -23,6 +25,9 @@ export async function createProduct(
     const repos = createRepositories(tx, userId);
     const replay = await existing(repos, request);
     if (replay) return replay;
+    if (request.barcode !== undefined && (await repos.products.findByBarcode(request.barcode))) {
+      return { status: 'barcode_taken' as const };
+    }
     if (!(await repos.ingredientClasses.exists(request.ingredientClassId))) {
       return {
         status: 'invalid' as const,
@@ -31,7 +36,12 @@ export async function createProduct(
     }
     if (!(await repos.products.insertIfAbsent(request))) {
       // Lost a race with a concurrent retry, or the id is someone else's.
-      return (await existing(repos, request)) ?? { status: 'conflict' as const };
+      const raced = await existing(repos, request);
+      if (raced) return raced;
+      // Not the id, so the barcode: someone added it between the check and the insert.
+      return request.barcode !== undefined && (await repos.products.findByBarcode(request.barcode))
+        ? { status: 'barcode_taken' as const }
+        : { status: 'conflict' as const };
     }
     const product = await repos.products.find(request.id);
     if (!product) throw new Error('Added product not found.');
@@ -51,12 +61,13 @@ async function existing(
     stored.addedByUser &&
     stored.name === request.name &&
     stored.brand === request.brand &&
+    stored.barcode === (request.barcode ?? null) &&
     stored.ingredientClassId === request.ingredientClassId &&
     NUTRIENTS.every((n) => stored.nutrition[n] === request.nutrition[n]);
   return same ? { status: 'replayed', product: shown(stored) } : { status: 'conflict' };
 }
 
-function shown(stored: CatalogProduct & { addedByUser: boolean }): CatalogProduct {
+export function shown(stored: StoredProduct): CatalogProduct {
   // Rebuilt, so what only the server needs doesn't leave with it.
   const { id, ingredientClassId, name, brand, nutrition, source, lastUsedAt } = stored;
   return {

@@ -12,6 +12,8 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NutritionTable } from '../NutritionTable';
 import { ProductDialog } from '../products/ProductForm';
+import { ScanDialog, type LookupOutcome } from '../products/ScanDialog';
+import { useApi } from '../api/api';
 import { useSaveMeal, type SaveResult } from '../outbox/Outbox';
 import { belongsTo, lastUser } from '../session';
 import { sinceStart, useFlowEvents } from '../events/useFlowEvents';
@@ -363,7 +365,10 @@ export function ProductChoices(props: {
 }) {
   const { t } = useTranslation();
   const { state, catalog } = props;
-  const [adding, setAdding] = useState(false);
+  const api = useApi();
+  // The screen over the step, if any: the scan view, or the product form (with the barcode it was
+  // opened for). Never both: the camera is closed before the form opens (#65-4).
+  const [overlay, setOverlay] = useState<{ type: 'scan' } | { type: 'add'; barcode?: string }>();
   const step = state.recipe.steps[state.current]!;
   const draft = state.steps[state.current]!;
   const options = useMemo(
@@ -375,6 +380,41 @@ export function ProductChoices(props: {
       ).options,
     [catalog, step],
   );
+  // Cancel, or leaving the step, ends the lookup in flight: its answer is dropped, so it never
+  // selects a product or opens a form the user has already walked away from.
+  const lookupId = useRef(0);
+  useEffect(
+    () => () => {
+      lookupId.current++;
+    },
+    [],
+  );
+  const cancel = () => {
+    lookupId.current++;
+    setOverlay(undefined);
+  };
+  /**
+   * #65-3, #65-4: a known barcode selects its product for the step, whatever its class (#65-5); an
+   * unknown one opens the product form with the barcode. If the store can't be asked, the scan
+   * view stays.
+   */
+  const lookup = async (barcode: string): Promise<LookupOutcome> => {
+    const mine = ++lookupId.current;
+    try {
+      const product = await api.productByBarcode(barcode);
+      if (mine !== lookupId.current) return 'failed';
+      if (product === undefined) {
+        setOverlay({ type: 'add', barcode });
+        return 'unknown';
+      }
+      props.onProductAdded(product);
+      props.onSelect(product.id, product.ingredientClassId !== step.ingredientClassId);
+      setOverlay(undefined);
+      return 'found';
+    } catch {
+      return 'failed';
+    }
+  };
   // A picked product of another class isn't among the options: it's shown anyway, checked.
   const picked = catalog.products.find((p) => p.id === draft.productId);
   const other = picked && picked.ingredientClassId !== step.ingredientClassId ? picked : undefined;
@@ -406,18 +446,25 @@ export function ProductChoices(props: {
           </p>
         )}
       </fieldset>
-      <button type="button" className="secondary" onClick={() => setAdding(true)}>
-        {t('step.addProduct')}
-      </button>
-      {adding && (
+      <div className="row">
+        <button type="button" className="secondary" onClick={() => setOverlay({ type: 'scan' })}>
+          {t('step.scan')}
+        </button>
+        <button type="button" className="secondary" onClick={() => setOverlay({ type: 'add' })}>
+          {t('step.addProduct')}
+        </button>
+      </div>
+      {overlay?.type === 'scan' && <ScanDialog lookup={lookup} onCancel={cancel} />}
+      {overlay?.type === 'add' && (
         <ProductDialog
           ingredientClasses={catalog.ingredientClasses}
           ingredientClassId={step.ingredientClassId}
-          onCancel={() => setAdding(false)}
+          {...(overlay.barcode === undefined ? {} : { barcode: overlay.barcode })}
+          onCancel={() => setOverlay(undefined)}
           onSaved={(product) => {
             props.onProductAdded(product);
             props.onSelect(product.id, product.ingredientClassId !== step.ingredientClassId);
-            setAdding(false);
+            setOverlay(undefined);
           }}
         />
       )}

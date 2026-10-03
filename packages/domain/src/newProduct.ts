@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { barcodeSchema } from './barcode.js';
 import { idSchema, slugSchema } from './common.js';
 import { parseGrams } from './input.js';
 import { productNutritionSchema, type Nutrient, type NutritionValues } from './nutrition.js';
@@ -71,6 +72,8 @@ export const createProductRequestSchema = z.object({
   /** As printed on the package; not translated. */
   name: z.string().trim().min(1).max(200),
   brand: z.string().trim().min(1).max(200).optional(),
+  /** The store's 13-digit form (#63-2), already normalized by the client (#65-2). */
+  barcode: barcodeSchema.optional(),
   nutrition: newProductNutritionSchema,
 });
 
