@@ -271,7 +271,7 @@ Work proceeds in phases. MVP0 was Phases A to C. Each phase ends with the app de
 
 - Goal: no product is a dead end. A product the app doesn't know is added from the app, by barcode lookup or by typing its label, into one store shared by all users.
 - Scope: the umbrella issue #TBD and its sub-issues. More work may join this phase later; it's added here when it does.
-- Criteria: in the GitHub issues, not in this doc. Each sub-issue lists its own, with IDs like `#62-3` (issue 62, criterion 3). The umbrella issue holds no criteria of its own; it closes when its sub-issues are closed. Issues labelled `on hold` belong to the phase's backlog, not its exit.
+- Criteria: in the GitHub issues, not in this doc. Each sub-issue lists its own, with IDs like `#123-3` (issue 123, criterion 3). The umbrella issue holds no criteria of its own; it closes when its sub-issues are closed. Issues labelled `on hold` belong to the phase's backlog, not its exit.
 - Moved in from Deferred from MVP0: the kcal consistency check, as part of adding a product by its label.
 - Moved in from Future stages: the products GUI; barcode scan with Open Food Facts lookup, plus a second provider to prove that providers chain.
 - Exit: every criterion in the phase's issues passes, in CI or in a manual smoke run on the phone, and a product unknown to the app has been added by barcode and used in a meal on the phone.
