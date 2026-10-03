@@ -114,9 +114,20 @@ describe('#63-2, #63-3: the database enforces the shared product shape', () => {
     database.db.execute(
       sql.raw(
         `insert into products (id, ingredient_class_id, name, source${columns === '' ? '' : `, ${columns}`})
-         values (gen_random_uuid(), 'curd', 'x', ${values}`,
+         values (gen_random_uuid(), 'curd', 'x', ${values})`,
       ),
     );
+
+  /** Rejects because of the named constraint, not because the statement is malformed. */
+  const violates = async (statement: Promise<unknown>, constraint: string) => {
+    const error = await statement.then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    const text = (e: unknown): string =>
+      e instanceof Error ? `${e.message} ${text(e.cause)}` : String(e ?? '');
+    expect(text(error)).toContain(constraint);
+  };
 
   beforeAll(async () => {
     database = await createMigratedTestDatabase();
@@ -128,18 +139,18 @@ describe('#63-2, #63-3: the database enforces the shared product shape', () => {
   });
 
   it('#63-2: a barcode is 13 digits and unique across the store; products may have none', async () => {
-    await insert('barcode', `'manual', '5901234123457')`);
-    await expect(insert('barcode', `'manual', '5901234123457')`)).rejects.toThrow();
-    await expect(insert('barcode', `'manual', '590123412345')`)).rejects.toThrow();
-    await expect(insert('barcode', `'manual', '59012341234570')`)).rejects.toThrow();
-    await expect(insert('barcode', `'manual', '590123412345a'`)).rejects.toThrow();
-    await insert('', `'manual')`);
-    await insert('', `'manual')`);
+    await insert('barcode', `'manual', '5901234123457'`);
+    await violates(insert('barcode', `'manual', '5901234123457'`), 'products_barcode_unique');
+    for (const barcode of ['590123412345', '59012341234570', '590123412345a', '']) {
+      await violates(insert('barcode', `'manual', '${barcode}'`), 'products_barcode_form');
+    }
+    await insert('', `'manual'`);
+    await insert('', `'manual'`);
   });
 
   it('#63-3: a product records its source, the provider reference and who added it', async () => {
-    await insert('source_ref, created_by', `'manual', 'ref-1', '${author}')`);
-    await expect(insert('', `'user')`)).rejects.toThrow();
+    await insert('source_ref, created_by', `'manual', 'ref-1', '${author}'`);
+    await violates(insert('', `'user'`), 'products_source_values');
   });
 
   it('#63-4: deleting the user who added a product clears createdBy and keeps the product', async () => {
