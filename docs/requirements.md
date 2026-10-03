@@ -70,7 +70,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 
 # Data model
 
-- Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent) has `ownerId`. Curated content (IngredientClass, Recipe) and all Products are global. From Phase D, products are one store shared by all users: a product added by one user is visible to everyone, and there are no per-user products. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it, except authentication, which finds the user by username or session before there is one.
+- Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent) has `ownerId`. Curated content (IngredientClass, Recipe) and all Products are global. From Phase D, products are one store shared by all users: a product added by one user is visible to everyone, and there are no per-user products. All data access goes through a repository layer. Queries for user-owned entities are scoped by the current user; queries for global content (ingredient classes, recipes, products) aren't. No query bypasses the repository layer. Authentication is the one exception to user scoping: it finds the user by username or session before there is one.
 - User: id, username, password hash (argon2id), timezone (IANA name, e.g. `Europe/Warsaw`; used by M2-5, M7-1).
 - NutritionValues (per 100 g): energy kcal, fat, saturates, carbs, sugars, protein, salt (full EU label set), fibre (EU labels don't always have it). UI shows only protein/fat/carbs/fibre/kcal for now.
   - Any value missing from a product's label or source (most often fibre, but e.g. saturates, sugars or salt too) is stored as unknown, never as 0. A meal or day total of a nutrient that includes an unknown value is shown as "unknown"; the other nutrients' totals are unaffected.
@@ -329,7 +329,7 @@ No new criteria are added here: from Phase D on, criteria live in GitHub issues 
   - The seed script reads initial passwords from environment variables and stores only hashes; the repo contains no passwords.
   - A CLI command resets a user's password.
 - **M4-2:** Every endpoint except login and health returns 401 without a valid session.
-- **M4-3:** An ownership test runs over the full route table: user B gets 404 for user A's resources, and list endpoints never include other users' rows. Each route registers a fixture that creates a resource owned by user A, and the test fails for any route without one.
+- **M4-3:** An ownership test runs over the full route table: user B gets 404 for user A's resources, and list endpoints never include other users' rows. Each route registers a fixture that creates a resource owned by user A, or a stated exemption when it serves only global content, and the test fails for any route without either. From Phase D, products are global: a test checks that a product added by user A is visible to user B (#63).
 - **M4-4:** Every request body is validated with the shared zod schemas. Invalid input returns 400 with field-level errors.
 - **M4-5:** Running the seed script twice leaves the same state as running it once.
 - **M4-6:** Saving a meal is idempotent through a client-generated ID. Posting the same meal twice creates exactly one meal and one consumption entry.
