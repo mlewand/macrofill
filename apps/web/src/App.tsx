@@ -7,6 +7,7 @@ import { createUsageTracker, TrackContext } from './events/track';
 import { Login } from './Login';
 import { OutboxProvider, useSync, type SaveResult } from './outbox/Outbox';
 import { SaveNotice, type Notice } from './SaveNotice';
+import { SignOut } from './SignOut';
 import { ScaleMode } from './scaleMode/ScaleMode';
 import { belongsToCurrentUser, lastUser, onUserChangedElsewhere, rememberUser } from './session';
 import { useDraftStore, type Draft } from './storage/drafts';
@@ -114,6 +115,15 @@ export function App() {
     setNeedsLogin(false);
     setLogins((n) => n + 1);
     userIs(username);
+  };
+  /**
+   * #95: the session is over. The login form opens over the app at once, and nobody is trusted
+   * until it settles who logs in; what's kept on the device stays stamped with its user (#95-5).
+   */
+  const signedOut = () => {
+    setNotice(undefined);
+    setNeedsLogin(true);
+    recheckUser();
   };
   // Who the session belongs to, from the server (M4-1): a cookie from before the app remembered
   // users has none on the device. Learning it for the first time isn't a change of user.
@@ -312,6 +322,7 @@ export function App() {
                   {t('home.logMeal')}
                 </button>
                 {user !== undefined && <TodayView recheckUser={recheckUser} />}
+                <SignOut onSignedOut={signedOut} />
               </section>
             )}
             {screen === 'scaleMode' && (

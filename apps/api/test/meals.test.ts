@@ -266,7 +266,10 @@ describe('POST /api/meals', () => {
     });
 
     it('every route that takes a body rejects an invalid one with 400', async () => {
-      const routes = app.routes.filter((r) => ['POST', 'PUT', 'PATCH'].includes(r.method));
+      // Logout (#95-2) takes no body: it ends the session named by the cookie.
+      const routes = app.routes.filter(
+        (r) => ['POST', 'PUT', 'PATCH'].includes(r.method) && r.path !== '/api/logout',
+      );
       expect(routes.length).toBeGreaterThan(0);
       for (const route of routes) {
         for (const body of ['{}', '{"x":', '[]']) {
