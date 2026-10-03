@@ -52,7 +52,7 @@ test('M7-6: every screen works in portrait, with full-width primary buttons at l
   await checkLayout(page, 'summary');
 
   await page.getByRole('button', { name: en.summary.save }).click();
-  await expect(page.getByRole('status')).toHaveText(en.saved.title);
+  await expect(page.getByText(en.saved.title)).toBeVisible();
   await checkLayout(page, 'saved');
 });
 

@@ -618,6 +618,30 @@ describe('Scale Mode', () => {
 });
 
 describe('Home', () => {
+  it('#88-1: a Scale Mode meal, once saved, also opens the main screen with the notice', async () => {
+    const api: Api = fakeApi({ catalog: () => Promise.resolve(catalog) });
+    const driver = new MockScaleDriver();
+    render(
+      <ApiContext value={api}>
+        <ScaleContext value={() => driver}>
+          <App />
+        </ScaleContext>
+      </ApiContext>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: en.home.weighMeal }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+    fireEvent.click(button(en.scale.connect));
+    await screen.findByText(en.scale.status.connected);
+    await act(() => driver.play(scaleScript({ intervalMs: 5 }).baseline(312, { forMs: 0 }).take()));
+    fireEvent.click(button(en.scale.start));
+    fireEvent.click(button(en.step.skip));
+    fireEvent.click(button(en.step.skip));
+    fireEvent.click(button(en.summary.save));
+    expect(await screen.findByText(en.saved.title)).toBeVisible();
+    expect(button(en.home.weighMeal)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+  });
+
   it('M6-1: offers Scale Mode next to Direct Entry', async () => {
     const api: Api = fakeApi({ catalog: () => Promise.resolve(catalog) });
     const driver = new MockScaleDriver();
@@ -691,7 +715,6 @@ describe('the scale stays connected between meals (#89)', () => {
     fireEvent.click(button(en.step.skip));
     fireEvent.click(button(en.summary.save));
     await screen.findByText(en.saved.title);
-    fireEvent.click(button(en.saved.done));
   }
 
   it('#89-1: after a saved meal, the next one starts at the bowl prompt without connecting again (regression: #89)', async () => {

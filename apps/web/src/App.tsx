@@ -6,6 +6,7 @@ import { DirectEntry } from './directEntry/DirectEntry';
 import { createUsageTracker, TrackContext } from './events/track';
 import { Login } from './Login';
 import { OutboxProvider, useSync, type SaveResult } from './outbox/Outbox';
+import { SaveNotice, type Notice } from './SaveNotice';
 import { ScaleHolder, ScaleHolderContext, useCreateScaleDriver } from './scale';
 import { ScaleMode } from './scaleMode/ScaleMode';
 import { belongsToCurrentUser, lastUser, onUserChangedElsewhere, rememberUser } from './session';
@@ -19,7 +20,7 @@ const ME_WAIT_MS = 5000;
 /** How often a kept session blocked by another tab is tried again. */
 const DRAFT_RETRY_MS = 1000;
 
-type Screen = 'home' | 'scaleMode' | 'directEntry' | 'saved';
+type Screen = 'home' | 'scaleMode' | 'directEntry';
 
 export function App() {
   const { t } = useTranslation();
@@ -27,10 +28,18 @@ export function App() {
   const createScaleDriver = useCreateScaleDriver();
   const [scale] = useState(() => new ScaleHolder(createScaleDriver));
   const [screen, setScreen] = useState<Screen>('home');
-  const [savedResult, setSavedResult] = useState<SaveResult>('synced');
+  // #88: a save goes straight to the main screen, with this notice on it.
+  const [notice, setNotice] = useState<Notice>();
+  const noticeCount = useRef(0);
   const showSaved = (result: SaveResult) => {
-    setSavedResult(result);
-    setScreen('saved');
+    setNotice({ id: ++noticeCount.current, result });
+    setScreen('home');
+  };
+  const dismissNotice = useCallback(() => setNotice(undefined), []);
+  /** A meal starts: the notice was about the last one. */
+  const startMeal = (next: 'scaleMode' | 'directEntry') => {
+    setNotice(undefined);
+    setScreen(next);
   };
   // M4-2: any request refused for want of a session opens the login form over the app. The screen
   // underneath stays mounted, so a meal in progress survives a login.
@@ -295,7 +304,7 @@ export function App() {
                     type="button"
                     className="primary"
                     disabled={noStart}
-                    onClick={() => setScreen('scaleMode')}
+                    onClick={() => startMeal('scaleMode')}
                   >
                     {t('home.weighMeal')}
                   </button>
@@ -303,7 +312,7 @@ export function App() {
                     type="button"
                     className="primary"
                     disabled={noStart}
-                    onClick={() => setScreen('directEntry')}
+                    onClick={() => startMeal('directEntry')}
                   >
                     {t('home.logMeal')}
                   </button>
@@ -340,24 +349,8 @@ export function App() {
                   )}
                 </WithCatalog>
               )}
-              {screen === 'saved' && (
-                <section>
-                  <h1 role="status">
-                    {savedResult === 'refused' ? t('saved.refusedTitle') : t('saved.title')}
-                  </h1>
-                  {savedResult === 'refused' && (
-                    <p role="alert" className="problem">
-                      {t('saved.refused')}
-                    </p>
-                  )}
-                  {/* M5-9: kept on the device until the server has it. */}
-                  {savedResult === 'pending' && <p>{t('saved.pending')}</p>}
-                  <button type="button" className="primary" onClick={() => setScreen('home')}>
-                    {t('saved.done')}
-                  </button>
-                </section>
-              )}
             </main>
+            <SaveNotice notice={notice} onDismiss={dismissNotice} />
             {needsLogin && <Login onLoggedIn={loggedIn} />}
           </OutboxProvider>
         </ApiContext>

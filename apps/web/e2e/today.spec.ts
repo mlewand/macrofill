@@ -27,7 +27,6 @@ test('M5-7, M7-1 to M7-5: a meal saved on the phone shows in Today, on the table
   await page.getByRole('button', { name: en.step.next }).click();
   for (let i = 0; i < 4; i++) await page.getByRole('button', { name: en.step.skip }).click();
   await page.getByRole('button', { name: en.summary.save }).click();
-  await page.getByRole('button', { name: en.saved.done }).click();
 
   // M5-7, M7-1: it's in Today, newest first, with its recipe name and macros.
   await expect(entries(page)).toHaveCount(before + 1);
