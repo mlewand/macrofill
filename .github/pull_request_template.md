@@ -14,6 +14,6 @@ Based on: <!-- for a stacked PR, the base PR; otherwise delete this line -->
 
 ### Not handled
 
-<!-- Known gaps and the issues extracted in review, with their priority, e.g. "#48 (priority: low): capture is enabled before /api/me settles". Reviewers don't raise low or medium ones again; a security hole or another high or critical problem the PR causes stays open to review. -->
+<!-- Known gaps and the issues extracted in review, with their priority, e.g. "#48 (priority: low): capture is enabled before /api/me settles". Reviewers don't raise low or medium ones again; a security hole or another high or critical problem the PR causes stays open to review, unless it notes the maintainer's OK to defer it. -->
 
 ### Implementation notes

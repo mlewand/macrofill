@@ -42,7 +42,7 @@ Judge each finding by how it affects the user in realistic use: the product as `
 
 Every finding, including points that appear only in a review summary, gets one of these outcomes, and a reply that says which. Reply on inline threads and resolve them; answer summary points with a PR comment. Check a finding before acting on it.
 
-- **Fix** it in the PR when it would open a security hole, however unlikely, or when, in realistic use, the PR would cause a regression in something that worked or data loss or corruption, or would leave a criterion it covers unmet. Any other high or critical finding the PR causes is fixed too; leaving one to an issue needs the maintainer's OK. Reply with the fixing commit.
+- **Fix** it in the PR when it would open a security hole, however unlikely, or when, in realistic use, the PR would cause a regression in something that worked or data loss or corruption, or would leave a criterion it covers unmet. Any other high or critical finding the PR causes is fixed too; leaving one to an issue needs the maintainer's OK, noted with it under "Not handled". Reply with the fixing commit.
 - **Extract** it to an issue when it's low or medium priority, theoretical problems included. The issue links where it came from (a permalink to the review thread or the code), says what goes wrong for the user, and gets a priority label, plus `data loss` when user data could be lost or corrupted. Reply with the issue link and its priority, list it under "Not handled" in the PR description, so re-reviews don't raise it again, and resolve the thread.
 - **Reject** it when it doesn't hold: say why, with evidence.
 - **Skip** it when it's unrelated to the PR's purpose, e.g. about code the PR doesn't change: say so in one line. Open an issue for it only when it's high or critical.
@@ -74,7 +74,7 @@ For code reviewers (Codex, Copilot, CodeRabbit), and agents reviewing a PR:
 - Review for realistic use of the product as `docs/requirements.md` scopes it, accepted shortcuts included. In MVP0 each phone or tablet is used by one person, so switching users on one device, across tabs or with browser storage blocked isn't a scenario to review for. The server keeping users apart (M4-1 to M4-3) is.
 - What matters most: regressions in what worked, data loss or corruption, security, and the acceptance criteria the PR names.
 - Rate each finding by its impact on the user in realistic use, likelihood included, not by its worst case, and say what the user would see. A security hole is the exception: always the highest priority.
-- Don't raise again a low or medium problem that the PR description lists under "Not handled", or that an open issue already tracks. A security hole, or another high or critical problem the PR causes, stays open to review even when it's listed or tracked. Leave problems in code the PR doesn't change alone, unless they're severe.
+- Don't raise again a low or medium problem that the PR description lists under "Not handled", or that an open issue already tracks. A security hole, or another high or critical problem the PR causes, stays open to review even when it's listed or tracked, unless the PR description notes the maintainer's OK to defer it. Leave problems in code the PR doesn't change alone, unless they're severe.
 - When a finding follows from the fix of an earlier one, say so.
 
 ## Conventions
