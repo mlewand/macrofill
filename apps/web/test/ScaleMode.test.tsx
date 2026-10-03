@@ -680,6 +680,101 @@ describe('Home', () => {
   });
 });
 
+describe('the scale stays connected between meals (#89)', () => {
+  function app() {
+    const driver = new MockScaleDriver();
+    const connect = vi.spyOn(driver, 'connect');
+    const api: Api = fakeApi({ catalog: () => Promise.resolve(catalog) });
+    render(
+      <ApiContext value={api}>
+        <ScaleContext value={() => driver}>
+          <App />
+        </ScaleContext>
+      </ApiContext>,
+    );
+    return { driver, connect, api };
+  }
+
+  /** Home → Weigh a meal → Curd bowl. */
+  async function weigh() {
+    fireEvent.click(await screen.findByRole('button', { name: en.home.weighMeal }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+  }
+
+  /** One meal with every step skipped, saved, and back on the home screen. */
+  async function meal(driver: MockScaleDriver, { connect }: { connect: boolean }) {
+    await weigh();
+    if (connect) {
+      fireEvent.click(button(en.scale.connect));
+      await screen.findByText(en.scale.status.connected);
+    }
+    const script = scaleScript({ intervalMs: 5 });
+    await act(() => driver.play(script.baseline(312, { forMs: 0 }).take()));
+    fireEvent.click(button(en.scale.start));
+    fireEvent.click(button(en.step.skip));
+    fireEvent.click(button(en.step.skip));
+    fireEvent.click(button(en.summary.save));
+    await screen.findByText(en.saved.title);
+  }
+
+  it('#89-1: after a saved meal, the next one starts at the bowl prompt without connecting again (regression: #89)', async () => {
+    const { driver, connect } = app();
+    await meal(driver, { connect: true });
+    await weigh();
+    expect(screen.queryByRole('button', { name: en.scale.connect })).toBeNull();
+    expect(screen.getByText(en.scale.placeBowl)).toBeVisible();
+    expect(screen.getByText(en.scale.status.connected)).toBeVisible();
+    // The first reading of the new meal makes Start available, as before.
+    const script = scaleScript({ intervalMs: 5 });
+    await act(() => driver.play(script.baseline(312, { forMs: 0 }).take()));
+    expect(button(en.scale.start)).toBeEnabled();
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('#89-1: a second meal on the held connection is saved like the first (regression: #89)', async () => {
+    const { driver, connect, api } = app();
+    await meal(driver, { connect: true });
+    await meal(driver, { connect: false });
+    expect(vi.mocked(api.saveMeal)).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('#89-2: a scale gone by the next meal shows the connect screen, never a stale connected state', async () => {
+    const { driver } = app();
+    await meal(driver, { connect: true });
+    act(() => driver.drop());
+    await weigh();
+    expect(button(en.scale.connect)).toBeEnabled();
+    expect(screen.queryByText(en.scale.status.connected)).toBeNull();
+    // Connecting again works as for the first time.
+    fireEvent.click(button(en.scale.connect));
+    await screen.findByText(en.scale.status.connected);
+    expect(screen.getByText(en.scale.placeBowl)).toBeVisible();
+  });
+
+  it('#89-3: a drop between meals shows nothing on the home screen and starts no reconnect', async () => {
+    const { driver, connect } = app();
+    await meal(driver, { connect: true });
+    act(() => driver.drop());
+    // Nothing to see or say on Home, and nothing tried: a reconnect would have called connect.
+    expect(button(en.home.weighMeal)).toBeVisible();
+    expect(screen.queryByText(en.scale.status.reconnecting)).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it("#89-4: readings between meals are not in the next meal's recording", async () => {
+    const { driver, api } = app();
+    await meal(driver, { connect: true });
+    const script = scaleScript({ intervalMs: 5 });
+    await act(() => driver.play(script.baseline(250, { forMs: 0 }).take()));
+    await meal(driver, { connect: false });
+    const second = vi.mocked(api.saveMeal).mock.calls[1]![0];
+    // Only the reading played during the second meal.
+    expect(second.recording?.frames.map((f) => f.reading.grams)).toEqual([312]);
+  });
+});
+
 describe('adding a product at a step (#64-6)', () => {
   it('#64-6: the scale connection and the wake lock survive the form, and the weighing goes on', async () => {
     const release = vi.fn(() => Promise.resolve());

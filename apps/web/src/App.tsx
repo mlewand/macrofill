@@ -7,6 +7,7 @@ import { createUsageTracker, TrackContext } from './events/track';
 import { Login } from './Login';
 import { OutboxProvider, useSync, type SaveResult } from './outbox/Outbox';
 import { SaveNotice, type Notice } from './SaveNotice';
+import { ScaleHolder, ScaleHolderContext, useCreateScaleDriver } from './scale';
 import { SignOut } from './SignOut';
 import { ScaleMode } from './scaleMode/ScaleMode';
 import { belongsToCurrentUser, lastUser, onUserChangedElsewhere, rememberUser } from './session';
@@ -24,6 +25,9 @@ type Screen = 'home' | 'scaleMode' | 'directEntry';
 
 export function App() {
   const { t } = useTranslation();
+  // The scale outlives a meal: it stays connected for the next one (#89).
+  const createScaleDriver = useCreateScaleDriver();
+  const [scale] = useState(() => new ScaleHolder(createScaleDriver));
   const [screen, setScreen] = useState<Screen>('home');
   // #88: a save goes straight to the main screen, with this notice on it.
   const [notice, setNotice] = useState<Notice>();
@@ -285,82 +289,84 @@ export function App() {
   const noStart = user === undefined || resumeWaiting;
 
   return (
-    <TrackContext value={tracker.track}>
-      <ApiContext value={api}>
-        <OutboxProvider ready={confirmed} readyNow={confirmedNow} offline={unreachable}>
-          <SyncAfterLogin logins={logins} user={user} confirmed={confirmed} />
-          <main hidden={needsLogin}>
-            {screen === 'home' && (
-              // Keyed by logins, so what failed without a session loads again after one.
-              <section key={logins}>
-                <h1>{t('app.name')}</h1>
-                {/* A meal must belong to someone: none starts until the user is known (M5-8). */}
-                {user === undefined && (
-                  <>
-                    <p role="alert" className="problem">
-                      {t('home.userUnknown')}
-                    </p>
-                    <button type="button" className="secondary" onClick={recheckUser}>
-                      {t('app.retry')}
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={noStart}
-                  onClick={() => startMeal('scaleMode')}
-                >
-                  {t('home.weighMeal')}
-                </button>
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={noStart}
-                  onClick={() => startMeal('directEntry')}
-                >
-                  {t('home.logMeal')}
-                </button>
-                {user !== undefined && <TodayView recheckUser={recheckUser} />}
-                <SignOut onSignedOut={signedOut} />
-              </section>
-            )}
-            {screen === 'scaleMode' && (
-              <WithCatalog>
-                {(catalog, onProductAdded) => (
-                  <ScaleMode
-                    catalog={catalog}
-                    onProductAdded={onProductAdded}
-                    owner={user}
-                    onSaved={showSaved}
-                    onCancel={() => setScreen('home')}
-                  />
-                )}
-              </WithCatalog>
-            )}
-            {screen === 'directEntry' && (
-              <WithCatalog>
-                {(catalog, onProductAdded) => (
-                  <DirectEntry
-                    catalog={catalog}
-                    onProductAdded={onProductAdded}
-                    owner={user}
-                    onSaved={(result) => {
-                      setResume(undefined);
-                      showSaved(result);
-                    }}
-                    onCancel={() => leaveDirectEntry('home')}
-                    {...(resume ? { resume } : {})}
-                  />
-                )}
-              </WithCatalog>
-            )}
-          </main>
-          <SaveNotice notice={notice} onDismiss={dismissNotice} />
-          {needsLogin && <Login onLoggedIn={loggedIn} />}
-        </OutboxProvider>
-      </ApiContext>
-    </TrackContext>
+    <ScaleHolderContext value={scale}>
+      <TrackContext value={tracker.track}>
+        <ApiContext value={api}>
+          <OutboxProvider ready={confirmed} readyNow={confirmedNow} offline={unreachable}>
+            <SyncAfterLogin logins={logins} user={user} confirmed={confirmed} />
+            <main hidden={needsLogin}>
+              {screen === 'home' && (
+                // Keyed by logins, so what failed without a session loads again after one.
+                <section key={logins}>
+                  <h1>{t('app.name')}</h1>
+                  {/* A meal must belong to someone: none starts until the user is known (M5-8). */}
+                  {user === undefined && (
+                    <>
+                      <p role="alert" className="problem">
+                        {t('home.userUnknown')}
+                      </p>
+                      <button type="button" className="secondary" onClick={recheckUser}>
+                        {t('app.retry')}
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={noStart}
+                    onClick={() => startMeal('scaleMode')}
+                  >
+                    {t('home.weighMeal')}
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={noStart}
+                    onClick={() => startMeal('directEntry')}
+                  >
+                    {t('home.logMeal')}
+                  </button>
+                  {user !== undefined && <TodayView recheckUser={recheckUser} />}
+                  <SignOut onSignedOut={signedOut} />
+                </section>
+              )}
+              {screen === 'scaleMode' && (
+                <WithCatalog>
+                  {(catalog, onProductAdded) => (
+                    <ScaleMode
+                      catalog={catalog}
+                      onProductAdded={onProductAdded}
+                      owner={user}
+                      onSaved={showSaved}
+                      onCancel={() => setScreen('home')}
+                    />
+                  )}
+                </WithCatalog>
+              )}
+              {screen === 'directEntry' && (
+                <WithCatalog>
+                  {(catalog, onProductAdded) => (
+                    <DirectEntry
+                      catalog={catalog}
+                      onProductAdded={onProductAdded}
+                      owner={user}
+                      onSaved={(result) => {
+                        setResume(undefined);
+                        showSaved(result);
+                      }}
+                      onCancel={() => leaveDirectEntry('home')}
+                      {...(resume ? { resume } : {})}
+                    />
+                  )}
+                </WithCatalog>
+              )}
+            </main>
+            <SaveNotice notice={notice} onDismiss={dismissNotice} />
+            {needsLogin && <Login onLoggedIn={loggedIn} />}
+          </OutboxProvider>
+        </ApiContext>
+      </TrackContext>
+    </ScaleHolderContext>
   );
 }
 

@@ -1,16 +1,61 @@
 import { scaleScript, type ScaleDriver } from '@macrofill/scale';
 import type { MockScaleDriver } from '@macrofill/scale/mock';
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useState } from 'react';
 
 /**
- * Creates the scale driver for a Scale Mode session. `main.tsx` provides it, and tests provide
- * `MockScaleDriver`, so the UI never imports a driver itself.
+ * Creates the app's scale driver, once (see `ScaleHolder`). `main.tsx` provides it, and tests
+ * provide `MockScaleDriver`, so the UI never imports a driver itself.
  */
 export const ScaleContext = createContext<() => ScaleDriver>(() => {
   throw new Error('No scale driver: provide ScaleContext.');
 });
 
 export const useCreateScaleDriver = () => useContext(ScaleContext);
+
+/**
+ * The app's one scale driver, which outlives a meal (#89): the scale stays connected when a
+ * Scale Mode session ends, so the next meal needn't pair it again. The driver is created on first
+ * use, never in an effect (StrictMode runs those twice). The holder follows the connection
+ * itself, because `ScaleDriver` has no current-state getter.
+ */
+export class ScaleHolder {
+  readonly #create: () => ScaleDriver;
+  #driver: ScaleDriver | undefined;
+  #connected = false;
+
+  constructor(create: () => ScaleDriver) {
+    this.#create = create;
+  }
+
+  get driver(): ScaleDriver {
+    if (this.#driver === undefined) {
+      const driver = this.#create();
+      driver.onConnectionChange((state) => {
+        this.#connected = state === 'connected';
+      });
+      this.#driver = driver;
+    }
+    return this.#driver;
+  }
+
+  /** Whether the scale is connected right now. A drop between meals makes it false (#89-2). */
+  get connected(): boolean {
+    return this.#connected;
+  }
+}
+
+/** `App` provides it, so every Scale Mode session shares the scale. */
+export const ScaleHolderContext = createContext<ScaleHolder | undefined>(undefined);
+
+/**
+ * The app's `ScaleHolder`. A screen rendered without `App` (a test) holds a scale of its own.
+ */
+export function useScaleHolder(): ScaleHolder {
+  const shared = useContext(ScaleHolderContext);
+  const create = useCreateScaleDriver();
+  const [own] = useState(() => new ScaleHolder(create));
+  return shared ?? own;
+}
 
 /**
  * `localStorage` key that switches Scale Mode to `MockScaleDriver`: e2e tests set it before the

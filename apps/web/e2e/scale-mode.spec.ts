@@ -161,3 +161,22 @@ test('M6-8, M6-5: after the scale drops, the meal is finished with typed grams',
   await page.getByRole('button', { name: en.summary.save }).click();
   await expect(page.getByText(en.saved.title)).toBeVisible();
 });
+
+test('#89-1: the scale stays paired for the next meal (regression: #89)', async ({ page }) => {
+  // Meal one: pair the scale, Start, skip every step, save, Done.
+  await startCurd(page);
+  for (let step = 0; step < 5; step++) {
+    await page.getByRole('button', { name: en.step.skip }).click();
+  }
+  await page.getByRole('button', { name: en.summary.save }).click();
+  await expect(page.getByText(en.saved.title)).toBeVisible();
+
+  // Meal two: straight to the bowl prompt, with no pairing screen in between.
+  await page.getByRole('button', { name: en.home.weighMeal }).click();
+  await page.getByRole('button', { name: 'Curd' }).click();
+  await expect(page.getByText(en.scale.placeBowl)).toBeVisible();
+  await expect(page.getByRole('button', { name: en.scale.connect })).toHaveCount(0);
+  await expect(page.getByText(en.scale.status.connected, { exact: true })).toBeVisible();
+  await play(page, scaleScript({ intervalMs: 50 }).baseline(312, { forMs: 0 }).take());
+  await expect(page.getByRole('button', { name: en.scale.start })).toBeEnabled();
+});
