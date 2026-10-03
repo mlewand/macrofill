@@ -54,17 +54,17 @@ Priority is judged from the product side: how much it affects the user, counting
 - `priority: medium`: a noticeable annoyance, or a wrong result in an uncommon but realistic case, with a workaround.
 - `priority: low`: a rare edge case, a theoretical problem, or something cosmetic.
 
-**Escalation after 20 reviews.** Count the reviews submitted on the PR (by Codex, Copilot, CodeRabbit or people), as GitHub lists them. GitHub also lists each reply on a review thread as a review with an empty body; those don't count. Once the PR has 20 and the latest review still has findings to fix, stop working on it:
+**Escalation after 20 reviews.** Count the reviews submitted on the PR (by Codex, Copilot, CodeRabbit or people), as GitHub lists them. GitHub also lists each reply on a review thread as a comment-only review with an empty body; those don't count. An approval or a change request counts even without a body. Once the PR has 20 and the latest review still has findings to fix, stop working on it:
 
 - Post a PR comment for the maintainer: why the reviews keep finding things (the themes they come back to, and which findings came from earlier fixes), what has been fixed and extracted so far, and how you suggest proceeding (an accepted shortcut to propose, a narrower scope, a split or a different design).
 - Add the `needs-maintainer` label, and tell the maintainer.
 - Leave the PR alone until the maintainer answers. Other work goes on, within the cap.
 
-When the maintainer gives the go-ahead, remove the label. The count starts again from then: after 20 more reviews, the same applies. To count, with `and .submitted_at > "<go-ahead time>"` added to the filter after a go-ahead:
+When the maintainer gives the go-ahead, remove the label. The count starts again from then: after 20 more reviews, the same applies. To count (after a go-ahead, add `| select(.submitted_at > "<go-ahead time>")` before `| .id`):
 
 ```sh
 gh api 'repos/{owner}/{repo}/pulls/<number>/reviews' --paginate \
-  --jq '.[] | select(.body != "") | .id' | wc -l
+  --jq '.[] | select(.body != "" or .state != "COMMENTED") | .id' | wc -l
 ```
 
 ## Review guidelines
