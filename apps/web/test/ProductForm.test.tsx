@@ -110,6 +110,35 @@ describe('the product form', () => {
     expect(api.createProduct).not.toHaveBeenCalled();
   });
 
+  it('#69-1: sugars above carbs and saturates above fat are refused, with the message on the field', () => {
+    const { api } = setup();
+    type(en.product.name, 'x');
+    type(f.carbs, '10');
+    type(f.sugars, '12');
+    type(f.fat, '3');
+    type(f.saturates, '4');
+    save();
+    expect(field(f.sugars)).toBeInvalid();
+    expect(field(f.saturates)).toBeInvalid();
+    expect(screen.getByText(en.product.problem.aboveCarbs)).toBeVisible();
+    expect(screen.getByText(en.product.problem.aboveFat)).toBeVisible();
+    expect(api.createProduct).not.toHaveBeenCalled();
+    // Fixed, it saves; the message goes with the typo.
+    type(f.sugars, '9,5');
+    type(f.saturates, '2');
+    expect(screen.queryByText(en.product.problem.aboveCarbs)).toBeNull();
+    save();
+    expect(api.createProduct).toHaveBeenCalledOnce();
+  });
+
+  it('#69-1: comparing with an unknown value is skipped: sugars with no carbs is saved', async () => {
+    const { api } = setup();
+    type(en.product.name, 'x');
+    type(f.sugars, '40');
+    save();
+    await waitFor(() => expect(api.createProduct).toHaveBeenCalledOnce());
+  });
+
   it('#64-1: another ingredient class can be chosen', async () => {
     const { api } = setup();
     type(en.product.name, 'Oat milk');
@@ -353,5 +382,135 @@ describe('inside another form', () => {
     save();
     await waitFor(() => expect(api.createProduct).toHaveBeenCalled());
     expect(outer).not.toHaveBeenCalled();
+  });
+});
+
+/** The controls marked invalid, each with the text it points at (`aria-describedby`). */
+function invalidControls() {
+  return Array.from(document.querySelectorAll<HTMLElement>('[aria-invalid="true"]')).map(
+    (control) => {
+      const ids = (control.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
+      const text = ids
+        .map((id) => document.getElementById(id)?.textContent ?? '')
+        .join(' ')
+        .trim();
+      return { label: control.id, text };
+    },
+  );
+}
+
+describe('a wrong value always says what is wrong', () => {
+  const long = 'x'.repeat(250);
+  const scenarios: [string, () => void, string[]][] = [
+    ['no name', () => undefined, [en.product.problem.name]],
+    ['a negative value', () => type(f.fat, '-1'), [en.product.problem.negative]],
+    ['not a number', () => type(f.sugars, 'abc'), [en.product.problem.invalid]],
+    ['more than 100 g', () => type(f.salt, '101'), [en.product.problem.tooLarge]],
+    [
+      'sugars above carbs',
+      () => {
+        type(f.carbs, '10');
+        type(f.sugars, '12');
+      },
+      [en.product.problem.aboveCarbs],
+    ],
+    [
+      'saturates above fat',
+      () => {
+        type(f.fat, '3');
+        type(f.saturates, '4');
+      },
+      [en.product.problem.aboveFat],
+    ],
+    ['a too long name', () => type(en.product.name, long), [en.product.problem.tooLong]],
+    ['a too long brand', () => type(en.product.brand, long), [en.product.problem.tooLong]],
+  ];
+
+  it.each(scenarios)(
+    '%s: the field marked invalid points at a visible message saying why (regression: #94)',
+    (_name, wrong, messages) => {
+      const { api } = setup();
+      // Every scenario but the first has a name.
+      if (_name !== 'no name') type(en.product.name, 'x');
+      wrong();
+      save();
+      const invalid = invalidControls();
+      expect(invalid.length).toBeGreaterThan(0);
+      for (const control of invalid) expect(control.text, control.label).not.toBe('');
+      expect(invalid.map((c) => c.text)).toEqual(expect.arrayContaining(messages));
+      expect(api.createProduct).not.toHaveBeenCalled();
+    },
+  );
+
+  it('everything wrong at once: every marked field has its own message (regression: #94)', () => {
+    setup();
+    type(f.fat, '-1');
+    type(f.sugars, 'abc');
+    type(f.salt, '101');
+    type(en.product.brand, long);
+    save();
+    const invalid = invalidControls();
+    // The name is missing, too.
+    expect(invalid).toHaveLength(5);
+    for (const control of invalid) expect(control.text, control.label).not.toBe('');
+  });
+
+  it('values that add up to more than 100 g mark no field, and say so in one message (regression: #94)', () => {
+    setup();
+    type(en.product.name, 'x');
+    type(f.carbs, '50');
+    type(f.protein, '40');
+    type(f.fat, '20');
+    save();
+    expect(invalidControls()).toEqual([]);
+    expect(screen.getByRole('alert')).toHaveTextContent(en.product.problem.total);
+  });
+
+  describe('when the server refuses what the form accepted', () => {
+    const refusing = (issues: { path: string; message: string }[]) =>
+      setup(
+        fakeApi({
+          createProduct: () => Promise.reject(new ApiError(400, 'invalid_request', issues)),
+        }),
+      );
+
+    it('marks the field the server named, and says it does not accept that value (regression: #94)', async () => {
+      refusing([{ path: 'nutrition.fat', message: 'whatever the server says' }]);
+      type(en.product.name, 'x');
+      type(f.fat, '5');
+      save();
+      await screen.findByText(en.product.problem.refusedField);
+      expect(invalidControls()).toEqual([
+        { label: field(f.fat).id, text: en.product.problem.refusedField },
+      ]);
+      expect(screen.queryByText(en.product.refused)).toBeNull();
+      // Changing that value takes the mark away, and it can be sent again.
+      type(f.fat, '6');
+      expect(invalidControls()).toEqual([]);
+    });
+
+    it('names the name, the brand or the class too (regression: #94)', async () => {
+      refusing([
+        { path: 'name', message: 'x' },
+        { path: 'brand', message: 'x' },
+        { path: 'ingredientClassId', message: 'x' },
+      ]);
+      type(en.product.name, 'x');
+      save();
+      await screen.findAllByText(en.product.problem.refusedField);
+      expect(invalidControls().map((c) => c.text)).toEqual([
+        en.product.problem.refusedField,
+        en.product.problem.refusedField,
+        en.product.problem.refusedField,
+      ]);
+    });
+
+    it('with nothing to point at, says the server refused the product, without a red field (regression: #94)', async () => {
+      refusing([{ path: 'something.else', message: 'x' }]);
+      type(en.product.name, 'x');
+      save();
+      expect(await screen.findByText(en.product.refused)).toBeVisible();
+      expect(invalidControls()).toEqual([]);
+    });
   });
 });

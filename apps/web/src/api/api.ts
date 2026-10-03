@@ -61,6 +61,8 @@ export class ApiError extends Error {
     readonly status: number,
     /** The server's own name for the problem (`error` in its answer), when it gave one. */
     readonly code?: string,
+    /** The fields it refused, for a 400: `path` into the request, as the server names it. */
+    readonly issues: { path: string; message: string }[] = [],
   ) {
     super(`api responded ${status}`);
   }
@@ -98,9 +100,12 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
         { json: request },
         { init: { signal: AbortSignal.timeout(SAVE_TIMEOUT_MS) } },
       );
-      if (res.status === 409) throw new ApiError(409, await errorCode(res));
-      if (res.status !== 200 && res.status !== 201) throw new ApiError(res.status);
-      return catalogProductSchema.parse(await res.json());
+      if (res.status === 200 || res.status === 201) {
+        return catalogProductSchema.parse(await res.json());
+      }
+      // What the server says about a refusal: its name (`conflict`, `barcode_taken`) and the fields.
+      const { code, issues } = await errorBody(res);
+      throw new ApiError(res.status, code, issues);
     },
     async productByBarcode(code) {
       const res = await client.products['by-barcode'][':code'].$get(
@@ -140,13 +145,21 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
   };
 }
 
-/** The `error` name in a JSON answer, if it has one. */
-async function errorCode(res: Response): Promise<string | undefined> {
+/** The `error` name and the `issues` in a JSON answer, where it has them. */
+async function errorBody(
+  res: Response,
+): Promise<{ code?: string; issues: { path: string; message: string }[] }> {
   try {
-    const body = (await res.json()) as { error?: unknown };
-    return typeof body.error === 'string' ? body.error : undefined;
+    const body = (await res.json()) as { error?: unknown; issues?: unknown };
+    const issues = Array.isArray(body.issues)
+      ? body.issues.flatMap((issue: unknown) => {
+          const { path, message } = (issue ?? {}) as { path?: unknown; message?: unknown };
+          return typeof path === 'string' && typeof message === 'string' ? [{ path, message }] : [];
+        })
+      : [];
+    return { ...(typeof body.error === 'string' ? { code: body.error } : {}), issues };
   } catch {
-    return undefined;
+    return { issues: [] };
   }
 }
 

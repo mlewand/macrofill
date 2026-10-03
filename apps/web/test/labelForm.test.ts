@@ -128,3 +128,35 @@ describe('text from a provider that is too long to save (regression: #74)', () =
     });
   });
 });
+
+describe('#69-1: sugars above carbs, saturates above fat', () => {
+  it('names the part on its own field, not as a nutrient total', () => {
+    expect(readLabelForm(filled({ carbs: '10', sugars: '10,5' }))).toEqual({
+      ok: false,
+      fields: { sugars: 'aboveCarbs' },
+    });
+    expect(readLabelForm(filled({ fat: '4', saturates: '4.1' }))).toEqual({
+      ok: false,
+      fields: { saturates: 'aboveFat' },
+    });
+    expect(readLabelForm(filled({ carbs: '1', sugars: '2', fat: '3', saturates: '4' }))).toEqual({
+      ok: false,
+      fields: { sugars: 'aboveCarbs', saturates: 'aboveFat' },
+    });
+  });
+
+  it('accepts equal values, and skips the comparison with an empty field', () => {
+    expect(readLabelForm(filled({ carbs: '10', sugars: '10', fat: '4', saturates: '4' })).ok).toBe(
+      true,
+    );
+    expect(readLabelForm(filled({ sugars: '50' })).ok).toBe(true);
+    expect(readLabelForm(filled({ saturates: '50' })).ok).toBe(true);
+  });
+
+  it('a malformed value is its own problem first: nothing is compared with it', () => {
+    expect(readLabelForm(filled({ carbs: 'abc', sugars: '5' }))).toEqual({
+      ok: false,
+      fields: { carbs: 'invalid' },
+    });
+  });
+});

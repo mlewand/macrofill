@@ -10,13 +10,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore, type FormEven
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ApiError, useApi } from '../api/api';
-import {
-  emptyLabelForm,
-  MAX_TEXT,
-  readLabelForm,
-  type FieldProblem,
-  type LabelFormValues,
-} from './labelForm';
+import { emptyLabelForm, MAX_TEXT, readLabelForm, type LabelFormValues } from './labelForm';
 
 export interface ProductFormProps {
   ingredientClasses: readonly IngredientClass[];
@@ -36,6 +30,22 @@ export interface ProductFormProps {
   /** The product is stored: it comes back as the shared store has it. */
   onSaved: (product: CatalogProduct) => void;
   onCancel: () => void;
+}
+
+/** The fields of the form that can be marked: its text fields, the class and the nutrients. */
+type FieldKey = 'name' | 'brand' | 'ingredientClassId' | Nutrient;
+
+/** The form's fields that the server's issues name (`name`, `nutrition.fat`, …). */
+function fieldsNamedBy(issues: readonly { path: string }[]): FieldKey[] {
+  const named = new Set<FieldKey>();
+  for (const { path } of issues) {
+    const [first, second] = path.split('.');
+    if (first === 'name' || first === 'brand' || first === 'ingredientClassId') named.add(first);
+    else if (first === 'nutrition' && NUTRIENTS.includes(second as Nutrient)) {
+      named.add(second as Nutrient);
+    }
+  }
+  return [...named];
 }
 
 /** What the server says for good about a request: not worth sending again as it is. */
@@ -78,6 +88,8 @@ export function ProductForm(props: ProductFormProps) {
   const [warning, setWarning] = useState<{ kcal: number; expected: number }>();
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<'failed' | 'refused' | 'barcodeTaken'>();
+  // Fields the server refused although the form accepted them: marked until their value changes.
+  const [refusedFields, setRefusedFields] = useState<readonly FieldKey[]>([]);
   // A second tap before the first save's re-render must not send again.
   const inFlight = useRef(false);
   const mounted = useRef(true);
@@ -91,10 +103,12 @@ export function ProductForm(props: ProductFormProps) {
   const read = readLabelForm(values);
   const shown = attempted && !read.ok ? read : undefined;
 
-  // Any edit asks again about the energy: a confirmation is for the values it was given for.
-  const edit = (change: (current: LabelFormValues) => LabelFormValues) => {
+  // Any edit asks again about the energy: a confirmation is for the values it was given for. The
+  // field edited is no longer the one the server refused.
+  const edit = (change: (current: LabelFormValues) => LabelFormValues, field?: FieldKey) => {
     setValues(change);
     setWarning(undefined);
+    if (field) setRefusedFields((fields) => fields.filter((f) => f !== field));
   };
 
   const save = async (confirmed: boolean) => {
@@ -110,6 +124,7 @@ export function ProductForm(props: ProductFormProps) {
     inFlight.current = true;
     setSaving(true);
     setProblem(undefined);
+    setRefusedFields([]);
     try {
       props.onSaved(
         await api.createProduct({
@@ -122,11 +137,16 @@ export function ProductForm(props: ProductFormProps) {
     } catch (error) {
       inFlight.current = false;
       if (!mounted.current) return;
+      // A refusal that names fields marks them; one that names none says the product was refused.
+      const named = error instanceof ApiError ? fieldsNamedBy(error.issues) : [];
+      setRefusedFields(named);
       setProblem(
         error instanceof ApiError && error.code === 'barcode_taken'
           ? 'barcodeTaken'
           : error instanceof ApiError && REFUSED.includes(error.status)
-            ? 'refused'
+            ? named.length > 0
+              ? undefined
+              : 'refused'
             : 'failed',
       );
       setSaving(false);
@@ -140,8 +160,28 @@ export function ProductForm(props: ProductFormProps) {
     void save(false);
   };
 
-  const problemText = (problem: FieldProblem | undefined) =>
-    problem === undefined ? undefined : t(`product.problem.${problem}`);
+  /** Why a field can't be saved, if it can't: what the form found, or what the server refused. */
+  const problemOf = (key: FieldKey): string | undefined => {
+    const own = key === 'ingredientClassId' ? undefined : shown?.fields[key];
+    if (own !== undefined) return t(`product.problem.${own}`);
+    return refusedFields.includes(key) ? t('product.problem.refusedField') : undefined;
+  };
+  const problemId = (key: FieldKey) => `${ids}-${key}-problem`;
+  /** A field is marked invalid only together with the message that says why (aria-describedby). */
+  const marks = (key: FieldKey) => {
+    const text = problemOf(key);
+    return text === undefined
+      ? { 'aria-invalid': false }
+      : { 'aria-invalid': true, 'aria-describedby': problemId(key) };
+  };
+  const message = (key: FieldKey) => {
+    const text = problemOf(key);
+    return text === undefined ? null : (
+      <p id={problemId(key)} className="problem">
+        {text}
+      </p>
+    );
+  };
 
   return (
     <form onSubmit={submit} noValidate>
@@ -163,10 +203,10 @@ export function ProductForm(props: ProductFormProps) {
           maxLength={MAX_TEXT}
           autoComplete="off"
           value={values.name}
-          aria-invalid={shown?.fields.name !== undefined}
-          onChange={(event) => edit((v) => ({ ...v, name: event.target.value }))}
+          {...marks('name')}
+          onChange={(event) => edit((v) => ({ ...v, name: event.target.value }), 'name')}
         />
-        {shown?.fields.name && <p className="problem">{problemText(shown.fields.name)}</p>}
+        {message('name')}
 
         <label htmlFor={`${ids}-brand`}>{t('product.brand')}</label>
         <input
@@ -174,16 +214,19 @@ export function ProductForm(props: ProductFormProps) {
           maxLength={MAX_TEXT}
           autoComplete="off"
           value={values.brand}
-          aria-invalid={shown?.fields.brand !== undefined}
-          onChange={(event) => edit((v) => ({ ...v, brand: event.target.value }))}
+          {...marks('brand')}
+          onChange={(event) => edit((v) => ({ ...v, brand: event.target.value }), 'brand')}
         />
-        {shown?.fields.brand && <p className="problem">{problemText(shown.fields.brand)}</p>}
+        {message('brand')}
 
         <label htmlFor={`${ids}-class`}>{t('product.ingredientClass')}</label>
         <select
           id={`${ids}-class`}
           value={values.ingredientClassId}
-          onChange={(event) => edit((v) => ({ ...v, ingredientClassId: event.target.value }))}
+          {...marks('ingredientClassId')}
+          onChange={(event) =>
+            edit((v) => ({ ...v, ingredientClassId: event.target.value }), 'ingredientClassId')
+          }
         >
           {props.ingredientClasses.map((c) => (
             <option key={c.id} value={c.id}>
@@ -191,6 +234,7 @@ export function ProductForm(props: ProductFormProps) {
             </option>
           ))}
         </select>
+        {message('ingredientClassId')}
 
         <fieldset>
           <legend>{t('product.per100')}</legend>
@@ -203,17 +247,18 @@ export function ProductForm(props: ProductFormProps) {
                 inputMode="decimal"
                 autoComplete="off"
                 value={values.nutrition[nutrient]}
-                aria-invalid={shown?.fields[nutrient] !== undefined}
+                {...marks(nutrient)}
                 onChange={(event) =>
-                  edit((v) => ({
-                    ...v,
-                    nutrition: { ...v.nutrition, [nutrient]: event.target.value },
-                  }))
+                  edit(
+                    (v) => ({
+                      ...v,
+                      nutrition: { ...v.nutrition, [nutrient]: event.target.value },
+                    }),
+                    nutrient,
+                  )
                 }
               />
-              {shown?.fields[nutrient] && (
-                <p className="problem">{problemText(shown.fields[nutrient])}</p>
-              )}
+              {message(nutrient)}
             </div>
           ))}
         </fieldset>

@@ -136,4 +136,18 @@ describe('the http api', () => {
     stub(() => json({ error: 'x' }, 500));
     await expect(api.lookupProduct('3017620422003')).rejects.toMatchObject({ status: 500 });
   });
+
+  it('a 400 for a product carries the fields the server named (regression: #94)', async () => {
+    const issues = [{ path: 'nutrition.fat', message: 'x' }];
+    stub(() => json({ error: 'invalid_request', issues }, 400));
+    const api = createHttpApi(createApiClient('http://localhost/api'));
+    await expect(api.createProduct(product)).rejects.toMatchObject({
+      status: 400,
+      code: 'invalid_request',
+      issues,
+    });
+    // Anything it says that isn't that shape is ignored.
+    stub(() => json({ error: 'invalid_request', issues: 'nope' }, 400));
+    await expect(api.createProduct(product)).rejects.toMatchObject({ status: 400, issues: [] });
+  });
 });
