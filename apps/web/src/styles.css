@@ -218,3 +218,37 @@ button.danger {
   font-weight: 600;
   color: var(--accent);
 }
+
+/* The product form, over the step it was opened from (#64). */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow-y: auto;
+  background: Canvas;
+  color: CanvasText;
+}
+
+.dialog {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--gap);
+}
+
+.value {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.value input,
+.dialog input,
+.dialog select {
+  font: inherit;
+  padding: 0.5rem;
+}
+
+.login {
+  position: relative;
+  z-index: 30;
+}

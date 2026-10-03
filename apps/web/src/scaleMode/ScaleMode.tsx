@@ -2,6 +2,7 @@ import {
   currentAmount,
   parseGrams,
   type Catalog,
+  type CatalogProduct,
   type Recipe,
   type TrackerConfig,
 } from '@macrofill/domain';
@@ -37,6 +38,8 @@ import { useWakeLock } from './wakeLock';
 
 interface Props {
   catalog: Catalog;
+  /** A product was added at a step (#64): it joins the catalog the pickers list. */
+  onProductAdded: (product: CatalogProduct) => void;
   onSaved: (result: SaveResult) => void;
   onCancel: () => void;
   /** Default: `trackerSettings`. */
@@ -50,6 +53,7 @@ interface Props {
 /** Scale Mode (M6-1 to M6-5, M6-9, M6-10): pick a recipe, connect, Start, weigh each step, save. */
 export function ScaleMode({
   catalog,
+  onProductAdded,
   onSaved,
   onCancel,
   tracker = trackerSettings,
@@ -74,6 +78,7 @@ export function ScaleMode({
     <Session
       recipe={recipe}
       catalog={catalog}
+      onProductAdded={onProductAdded}
       tracker={tracker}
       reconnect={reconnect}
       onSaved={onSaved}
@@ -91,6 +96,7 @@ type Connection = 'idle' | 'connecting' | 'connected' | 'failed' | 'reconnecting
 function Session(props: {
   recipe: Recipe;
   catalog: Catalog;
+  onProductAdded: (product: CatalogProduct) => void;
   tracker: Partial<TrackerConfig>;
   reconnect: ReconnectSettings;
   onSaved: (result: SaveResult) => void;
@@ -326,7 +332,13 @@ function Session(props: {
   }
 
   return (
-    <StepScreen key={state.flow.current} state={state} catalog={catalog} dispatch={tap}>
+    <StepScreen
+      key={state.flow.current}
+      state={state}
+      catalog={catalog}
+      dispatch={tap}
+      onProductAdded={props.onProductAdded}
+    >
       {status}
       {notice}
     </StepScreen>
@@ -392,6 +404,7 @@ function StepScreen(props: {
   state: ScaleModeState;
   catalog: Catalog;
   dispatch: (action: ScaleModeAction) => void;
+  onProductAdded: (product: CatalogProduct) => void;
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
@@ -423,6 +436,7 @@ function StepScreen(props: {
         state={flow}
         catalog={catalog}
         onSelect={(productId) => dispatch({ type: 'selectProduct', productId })}
+        onProductAdded={props.onProductAdded}
       />
 
       {state.manual ? (

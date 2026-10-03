@@ -1,4 +1,4 @@
-import type { Catalog } from '@macrofill/domain';
+import type { Catalog, CatalogProduct } from '@macrofill/domain';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiContext, ApiError, guardApi, useApi } from './api/api';
@@ -307,9 +307,10 @@ export function App() {
             )}
             {screen === 'scaleMode' && (
               <WithCatalog>
-                {(catalog) => (
+                {(catalog, onProductAdded) => (
                   <ScaleMode
                     catalog={catalog}
+                    onProductAdded={onProductAdded}
                     owner={user}
                     onSaved={showSaved}
                     onCancel={() => setScreen('home')}
@@ -319,9 +320,10 @@ export function App() {
             )}
             {screen === 'directEntry' && (
               <WithCatalog>
-                {(catalog) => (
+                {(catalog, onProductAdded) => (
                   <DirectEntry
                     catalog={catalog}
+                    onProductAdded={onProductAdded}
                     owner={user}
                     onSaved={(result) => {
                       setResume(undefined);
@@ -377,8 +379,18 @@ function SyncAfterLogin(props: { logins: number; user: string | undefined; confi
   return null;
 }
 
-/** Loads the catalog fresh (with the latest last-use times) before rendering its children. */
-function WithCatalog({ children }: { children: (catalog: Catalog) => React.ReactNode }) {
+/**
+ * Loads the catalog fresh (with the latest last-use times) before rendering its children. A product
+ * added meanwhile (#64) joins it without loading again: the children only re-render.
+ */
+function WithCatalog({
+  children,
+}: {
+  children: (
+    catalog: Catalog,
+    onProductAdded: (product: CatalogProduct) => void,
+  ) => React.ReactNode;
+}) {
   const { t } = useTranslation();
   const api = useApi();
   const [catalog, setCatalog] = useState<Catalog>();
@@ -395,6 +407,16 @@ function WithCatalog({ children }: { children: (catalog: Catalog) => React.React
       current = false;
     };
   }, [api, attempt]);
+
+  const productAdded = useCallback(
+    (product: CatalogProduct) =>
+      setCatalog((current) =>
+        current && !current.products.some((p) => p.id === product.id)
+          ? { ...current, products: [...current.products, product] }
+          : current,
+      ),
+    [],
+  );
 
   const retry = () => {
     setFailed(false);
@@ -414,5 +436,5 @@ function WithCatalog({ children }: { children: (catalog: Catalog) => React.React
     );
   }
   if (catalog === undefined) return <p role="status">{t('app.loading')}</p>;
-  return <>{children(catalog)}</>;
+  return <>{children(catalog, productAdded)}</>;
 }

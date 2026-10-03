@@ -1,9 +1,12 @@
 import {
+  catalogProductSchema,
   catalogSchema,
   meSchema,
   saveMealResponseSchema,
   todaySchema,
   type Catalog,
+  type CatalogProduct,
+  type CreateProductRequest,
   type SaveMealRequest,
   type SaveMealResponse,
   type Today,
@@ -23,6 +26,12 @@ export interface Api {
   saveMeal: (request: SaveMealRequest) => Promise<SaveMealResponse>;
   /** Today's entries, totals and targets, in the user's timezone (M7-1 to M7-3). */
   today: () => Promise<Today>;
+  /**
+   * #64-4, #64-8: adds a product to the shared store. Resolves with the stored product, also for
+   * a retry of the same request (same id). Rejects with an `ApiError` the server refused, and with
+   * any other error when it can't be reached.
+   */
+  createProduct: (request: CreateProductRequest) => Promise<CatalogProduct>;
   /** Deletes a consumption entry (M7-4). Resolves also when it's already gone. */
   deleteEntry: (id: string) => Promise<void>;
   /** M7-8, M4-10: a batch of usage events. Resolves once the server has them. */
@@ -65,6 +74,14 @@ export function createHttpApi(client: ApiClient = createApiClient()): Api {
       if (res.status !== 200 && res.status !== 201) throw new ApiError(res.status);
       return saveMealResponseSchema.parse(await res.json());
     },
+    async createProduct(request) {
+      const res = await client.products.$post(
+        { json: request },
+        { init: { signal: AbortSignal.timeout(SAVE_TIMEOUT_MS) } },
+      );
+      if (res.status !== 200 && res.status !== 201) throw new ApiError(res.status);
+      return catalogProductSchema.parse(await res.json());
+    },
     async today() {
       const res = await client.today.$get();
       if (!res.ok) throw new ApiError(res.status);
@@ -106,6 +123,7 @@ export function guardApi(api: Api, onUnauthorized: () => void): Api {
     me: api.me,
     catalog: guard(api.catalog),
     saveMeal: guard(api.saveMeal),
+    createProduct: guard(api.createProduct),
     today: guard(api.today),
     deleteEntry: guard(api.deleteEntry),
     // Not guarded: tracking never asks to log in. Events wait for a session (M7-8).

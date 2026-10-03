@@ -1,7 +1,8 @@
 import type { Catalog } from '@macrofill/domain';
 import { replaySession, scaleScript } from '@macrofill/scale';
 import { MockScaleDriver } from '@macrofill/scale/mock';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiContext, type Api } from '../src/api/api';
 import { App } from '../src/App';
@@ -66,6 +67,20 @@ const catalog: Catalog = {
   ],
 };
 
+/** Scale Mode with a catalog that grows as products are added at a step (#64), as App's does. */
+function Harness(props: Omit<Parameters<typeof ScaleMode>[0], 'catalog' | 'onProductAdded'>) {
+  const [current, setCurrent] = useState(catalog);
+  return (
+    <ScaleMode
+      {...props}
+      catalog={current}
+      onProductAdded={(product) =>
+        setCurrent((c) => ({ ...c, products: [...c.products, product] }))
+      }
+    />
+  );
+}
+
 const button = (name: string) => screen.getByRole('button', { name });
 const liveWeight = () => screen.getByLabelText(en.scale.added);
 
@@ -79,8 +94,7 @@ async function session({ connect = true } = {}) {
     <ApiContext value={api}>
       <TrackContext value={track}>
         <ScaleContext value={() => driver}>
-          <ScaleMode
-            catalog={catalog}
+          <Harness
             onSaved={onSaved}
             onCancel={vi.fn()}
             owner="mlewand"
@@ -388,12 +402,7 @@ describe('Scale Mode', () => {
     render(
       <ApiContext value={api}>
         <ScaleContext value={() => driver}>
-          <ScaleMode
-            catalog={catalog}
-            onSaved={vi.fn()}
-            onCancel={vi.fn()}
-            tracker={{ stableWaitMs: 60 }}
-          />
+          <Harness onSaved={vi.fn()} onCancel={vi.fn()} tracker={{ stableWaitMs: 60 }} />
         </ScaleContext>
       </ApiContext>,
     );
@@ -636,5 +645,46 @@ describe('Home', () => {
       'flow_started',
       'flow_abandoned',
     ]);
+  });
+});
+
+describe('adding a product at a step (#64-6)', () => {
+  it('#64-6: the scale connection and the wake lock survive the form, and the weighing goes on', async () => {
+    const release = vi.fn(() => Promise.resolve());
+    const request = vi.fn(() => Promise.resolve({ release }));
+    // A spread copy of navigator has lost onLine, which lives on its prototype.
+    vi.stubGlobal('navigator', { ...navigator, onLine: true, wakeLock: { request } });
+    const s = await session();
+    const disconnect = vi.spyOn(s.driver, 'disconnect');
+    await s.play(s.script.baseline(312, { forMs: 0 }));
+    fireEvent.click(button(en.scale.start));
+    expect(request).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(button(en.step.addProduct));
+    // Readings keep coming while the form is open.
+    await s.play(s.script.add(150));
+    fireEvent.change(screen.getByLabelText(en.product.name), {
+      target: { value: 'Homemade curd' },
+    });
+    fireEvent.click(button(en.product.save));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    expect(screen.getByText(en.scale.status.connected)).toBeVisible();
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledTimes(1);
+    // The product is selected for the step, and the weight added meanwhile is still counted.
+    const added = vi.mocked(s.api.createProduct).mock.calls[0]![0];
+    expect(screen.getByLabelText('Homemade curd')).toBeChecked();
+    expect(screen.getByText('Step 1 of 2')).toBeVisible();
+    await s.play(s.script.stable({ forMs: 0 }));
+    fireEvent.click(button(en.step.next));
+    expect(await screen.findByText('Step 2 of 2')).toBeVisible();
+    expect(
+      screen.getByText(
+        en.scale.recorded.replace('{{product}}', 'Homemade curd').replace('{{grams}}', '150'),
+      ),
+    ).toBeVisible();
+    expect(added.ingredientClassId).toBe('curd');
   });
 });
