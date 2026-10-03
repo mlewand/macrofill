@@ -14,6 +14,6 @@ Based on: <!-- for a stacked PR, the base PR; otherwise delete this line -->
 
 ### Not handled
 
-<!-- Known gaps and the issues extracted in review, with their priority, e.g. "#48 (priority: low): capture is enabled before /api/me settles". Reviewers don't raise low or medium ones again; a security hole always stays open to review, and so does another high or critical problem the PR causes, unless it notes the maintainer's OK to defer it. -->
+<!-- Known gaps and the issues extracted in review, with their priority, e.g. "#48 (priority: low): capture is enabled before /api/me settles". Reviewers don't raise these again, except what Handling reviews in AGENTS.md says to fix in the PR (Fix). Note the maintainer's OK next to a high or critical item they agreed to defer; a security hole can't be deferred. -->
 
 ### Implementation notes
