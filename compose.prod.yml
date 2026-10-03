@@ -12,10 +12,14 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must point at the app's own database and role}
-      # Barcode lookup in Open Food Facts (#66). All optional: empty means the default. The version
+      # Barcode lookup in Open Food Facts and USDA FoodData Central (#66, #67). All optional: empty means the default. The version
       # and the contact make up the User-Agent that Open Food Facts asks for.
       APP_VERSION: ${APP_VERSION:-dev}
       LOOKUP_TIMEOUT_MS: ${LOOKUP_TIMEOUT_MS:-}
+      LOOKUP_TOTAL_TIMEOUT_MS: ${LOOKUP_TOTAL_TIMEOUT_MS:-}
+      # USDA FoodData Central (#67) is asked only with a key from https://api.data.gov/signup/.
+      USDA_API_KEY: ${USDA_API_KEY:-}
+      USDA_API_URL: ${USDA_API_URL:-}
       LOOKUP_CONTACT: ${LOOKUP_CONTACT:-}
       OPEN_FOOD_FACTS_URL: ${OPEN_FOOD_FACTS_URL:-}
     ports:

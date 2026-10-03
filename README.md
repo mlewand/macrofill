@@ -142,7 +142,7 @@ You need Docker with Compose v2 and git on the server, the Postgres container (C
 
    `deploy.sh` reads `SEED_PASSWORD_*` lines itself: one `KEY=value` per line, optionally in single or double quotes, with no comment after the value.
 
-   Optional, in the same `.env`: `LOOKUP_TIMEOUT_MS` (how long a product database may take, default 5000 ms, at most 20000), `LOOKUP_CONTACT` (the contact in the User-Agent that Open Food Facts asks for; default `macrofill_app@mlewandowski.com`) and `OPEN_FOOD_FACTS_URL`. The version in the User-Agent is the commit `deploy.sh` builds.
+   Optional, in the same `.env`: `USDA_API_KEY` (a free data.gov key from https://api.data.gov/signup/: with it, a barcode Open Food Facts doesn't know is looked up in USDA FoodData Central next; without it only Open Food Facts is asked), `LOOKUP_TIMEOUT_MS` (how long one product database may take, default 5000 ms, at most 20000), `LOOKUP_TOTAL_TIMEOUT_MS` (all of them together, default 10000, at most 20000), `LOOKUP_CONTACT` (the contact in the User-Agent that Open Food Facts asks for; default `macrofill_app@mlewandowski.com`) `OPEN_FOOD_FACTS_URL` and `USDA_API_URL`. The version in the User-Agent is the commit `deploy.sh` builds.
 
 4. **Deploy:**
 
@@ -181,3 +181,4 @@ The container's healthcheck calls `/api/health`, which checks the database conne
 ## Data sources and licenses
 
 - **Open Food Facts** (https://world.openfoodfacts.org) answers the barcode lookup for products the app doesn't have. Its data is under the [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/) (ODbL): the app credits it where a product from it is shown (in the product form, and next to the product in the picker) and here. A product the user saves from it is stored in our product table, which makes that table a database derived from Open Food Facts, under the same share-alike terms. That is fine for now; it goes on the list for the public launch and GDPR work.
+- **USDA FoodData Central** (https://fdc.nal.usda.gov) is the second source of the barcode lookup, for products Open Food Facts doesn't have; it mostly covers American products. Its data is in the public domain (CC0), and the app credits it like Open Food Facts. It needs a free data.gov API key (`USDA_API_KEY`); without one it isn't asked.
