@@ -13,7 +13,7 @@ With open PRs, run `.claude/scripts/pr-watch.sh` as a `Monitor` source, so revie
 - command: `.claude/scripts/pr-watch.sh <scratchpad>/pr-watch.state`. Keep the state file out of the repo.
 - `timeout_ms: 1800000`, the maximum, and re-arm it whenever it expires.
 
-Handle each event with the review workflow in `AGENTS.md`. Monitor only runs while this session does.
+Handle each event as Handling reviews in `AGENTS.md` says, escalation after 20 reviews included. Monitor only runs while this session does.
 
 ## Requesting reviews
 

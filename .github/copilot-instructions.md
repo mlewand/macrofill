@@ -2,9 +2,11 @@
 
 Prioritize finding defects and maintainability problems over stylistic comments.
 
+Follow the Review guidelines in `AGENTS.md`: they set which scenarios count and how to rate a finding.
+
 When reviewing changes:
 
-- Look for incorrect behavior, regressions, and unhandled edge cases.
+- Look for incorrect behavior, regressions, and edge cases left unhandled that can happen in realistic use.
 - Look for incorrect assumptions about null/undefined values and empty collections.
 - Check asynchronous code for missing awaits, races, stale state, and incorrect error propagation.
 - Check resource lifecycle and cleanup.
