@@ -408,7 +408,7 @@ export function ProductChoices(props: {
         return 'unknown';
       }
       props.onProductAdded(product);
-      props.onSelect(product.id);
+      props.onSelect(product.id, product.ingredientClassId !== step.ingredientClassId);
       setOverlay(undefined);
       return 'found';
     } catch {

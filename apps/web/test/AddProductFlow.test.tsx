@@ -329,6 +329,42 @@ describe('scanning a barcode at a step', () => {
     expect(screen.getByRole('button', { name: en.step.scan })).toBeEnabled();
   });
 
+  it('#65-5: a scanned product of another class is still selected after a reload of the page (regression: #73)', async () => {
+    const api = fakeApi({
+      catalog: () => Promise.resolve(catalog),
+      productByBarcode: () => Promise.resolve(milkOat),
+    });
+    const scanner = fakeScanner();
+    const store = indexedDbDraftStore();
+    const renderApp = () =>
+      render(
+        <ApiContext value={api}>
+          <ScannerContext value={scanner}>
+            <DraftContext value={store}>
+              <App />
+            </DraftContext>
+          </ScannerContext>
+        </ApiContext>,
+      );
+    renderApp();
+    fireEvent.click(await screen.findByRole('button', { name: en.home.logMeal }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Curd bowl' }));
+    click(en.step.scan);
+    await cameraOn(scanner);
+    scanner.read(EAN13);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(checked()).toEqual(['Oat milk']);
+    await waitFor(async () => expect((await store.load())?.state.steps[0]?.otherClass).toBe(true));
+    cleanup();
+    vi.mocked(api.catalog).mockResolvedValue({
+      ...catalog,
+      products: [...catalog.products, milkOat],
+    });
+    renderApp();
+    await screen.findByText('Step 1 of 2');
+    expect(checked()).toEqual(['Oat milk']);
+  });
+
   it('#65-4: an unknown barcode opens the product form with it, after the camera is off, and saves it with the product', async () => {
     const api = base();
     const scanner = fakeScanner();
