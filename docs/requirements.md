@@ -270,11 +270,11 @@ Work proceeds in phases. MVP0 was Phases A to C. Each phase ends with the app de
 ## Phase D: Product store
 
 - Goal: no product is a dead end. A product the app doesn't know is added from the app, by barcode lookup or by typing its label, into one store shared by all users.
-- Scope: the umbrella issue #70 and its sub-issues. More work may join this phase later; it's added here when it does.
+- Scope: the umbrella issue #70 and its sub-issues, plus three independent issues that joined on 2026-10-03: #88 (after saving a meal, go straight to the main screen with a notification), #89 (the scale stays connected between meals) and #95 (sign out). More work may join this phase later; it's added here when it does.
 - Criteria: in the GitHub issues, not in this doc. Each sub-issue lists its own, with IDs like `#123-3` (issue 123, criterion 3). The umbrella issue holds no criteria of its own; it closes when its sub-issues are closed. Issues labelled `on hold` belong to the phase's backlog, not its exit.
 - Moved in from Deferred from MVP0: the kcal consistency check, as part of adding a product by its label.
 - Moved in from Future stages: the products GUI; barcode scan with Open Food Facts lookup, plus a second provider to prove that providers chain.
-- Exit: every criterion in the phase's issues passes, in CI or in a manual smoke run on the phone, and a product unknown to the app has been added by barcode and used in a meal on the phone.
+- Exit: every criterion in the phase's issues passes, in CI or in a manual smoke run on the phone, and a product unknown to the app has been added by barcode and used in a meal on the phone. A second cumulative review covers the issues that joined after the first (#85).
 
 # Acceptance criteria (MVP0)
 
