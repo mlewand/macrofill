@@ -6,13 +6,22 @@ import {
   type Today,
   type TodayListEntry,
 } from '@macrofill/domain';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi } from '../api/api';
 import { formatGrams, formatKcal, formatTime } from '../format';
 import { usePending, useRemovePending, useUserStatus } from '../outbox/Outbox';
 import { lastTimezone, lastUser, rememberTimezone } from '../session';
 import type { OutboxItem } from '../outbox/store';
+
+/** How often Today loads the day again by itself while the tab is visible (#77-2). */
+export const REFRESH_INTERVAL_MS = 30_000;
+/**
+ * A refresh not answered after this long is given up on: a connection that hangs instead of
+ * failing must not stop the next refreshes (#77-5). The next one starts, and the old one's answer,
+ * if it ever comes, is dropped.
+ */
+export const REFRESH_STALLED_MS = 15_000;
 
 /**
  * Today (M7-1 to M7-4): totals against targets and the day's meals, newest first, with the meals
@@ -48,26 +57,79 @@ export function TodayView(props: {
     }
   }
 
+  // Loads of the day, to tell a load that was overtaken from the one that counts: a refresh
+  // answering after a later load, or after the user changed, is dropped (#77-5).
+  const loadState = useRef({ count: 0, loading: false });
+
   useEffect(() => {
     if (!ready) return;
-    let current = true;
+    const state = loadState.current;
+    const load = ++state.count;
+    state.loading = true;
     // Whose day this is: the user confirmed now, not whoever is remembered when it arrives.
     const askedFor = lastUser();
     api.today().then(
       (loaded) => {
-        if (!current) return;
+        if (load !== state.count) return;
+        state.loading = false;
         // For showing times in the user's timezone offline too.
         if (lastUser() === askedFor) rememberTimezone(askedFor, loaded.timezone);
         // Also after an automatic reload (the user confirmed again): it loaded now.
         setFailed(false);
         setToday(loaded);
       },
-      () => current && setFailed(true),
+      () => {
+        if (load !== state.count) return;
+        state.loading = false;
+        setFailed(true);
+      },
     );
     return () => {
-      current = false;
+      state.count++;
+      state.loading = false;
     };
   }, [api, attempt, ready]);
+
+  // #77: other devices and windows save meals too, so Today catches up by itself when the window
+  // gets focus and every 30 seconds while the tab is visible. It's silent: the day on screen stays
+  // until the new one arrives, and a refresh that fails changes nothing (#77-3, #77-4).
+  useEffect(() => {
+    if (!ready) return;
+    const state = loadState.current;
+    let latest = 0;
+    let out = false;
+    let startedAt = 0;
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || state.loading) return;
+      if (out && Date.now() - startedAt < REFRESH_STALLED_MS) return;
+      const mine = ++latest;
+      out = true;
+      startedAt = Date.now();
+      const load = state.count;
+      const askedFor = lastUser();
+      api.today().then(
+        (loaded) => {
+          // Only the latest refresh counts, also for being the one out.
+          if (mine !== latest) return;
+          out = false;
+          if (load !== state.count) return;
+          if (lastUser() === askedFor) rememberTimezone(askedFor, loaded.timezone);
+          // Brings the day back too, when it couldn't be loaded before.
+          setFailed(false);
+          setToday(loaded);
+        },
+        () => {
+          if (mine === latest) out = false;
+        },
+      );
+    };
+    window.addEventListener('focus', refresh);
+    const timer = setInterval(refresh, REFRESH_INTERVAL_MS);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      clearInterval(timer);
+    };
+  }, [api, ready]);
 
   const reload = () => {
     setFailed(false);
