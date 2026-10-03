@@ -2,7 +2,7 @@
 
 Working code name: **Diet Tracking App** (Macrofill)
 
-Status: MVP0 requirements. Future stages are listed so the MVP0 design leaves room for them. Do not implement them in MVP0.
+Status: MVP0 is done (Phases A to C). Phase D is in progress (see Phases). Future stages are listed so the design leaves room for them. Don't implement them before a phase takes them in.
 
 # Problem
 
@@ -41,7 +41,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
   - users provisioned from configuration/seed, no sign-up UI; login with username + password. Data model and auth are multi-user from day 0 (see Data model, Backend & sync)
   - one user per device: each phone or tablet is used by one person. The server keeps users apart (M4-1 to M4-3), and refuses a save that names another user than the session's. On the device, what's kept for a reload or offline (the Direct Entry draft, the save outbox) is tied to the user who saved it, as a best-effort guard. Switching users on one device, also across tabs or with browser storage blocked, isn't an MVP0 scenario: gaps found there are tracked as issues, not treated as blockers
   - daily targets defined in configuration, no GUI
-  - recipes, ingredient classes and products come from seed files in the repo, no GUI to edit them
+  - recipes, ingredient classes and products come from seed files in the repo, no GUI to edit them. Phase D lifts this for products: they're added in the app
   - Android Chrome only
   - online-first sync (see Backend & sync)
 - Must implement support for my bluetooth kitchen scale (implement a driver for it). There should be a base abstraction for the kitchen scale so that any new models can be added easily later on.
@@ -70,12 +70,14 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 
 # Data model
 
-- Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent, user-added Product) has `ownerId`. Curated content (IngredientClass, Recipe, seed Products) is global. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it, except authentication, which finds the user by username or session before there is one.
+- Ownership: every user-owned entity (PreparedMeal, ConsumptionEntry, ScaleRecording, DailyTargets, UsageEvent) has `ownerId`. Curated content (IngredientClass, Recipe) and all Products are global. From Phase D, products are one store shared by all users: a product added by one user is visible to everyone, and there are no per-user products. All data access goes through a repository layer that scopes queries by the current user; no query bypasses it, except authentication, which finds the user by username or session before there is one.
 - User: id, username, password hash (argon2id), timezone (IANA name, e.g. `Europe/Warsaw`; used by M2-5, M7-1).
 - NutritionValues (per 100 g): energy kcal, fat, saturates, carbs, sugars, protein, salt (full EU label set), fibre (EU labels don't always have it). UI shows only protein/fat/carbs/fibre/kcal for now.
   - Any value missing from a product's label or source (most often fibre, but e.g. saturates, sugars or salt too) is stored as unknown, never as 0. A meal or day total of a nutrient that includes an unknown value is shown as "unknown"; the other nutrients' totals are unaffected.
 - IngredientClass: id (stable slug, e.g. `curd`), name (LocalizedText).
-- Product: id, ingredientClassId, name (plain string, as on the package), brand?, nutrition per 100 g, source (`seed` | `user`). Barcode reserved for the future.
+- Product: id, ingredientClassId, name (plain string, as on the package), brand?, nutrition per 100 g, source (`seed`, `manual`, or the lookup provider it came from), sourceRef? (the provider's own reference), barcode?, createdBy?.
+  - barcode: unique across the store, stored in one 13-digit form: EAN-13 as is, UPC-A and EAN-8 left-padded with zeros. Seed products may have none.
+  - createdBy: the user who added the product. It's kept for the maintainer only: the API and UI never show it. Deleting that user clears it, and the product stays.
 - Recipe: id, name (LocalizedText), steps: ordered list of { id, ingredientClassId, defaultProductId? }.
 - PreparedMeal: id, recipeId?, inputMethod (`scale` | `vision` | `direct`), startedAt, finishedAt, items: a discriminated union on `skipped` — `{ stepId?, skipped: true }` for a skipped step, or `{ stepId?, skipped: false, productId, grams, weightSource ('scale' | 'manual') }` otherwise. `productId` and `grams` don't exist on a skipped item.
   - Item grams are ≥ 0. Negative items (net removal) are deferred.
@@ -91,7 +93,8 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 - Realistically I need two meals for testing (curd and wholegrain bread).
 - Each meal has steps, each requiring an ingredient class. The user picks the concrete product at that step.
 - Generic class-level macros are too inaccurate (e.g. lean vs full-fat curd differ several times over in fat). The product picker shows products of the step's ingredient class, most recently used choices prioritized.
-- MVP0: recipes, ingredient classes and products are seed files in the repo (JSON/TS), loaded into the backend DB. Adding a product = editing the seed file.
+- MVP0: recipes, ingredient classes and products are seed files in the repo (JSON/TS), loaded into the backend DB.
+- Phase D: users add products in the app, by typing the label values or by barcode lookup, into the shared store (see Data model). The seed file's products only initialize an empty product store. Once the store holds products, seeding doesn't load products again, and editing the seed file no longer changes them. Products from the seed keep source `seed`.
 - Seed recipes:
   - Sandwich: wholegrain bread → cream cheese → cheese → ham
   - Curd: curd → milk → cucumber → ham → radish
@@ -99,7 +102,7 @@ I need to hit my protein/fat/carbs norm daily. It's troublesome.
 - In the future:
   - In the production quality, I expect this to contain a vast meal recipe database.
   - User should be able to add his own recipes.
-  - GUI for adding a missing product (label values typed in, later photo of the nutrition label, barcode + Open Food Facts).
+  - Adding a product from a photo of its nutrition label.
   - Product prediction from history beyond "most recent first".
 
 # Meal input methods
@@ -220,7 +223,8 @@ interface ScaleDriver {
 - Server is the source of truth. Client is online-first.
 - The in-progress Direct Entry session is persisted locally (IndexedDB), so a reload doesn't lose it. Resuming a Scale Mode session after a reload is deferred.
 - Saves go through an outbox in IndexedDB and are retried until the server accepts them. Client-generated IDs make retries idempotent.
-- Seed data (recipes, classes, products) loaded from repo files.
+- Seed data (recipes, classes, products) loaded from repo files. Seed products only go into an empty product store (see Cookbook database).
+- Phase D: adding a product needs a connection; it doesn't go through the outbox. Picking a product already known works as before.
 - Hosting: one Docker image (api + built web) on a separate LAN machine, behind the HTTPS reverse proxy.
 - Future: offline-first sync, public sign-up, real auth library.
 
@@ -237,11 +241,11 @@ The app has to be well tested with automated tests at every step, both while bui
 - `apps/web`: component tests (Vitest + Testing Library); Playwright e2e on a phone viewport with `MockScaleDriver` injected into the production build by the test: the bundle honours a flag the test sets before the page loads, and loads the mock as a separate chunk, so e2e tests the artifact that ships. Scenarios: full meal (Scale Mode and Direct Entry), skip, manual correction, undo, scale disconnect with automatic reconnect, negative step leading to correction, wrong unit, Today totals.
 - Real hardware (Web Bluetooth + my scale) can't run in CI: short manual smoke checklist per release.
 - Line coverage thresholds: 90% for `domain`, 70% for `scale`, `api` and `web`.
-- Acceptance criteria in this doc are written as testable statements; agents write the tests first.
+- Acceptance criteria are written as testable statements; agents write the tests first. MVP0's are in this doc; from Phase D on, they're in GitHub issues (see Phases).
 
 # Phases
 
-Work proceeds in three phases. Each ends with the app deployed from the production image and used on the phone. The milestones in Acceptance criteria group criteria by area; the phases set the order of work. Criteria from a later phase are not implemented early.
+Work proceeds in phases. MVP0 was Phases A to C. Each phase ends with the app deployed from the production image and used on the phone. The milestones in Acceptance criteria group criteria by area; the phases set the order of work. Criteria from a later phase are not implemented early.
 
 ## Phase A: Direct Entry end to end
 
@@ -263,9 +267,18 @@ Work proceeds in three phases. Each ends with the app deployed from the producti
 - Criteria: M1-3, M1-6; M3-11; M4-1, M4-2, M4-3, M4-7, M4-10; M5-8, M5-9; M6-6, M6-7, the M6-8 reconnect scenario; M7-8.
 - Exit: every MVP0 criterion passes, in CI or in the manual smoke checklist.
 
+## Phase D: Product store
+
+- Goal: no product is a dead end. A product the app doesn't know is added from the app, by barcode lookup or by typing its label, into one store shared by all users.
+- Scope: the umbrella issue #TBD and its sub-issues. More work may join this phase later; it's added here when it does.
+- Criteria: in the GitHub issues, not in this doc. Each sub-issue lists its own, with IDs like `#62-3` (issue 62, criterion 3). The umbrella issue holds no criteria of its own; it closes when its sub-issues are closed. Issues labelled `on hold` belong to the phase's backlog, not its exit.
+- Moved in from Deferred from MVP0: the kcal consistency check, as part of adding a product by its label.
+- Moved in from Future stages: the products GUI; barcode scan with Open Food Facts lookup, plus a second provider to prove that providers chain.
+- Exit: every criterion in the phase's issues passes, in CI or in a manual smoke run on the phone, and a product unknown to the app has been added by barcode and used in a meal on the phone.
+
 # Acceptance criteria (MVP0)
 
-IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferred from MVP0). See Phases for which phase each criterion belongs to.
+No new criteria are added here: from Phase D on, criteria live in GitHub issues (see Phases). IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferred from MVP0). See Phases for which phase each criterion belongs to.
 
 ## M1: Repository and CI skeleton
 
@@ -367,7 +380,6 @@ IDs are stable and never renumbered. Retired: M2-7, M3-7, M3-8, M3-9 (see Deferr
 
 Mirrored in `TODO.md`. Each item states the behavior that applies until it's done.
 
-- **Kcal consistency check for products:** warn when kcal differs from 4·protein + 4·carbs + 9·fat + 2·fibre, and save only after the user confirms. The tolerance must handle low-energy products, e.g. max(15%, 10 kcal). Until then: no check.
 - **Tare and bowl-lift detection mid-meal (unresolved):** cases are a tare between ingredients; the bowl lifted and put back; a small food item (e.g. a 15 g piece of apple) lifted and put back, which must still count as food; the scale re-zeroing after a power cycle during a disconnect. Until then: only stable readings at Start and Next count, and a negative step asks for manual correction (M3-6).
 - **Manual scale reconnect:** a Reconnect button (user gesture, device chooser) for when automatic reconnect isn't possible, plus handling a possible new zero. Until then: automatic reconnect only (M6-6), with manual weights as the fallback.
 - **Resume Scale Mode after page reload:** needs a reconnect and new-zero handling. Until then: only Direct Entry sessions resume (M5-8).
@@ -379,8 +391,8 @@ Mirrored in `TODO.md`. Each item states the behavior that applies until it's don
 - MVP X: add a custom ingredient during preparation.
 - Partial consumption (sharing a meal) and cooked total weight for batch dishes.
 - Vision Mode.
-- GUIs: daily targets, products, recipes; user-defined recipes; vast recipe database.
-- Barcode scan, Open Food Facts, product from nutrition label photo.
+- GUIs: daily targets, recipes; user-defined recipes; vast recipe database.
+- Product from nutrition label photo; barcode formats beyond EAN-13, EAN-8 and UPC-A; more lookup providers.
 - Capacitor build for iOS.
 - Offline-first sync.
 - Public sign-up and a real auth library.
