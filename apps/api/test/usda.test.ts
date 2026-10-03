@@ -64,6 +64,33 @@ describe('#67-3: mapping a USDA FoodData Central food', () => {
     expect(mapUsda(body, BARCODE)).toMatchObject({ sourceRef: '2', name: 'Mine' });
   });
 
+  it('#67-3: of several revisions of the same barcode, the newest published one is the current product (regression: #76)', () => {
+    const revision = (fdcId: number, publishedDate: string | undefined, protein: number) => ({
+      fdcId,
+      gtinUpc: '016000275683',
+      description: `Revision ${fdcId}`,
+      dataType: 'Branded',
+      ...(publishedDate === undefined ? {} : { publishedDate }),
+      foodNutrients: [{ nutrientNumber: '203', unitName: 'G', value: protein }],
+    });
+    const body = {
+      foods: [
+        revision(1, '2019-04-01', 1),
+        revision(3, '2021-12-30', 3),
+        revision(2, '2020-06-15', 2),
+        revision(4, undefined, 4),
+      ],
+    };
+    expect(mapUsda(body, BARCODE)).toMatchObject({ sourceRef: '3', name: 'Revision 3' });
+    // Whatever order the search returns them in.
+    expect(mapUsda({ foods: [...body.foods].reverse() }, BARCODE)?.sourceRef).toBe('3');
+    // Without any date, the first one stands.
+    expect(
+      mapUsda({ foods: [revision(5, undefined, 5), revision(6, undefined, 6)] }, BARCODE)
+        ?.sourceRef,
+    ).toBe('5');
+  });
+
   it('only energy in kcal counts, and only values in grams', () => {
     const candidate = mapUsda(
       food({

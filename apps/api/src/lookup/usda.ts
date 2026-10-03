@@ -39,16 +39,27 @@ function nutrient(nutrients: unknown[], number: string, unit: string): number | 
 
 /**
  * #67-3: the food a search found for `barcode` (the store's 13 digits) as a candidate, or undefined.
- * The search is full-text, so only a food whose own `gtinUpc` is this barcode counts. Only values
+ * The search is full-text, so only a food whose own `gtinUpc` is this barcode counts, and of its
+ * revisions the newest published. Only values
  * USDA states are taken: it has no salt, which stays unknown (sodium is not converted), as for
  * Open Food Facts (M2-3).
  */
 export function mapUsda(body: unknown, barcode: string): ProductCandidate | undefined {
   if (!isRecord(body) || !Array.isArray(body.foods)) return undefined;
-  const food = body.foods.find(
-    (f): f is Record<string, unknown> =>
-      isRecord(f) && typeof f.gtinUpc === 'string' && normalize(f.gtinUpc) === barcode,
-  );
+  // Duplicate GTINs are revisions of the same product: the latest `publishedDate` (YYYY-MM-DD, so
+  // it sorts as text) is the current one. A food without a date comes after those with one; among
+  // equals the search's own order stands.
+  const published = (f: Record<string, unknown>) =>
+    typeof f.publishedDate === 'string' ? f.publishedDate : '';
+  const food = body.foods
+    .filter(
+      (f): f is Record<string, unknown> =>
+        isRecord(f) && typeof f.gtinUpc === 'string' && normalize(f.gtinUpc) === barcode,
+    )
+    .reduce<Record<string, unknown> | undefined>(
+      (best, f) => (best === undefined || published(f) > published(best) ? f : best),
+      undefined,
+    );
   if (!food || (typeof food.fdcId !== 'number' && typeof food.fdcId !== 'string')) return undefined;
   const nutrients = Array.isArray(food.foodNutrients) ? food.foodNutrients : [];
   const nutrition: NutritionValues = {
