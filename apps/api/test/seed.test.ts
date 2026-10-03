@@ -84,6 +84,75 @@ describe('M4-5: seed script', () => {
     expect(rows).toEqual([first!, ...rest].map((s, position) => ({ id: s.id, position })));
   });
 
+  it('#63-7: a store that already holds products is not seeded with products again', async () => {
+    await seed(database.db);
+    const [first, ...rest] = seedData.products;
+    // Someone changed a product in the app, and the seed file has a changed and a new one.
+    await database.db.execute(sql`update products set name = 'Renamed' where id = ${first!.id}`);
+    const newProduct = { ...first!, id: 'a1b2c3d4-0000-4000-8000-0000000000aa', name: 'New' };
+    const changed = {
+      ...seedData,
+      products: [{ ...first!, name: 'Edited in the seed file' }, ...rest, newProduct],
+    };
+    await seed(database.db, changed);
+    const rows = await queryRows<{ id: string; name: string }>(
+      database.db,
+      sql`select id, name from products order by name`,
+    );
+    expect(rows).toHaveLength(seedData.products.length);
+    expect(rows.find((r) => r.id === first!.id)!.name).toBe('Renamed');
+    expect(rows.map((r) => r.id)).not.toContain(newProduct.id);
+  });
+
+  it('#63-7: a store with only a product added in the app is not seeded either', async () => {
+    await seed(database.db, { ...seedData, products: [], recipes: [] });
+    await database.db.execute(
+      sql`insert into products (id, ingredient_class_id, name, source)
+          values (gen_random_uuid(), 'curd', 'Added in the app', 'manual')`,
+    );
+    await seed(database.db);
+    const rows = await queryRows(database.db, sql`select name from products`);
+    expect(rows).toEqual([{ name: 'Added in the app' }]);
+  });
+
+  it('#63-7: recipes, classes and users are still seeded when the store holds products', async () => {
+    await seed(database.db, { ...seedData, recipes: [] });
+    expect(await queryRows(database.db, sql`select id from recipes`)).toEqual([]);
+    const result = await seed(database.db);
+    expect(await queryRows(database.db, sql`select id from recipes`)).toHaveLength(
+      seedData.recipes.length,
+    );
+    expect(result.missingDefaultProducts).toEqual([]);
+  });
+
+  it('#63-7: a recipe step whose default product is not in the store loses only the default', async () => {
+    await seed(database.db, { ...seedData, recipes: [] });
+    const [recipe, ...otherRecipes] = seedData.recipes;
+    const [first, ...rest] = recipe!.steps;
+    const missing = 'a1b2c3d4-0000-4000-8000-0000000000bb';
+    const changed = {
+      ...seedData,
+      recipes: [
+        { ...recipe!, steps: [{ ...first!, defaultProductId: missing }, ...rest] },
+        ...otherRecipes,
+      ],
+    };
+    const result = await seed(database.db, changed);
+    expect(result.missingDefaultProducts).toEqual([missing]);
+    const steps = await queryRows(
+      database.db,
+      sql`select default_product_id from recipe_steps where id = ${first!.id}`,
+    );
+    expect(steps).toEqual([{ default_product_id: null }]);
+    // Everything else of the seed went in, users included.
+    expect(await queryRows(database.db, sql`select id from recipes`)).toHaveLength(
+      seedData.recipes.length,
+    );
+    expect(await queryRows(database.db, sql`select id from users`)).toHaveLength(
+      seedData.users.length,
+    );
+  });
+
   it('never writes a password hash, and keeps one that was set', async () => {
     await seed(database.db);
     const [user] = seedData.users;

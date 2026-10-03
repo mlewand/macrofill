@@ -245,7 +245,7 @@ describe('seed passwords (M4-1, M4-5)', () => {
   it('M4-1: an initial password is ignored, not checked, for a user who has one (regression: #34)', async () => {
     await seed(database.db, undefined, { [seedUsername]: TEST_PASSWORD });
     const first = await hashes();
-    await expect(seed(database.db, undefined, { [seedUsername]: 'short' })).resolves.toEqual({
+    await expect(seed(database.db, undefined, { [seedUsername]: 'short' })).resolves.toMatchObject({
       withoutPassword: [],
     });
     expect(await hashes()).toEqual(first);
@@ -260,7 +260,7 @@ describe('seed passwords (M4-1, M4-5)', () => {
   });
 
   it('M4-1: the seed reports users without a password', async () => {
-    expect(await seed(database.db)).toEqual({
+    expect(await seed(database.db)).toMatchObject({
       withoutPassword: seedData.users.map((u) => u.user.username),
     });
   });

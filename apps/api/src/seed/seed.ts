@@ -1,4 +1,4 @@
-import { and, eq, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   dailyTargets,
@@ -45,6 +45,11 @@ export function seedPasswordsFromEnv(
  * M4-5: loads the seed data. Idempotent: every row is upserted by its fixed id, so running it
  * again leaves the same state.
  *
+ * #63-7: products are loaded only into an empty product store. Once it holds any, products
+ * are shared content that users add to and the seed file's products are left alone: no update,
+ * no new one. A recipe step whose default product isn't in the store then loses that default
+ * (the rest is seeded), and its id is returned in `missingDefaultProducts`.
+ *
  * M4-1: `passwords` are initial passwords. One is hashed and stored only for a user who has no
  * password yet, so running the seed again keeps the hash, and a password reset survives deploys.
  * Returns the users who still have no password (they can't log in).
@@ -53,7 +58,7 @@ export async function seed(
   db: Db,
   data = seedData,
   passwords: SeedPasswords = {},
-): Promise<{ withoutPassword: string[] }> {
+): Promise<{ withoutPassword: string[]; missingDefaultProducts: string[] }> {
   return db.transaction(async (tx) => {
     for (const { user, targets } of data.users) {
       const { username, timezone } = user;
@@ -74,10 +79,24 @@ export async function seed(
         .onConflictDoUpdate({ target: ingredientClasses.id, set: ingredientClass });
     }
 
-    for (const { nutrition, brand, ...product } of data.products) {
-      const row = { ...product, brand: brand ?? null, ownerId: null, ...nutrition };
-      await tx.insert(products).values(row).onConflictDoUpdate({ target: products.id, set: row });
+    const [existing] = await tx.select({ id: products.id }).from(products).limit(1);
+    if (existing === undefined) {
+      for (const { nutrition, brand, ...product } of data.products) {
+        const row = { ...product, brand: brand ?? null, ...nutrition };
+        await tx.insert(products).values(row);
+      }
     }
+    const wanted = [
+      ...new Set(data.recipes.flatMap((r) => r.steps.map((s) => s.defaultProductId))),
+    ].filter((id): id is string => id !== undefined);
+    const present = new Set(
+      wanted.length === 0
+        ? []
+        : (
+            await tx.select({ id: products.id }).from(products).where(inArray(products.id, wanted))
+          ).map((r) => r.id),
+    );
+    const missingDefaultProducts = wanted.filter((id) => !present.has(id));
 
     for (const { steps, ...recipe } of data.recipes) {
       await tx
@@ -105,7 +124,10 @@ export async function seed(
           ...step,
           recipeId: recipe.id,
           position,
-          defaultProductId: defaultProductId ?? null,
+          defaultProductId:
+            defaultProductId !== undefined && present.has(defaultProductId)
+              ? defaultProductId
+              : null,
         };
         await tx
           .insert(recipeSteps)
@@ -128,6 +150,6 @@ export async function seed(
       assertSettablePassword(password);
       await auth.setInitialPasswordHash(user.username, await hashPassword(password));
     }
-    return { withoutPassword };
+    return { withoutPassword, missingDefaultProducts };
   });
 }
